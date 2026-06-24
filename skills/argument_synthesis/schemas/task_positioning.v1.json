@@ -1,0 +1,13 @@
+{
+  "schema": "task_positioning.v1",
+  "type": "object",
+  "required": ["topic", "audience", "report_type", "output_format", "decision_goal"],
+  "properties": {
+    "topic": { "type": "string" },
+    "audience": { "type": "string" },
+    "report_type": { "type": "string" },
+    "output_format": { "type": "string" },
+    "decision_goal": { "type": "string" }
+  }
+}
+

@@ -1,0 +1,378 @@
+{
+  "version": "v1.1",
+  "agent_id": "page_filling",
+  "purpose": "Evaluate whether the page-filling agent has transformed a storyline into dummy pages: page briefs, proof chains, content blocks, chart/table/callout plans, source and gap status, appendix candidates, draft_material wireframes, state revision suggestions, and format handoff notes without changing the storyline or producing final formatted materials.",
+  "rubric_layers": {
+    "blocking_p0": [
+      "PF-P0-000",
+      "PF-P0-001",
+      "PF-P0-002",
+      "PF-P0-003",
+      "PF-P0-004",
+      "PF-P0-005",
+      "PF-P0-006",
+      "PF-P0-008",
+      "PF-P0-009",
+      "PF-P0-010",
+      "PF-P0-011",
+      "PF-P0-012",
+      "PF-DRAFT-001"
+    ],
+    "conditional_p0": {
+      "PF-P0-007": "当 output_format 为 ppt/document/html 且产物颗粒度明显错配时为 P0；若只是细节密度不佳，降为 P1 交 human review。",
+      "PF-DRAFT-001": "当用户或流程要求 draft_material 进入渲染后端时为 P0；若当前运行明确只需要 JSON page_content，可降为 warning，但必须显式说明未生成 draft_material。"
+    },
+    "p1_quality": [
+      "PF-P1-001",
+      "PF-P1-002",
+      "PF-P1-003",
+      "PF-P1-004",
+      "PF-P1-005",
+      "PF-DRAFT-002"
+    ]
+  },
+  "rubrics": [
+    {
+      "id": "PF-P0-000",
+      "severity": "P0",
+      "dimension": "input_fill_readiness",
+      "criterion": "在生成 dummy page 前，必须检查 storyline 页面字段和证据材料是否足够支撑页面填充；缺字段或缺证据时不得硬填。",
+      "check": "每个 mainline page 有 page_no/title/key_question/so_what/expected_evidence_materials/evidence_refs 或 needs_evidence；每页有 fill_status；缺证据页面进入 data_gaps，不得生成 high confidence 内容。",
+      "fail_examples": [
+        "storyline 没有 expected_evidence_materials，page_filling 仍自行编出图表和证据。",
+        "某页缺少 evidence_refs，却输出了完整 proof_chain 且标记 high confidence。",
+        "输入没有 cohort 数据，仍生成留存曲线 visual_plan 且未标 data_gap。",
+        "页面关键字段缺失，但没有在 input_readiness、global_data_gaps 或 page.data_gaps 中说明。"
+      ],
+      "fix": "补做输入就绪检查；为每页标记 fill_status；缺证据的页面只生成 partial/blocked 草稿，并写明 data_gaps、impact 和 needed_input。"
+    },
+    {
+      "id": "PF-P0-001",
+      "severity": "P0",
+      "dimension": "storyline_fidelity",
+      "criterion": "必须保持 storyline 的标题、关键问题、页面顺序和核心含义；如确需调整标题，必须标记 reason_for_title_change。",
+      "check": "每个 page_content page 能回指 storyline page_no；title 与 storyline title 语义一致；page_order 不被重排。",
+      "fail_examples": [
+        "把 storyline 的“留存质量正在替代流量峰值成为关键判断”改成“用户画像分析”。",
+        "为方便填内容调换页面顺序，但没有说明。",
+        "新增一个强结论页，storyline 没有对应依据。"
+      ],
+      "fix": "恢复 storyline 标题和顺序；若标题必须微调，写明 reason_for_title_change 并保持原判断不变。"
+    },
+    {
+      "id": "PF-P0-002",
+      "severity": "P0",
+      "dimension": "dummy_page_contract",
+      "criterion": "每页必须产出 dummy page/page brief，而不是只列素材或直接写正式成稿。",
+      "check": "每页包含 page_brief、page_takeaway、proof_chain、content_blocks、visual_plan、sources、data_gaps、format_handoff_notes。",
+      "fail_examples": [
+        "只把 storyline 的标题复制过来，没有页面内容骨架。",
+        "直接写成完整 PPT 页面文案和精排版说明。",
+        "只有图表建议，没有 page brief 和证明链。"
+      ],
+      "fix": "补齐该页意图、结论、证据链、内容块、图表/表格计划和给 format 的交接说明。"
+    },
+    {
+      "id": "PF-P0-003",
+      "severity": "P0",
+      "dimension": "one_page_one_claim",
+      "criterion": "一页仍然只能服务一个标题结论；内容块不得引入第二个同等重要结论。",
+      "check": "content_blocks、visual_plan、callouts 都支撑同一个 page_takeaway；额外结论进入 appendix_candidates 或拆页建议。",
+      "fail_examples": [
+        "一页既证明市场萎缩，又证明我们份额提升。",
+        "主标题讲留存，内容块大篇幅讲获客成本。",
+        "图表 takeaway 与页面标题无关。"
+      ],
+      "fix": "删除或下沉无关材料；必要时写 split_page_recommendation 供人工确认。"
+    },
+    {
+      "id": "PF-P0-004",
+      "severity": "P0",
+      "dimension": "proof_chain",
+      "criterion": "每页必须有清晰 proof_chain：标题结论 -> 关键证据 -> 推理桥 -> so what。",
+      "check": "proof_chain 包含 claim、evidence_steps、logic_bridge、so_what；不是证据堆砌。",
+      "fail_examples": [
+        "列了 5 个数据点，但没有解释如何推出标题。",
+        "logic_bridge 写成“数据如上”。",
+        "so_what 只是“值得关注”。"
+      ],
+      "fix": "补写证据如何支撑标题，以及该页对听众判断/行动的具体含义。"
+    },
+    {
+      "id": "PF-P0-005",
+      "severity": "P0",
+      "dimension": "evidence_traceability",
+      "criterion": "所有核心内容块、图表计划和 callout 必须有 evidence_refs 或 data_gap 标记。",
+      "check": "content_blocks[].evidence_refs、visual_plan.required_data、sources、data_gaps 可追溯到 evidence_bank/storyline expected_evidence_materials。",
+      "fail_examples": [
+        "写出“商业化已验证”但没有任何证据 ref。",
+        "图表需要的指标在输入里不存在，也没有 data_gap。",
+        "来源只写“内部数据”但无口径、时间窗或负责人。"
+      ],
+      "fix": "补 evidence_refs、source、timeframe、metric_definition、confidence；缺失则写入 data_gaps。"
+    },
+    {
+      "id": "PF-P0-006",
+      "severity": "P0",
+      "dimension": "visual_plan_integrity",
+      "criterion": "图表/表格/重点 callout 方案必须说明读者要看出的结论、所需数据、数据状态和限制，不得编造图表。",
+      "check": "visual_plan 至少包含 visual_type、reader_takeaway、required_data、data_status、evidence_refs、risk_or_limitation；PPT 图表页若 data_status=ready/partial，应包含 chart_data_shape、chart_spec_draft 或 mck_layout_candidates；无适合图表时说明 none_reason。",
+      "fail_examples": [
+        "建议画留存曲线，但输入没有 cohort 数据且未标缺口。",
+        "只写“柱状图展示增长情况”，没有 reader_takeaway。",
+        "把访谈句子包装成量化趋势图。",
+        "output_format=ppt 时写“复杂 bar chart”，但没有 categories、series、values 等数据形状。"
+      ],
+      "fix": "明确图表要回答的问题、数据字段、口径、来源、缺口和替代呈现方式；有结构化数据时补 chart_spec_draft，没有数据时写 data_gaps 和 alternative_display。"
+    },
+    {
+      "id": "PF-P0-011",
+      "severity": "P0",
+      "dimension": "ppt_chart_spec_handoff",
+      "criterion": "当 output_format=ppt 且页面有可用结构化数据时，必须给 format Agent 可继续渲染的低保真图表 spec，而不是只给自然语言图表建议。",
+      "check": "visual_plan.data_status 为 ready/partial 且 visual_type 为 chart/table/callout 时，visual_plan.chart_spec_draft 或 draft_material.material_units[].visual_object.chart_spec 至少包含对应图表的数据形状；format_handoff_notes.layout_risks 标明类别/系列/标签/来源等风险。",
+      "fail_examples": [
+        "有竞品月度数据，但只写“建议做分组柱状图”。",
+        "有占比结构，但没有 segments 或 stacked_bar values。",
+        "有趋势数据，但没有 x_labels / values / metric_definition。",
+        "类别超过 10 个却没有提示 format 需要合并或拆成 multi_bar_panel。"
+      ],
+      "fix": "按 grouped_bar、stacked_bar、horizontal_bar、waterfall、line_chart、pareto、multi_bar_panel、dashboard 或 table_insight 的数据形状补齐 chart_spec_draft；数据不足时把缺口写入 data_gaps。"
+    },
+    {
+      "id": "PF-P0-012",
+      "severity": "P0",
+      "dimension": "document_docx_draft_contract",
+      "criterion": "当 output_format=document 时，page_filling 必须产出可导出 DOCX 的报告章节草稿，而不是 markdown 长文或纯 JSON 页面建议。",
+      "check": "draft_material.format=document；draft_material.material_units 覆盖主线页且 unit_type=document_section；第一个正文单元是 Executive Summary（layout_type=executive_summary 或 document_role=executive_summary），并含 3-5 条核心 bullet；layout_or_structure 含 heading_level/document_role 或 paragraph_roles；finalized_content 含 supporting_points/bullet_groups/quote_blocks/figure_caption 中的适用项；量化图表章节保留 visual_plan.chart_spec_draft 或 visual_object.chart_spec。",
+      "fail_examples": [
+        "output_format=document 但 draft_material.format 写成 ppt 或 html。",
+        "文档草稿直接进入分析章节，没有 Executive Summary。",
+        "Executive Summary 只有一句背景介绍，没有 3-5 条核心结论 bullet。",
+        "文档草稿只有一整段正文，没有标题层级和 bullet 证据链。",
+        "有图表数据但只写“放一张图”，没有 chart_spec_draft、caption 或 source note。",
+        "访谈引用没有 attribution，且被当成总体趋势证据。"
+      ],
+      "fix": "把文档产物转成 document_section 单元：开头补 Executive Summary，之后补 heading_level、document_role、bullet_groups、figure_slots、quote_blocks、source_note；图表只做 spec 草稿，正式绘制交给 format。"
+    },
+    {
+      "id": "PF-P0-007",
+      "severity": "P0",
+      "dimension": "format_specific_dummy",
+      "criterion": "dummy page 必须按输出载体调整内容颗粒度：PPT 是页级块，文档是章节段落骨架，HTML 是模块和展开层级。",
+      "check": "output_format=ppt 时给 block hierarchy/wireframe_hint；document 时给 section_outline/paragraph_roles；html 时给 module_structure/expander_plan。",
+      "fail_examples": [
+        "PPT 页写成长文段落。",
+        "文档章节只有三个 bullet，无法独立阅读。",
+        "HTML 没有模块层级和可展开证据。"
+      ],
+      "fix": "按载体重写 content_blocks 和 format_handoff_notes。"
+    },
+    {
+      "id": "PF-P0-008",
+      "severity": "P0",
+      "dimension": "source_gap_status",
+      "criterion": "每页必须明确 sources、data_gaps 和 confidence 状态；缺数据不能伪装成已完成。",
+      "check": "核心页 sources 非空或 data_gaps 非空；每个 gap 有 impact、needed_input、owner_or_question、blocking_level。",
+      "fail_examples": [
+        "页面用了多个数据但 sources 为空。",
+        "缺少关键指标仍输出 high confidence。",
+        "data_gaps 只写“待补充数据”，没有说明影响。"
+      ],
+      "fix": "补齐来源/口径/时间窗；对缺口写清它会影响哪条结论和是否阻断后续 format。"
+    },
+    {
+      "id": "PF-P0-009",
+      "severity": "P0",
+      "dimension": "role_boundary",
+      "criterion": "单页内容填充不得越权产出正式 PPT/HTML/文档、最终排版、完整逐字稿或改写故事线。",
+      "check": "输出是 dummy page/page_content.v1 和 draft_material spec；不生成成品文件，不指定完整视觉设计 token，不写 30 分钟逐字稿。",
+      "fail_examples": [
+        "直接生成完整 PPT 页面。",
+        "给出最终 HTML 代码。",
+        "写出演讲逐字稿。"
+      ],
+      "fix": "把正式版式交给 format，把讲稿交给 speaker_script，把本环节输出限定在内容骨架和素材计划。"
+    },
+    {
+      "id": "PF-P0-010",
+      "severity": "P0",
+      "dimension": "output_contract",
+      "criterion": "必须按 page_content.v1 输出结构化 artifact，包含 input_readiness、pages[]、draft_material、sources/gaps 和 format_handoff_summary；页面级必须包含 fill_status。",
+      "check": "顶层字段和每页必填字段完整；pages[].fill_status ∈ ready/partial/blocked；draft_material.render_result 可为空但字段语义清楚，不能假装已经渲染。",
+      "fail_examples": [
+        "只输出自然语言页面建议，没有 page_content.v1。",
+        "pages[] 没有 fill_status，无法判断哪些页可落版。",
+        "把 render_result 写成虚构文件路径，实际没有后端结果。"
+      ],
+      "fix": "补齐 page_content.v1 输出字段；render_result 仅在后端执行后回填；缺口页标记 partial/blocked。"
+    },
+    {
+      "id": "PF-P1-001",
+      "severity": "P1",
+      "dimension": "content_density",
+      "criterion": "内容密度应匹配受众和格式，高层页克制，专题文档充分，业务团队页可操作。",
+      "check": "board/exec_office 主线页不堆过多细节；strategy_lead 保留假设和反证；business_team 保留动作和指标。",
+      "weak_examples": [
+        "董事会页塞 12 个 bullet。",
+        "战略负责人版本没有任何假设或反证。",
+        "业务团队版本没有指标或动作含义。"
+      ],
+      "improvement": "按 audience 调整 content_blocks 的数量、层级和细节。"
+    },
+    {
+      "id": "PF-P1-002",
+      "severity": "P1",
+      "dimension": "chart_choice_quality",
+      "criterion": "图表类型应匹配要证明的问题，而不是默认柱状图/折线图。",
+      "check": "趋势用折线，构成用堆叠/瀑布，比较用条形，分布用箱线/直方，因果机制用流程/漏斗；选择理由清楚。",
+      "weak_examples": [
+        "所有页面都建议柱状图。",
+        "用户旅程机制用饼图。",
+        "没有图表选择理由。"
+      ],
+      "improvement": "补 visual_reasoning，解释为什么这个图表最能支撑 page_takeaway。"
+    },
+    {
+      "id": "PF-P1-003",
+      "severity": "P1",
+      "dimension": "headline_support",
+      "criterion": "页面内容应强化标题，而不是让 format 或汇报人再去猜重点。",
+      "check": "page_brief、proof_chain、first_content_block 和 visual reader_takeaway 指向同一标题结论。",
+      "weak_examples": [
+        "标题很尖锐，但第一块内容只是背景。",
+        "视觉重点落在次要指标。",
+        "页面最后才出现真正支撑标题的证据。"
+      ],
+      "improvement": "把最能证明标题的证据前置，把背景压缩或移入附录。"
+    },
+    {
+      "id": "PF-P1-004",
+      "severity": "P1",
+      "dimension": "appendix_and_qa_readiness",
+      "criterion": "不能进主线但 Q&A 有用的材料应进入 appendix_candidates。",
+      "check": "口径说明、长表、访谈原文、替代分析、反方证据被合理放入 appendix_candidates。",
+      "weak_examples": [
+        "主线页塞入口径长表。",
+        "删除了可能被问到的反方材料。",
+        "appendix_candidates 为空但 sources 很复杂。"
+      ],
+      "improvement": "把长证据和防守材料转成 appendix_candidates，并说明 Q&A 用途。"
+    },
+    {
+      "id": "PF-P1-005",
+      "severity": "P1",
+      "dimension": "handoff_clarity",
+      "criterion": "给 format 的交接应清楚说明信息层级、建议视觉焦点和不可牺牲的限定条件。",
+      "check": "format_handoff_notes 包含 primary_focus、secondary_details、must_keep_caveats、layout_risks。",
+      "weak_examples": [
+        "format_handoff_notes 只写“做得好看一点”。",
+        "没有说明哪些口径必须保留。",
+        "没有标记缺数据页面的占位方式。"
+      ],
+      "improvement": "补充 format Agent 可直接使用的信息层级和风险提示。"
+    },
+    {
+      "id": "PF-DRAFT-001",
+      "severity": "P0",
+      "dimension": "draft_material_contract",
+      "criterion": "必须产出草稿版（wireframe）材料 draft_material，覆盖所有主线页，供渲染后端导出真实 PPT/HTML/文档骨架。",
+      "check": "draft_material 含 format 与 material_units[]；material_units 覆盖每个主线 page（source_page_no 一一对应）；每单元有 headline、layout_or_structure.layout_type、finalized_content。",
+      "fail_examples": [
+        "只产出 pages[] JSON，没有 draft_material。",
+        "draft_material 只覆盖了一半页面。",
+        "草稿单元缺 layout_type 或 headline。"
+      ],
+      "fix": "为每个主线页补一个草稿单元，给出 headline（洞见句）、版式 hint 和 2-4 条核心要点。"
+    },
+    {
+      "id": "PF-DRAFT-002",
+      "severity": "P1",
+      "dimension": "draft_quality_boundary",
+      "criterion": "草稿单元的 headline 应已是完整洞见句、layout_type 取自版式枚举；草稿不越权做正式版精排。",
+      "check": "headline 多为含动词的结论句而非主题词；layout_type ∈ 版式枚举；PPT 图表草稿可包含 chart_spec，但不含正式配色/图表精绘/逐字打磨这类应留给 format 的工作。",
+      "weak_examples": [
+        "草稿 headline 写成“市场分析”。",
+        "layout_type 写成自由文本。",
+        "草稿里已经做了精细配色和图表微调，越过 format 职责。"
+      ],
+      "improvement": "草稿只求结构正确、要点到位；把标题写成洞见句，版式取枚举值，精排留给 format。",
+      "machine_check": {
+        "each": "draft_material.material_units",
+        "optional_container": true,
+        "rules": [
+          {
+            "kind": "enum",
+            "path": "layout_or_structure.layout_type",
+            "label": "draft layout_type",
+            "values": [
+              "cover",
+              "section_divider",
+              "executive_summary",
+              "key_takeaway",
+              "four_column",
+              "scorecard",
+              "donut",
+              "pie",
+              "grouped_bar",
+              "stacked_bar",
+              "horizontal_bar",
+              "waterfall",
+              "line_chart",
+              "pareto",
+              "multi_bar_panel",
+              "dashboard_kpi_chart",
+              "dashboard_table_chart",
+              "matrix_2x2",
+              "process_chevron",
+              "timeline",
+              "data_table",
+              "table_insight",
+              "value_chain",
+              "closing",
+              "text"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "scoring_dimensions": [
+    {
+      "dimension": "input_and_contract_readiness",
+      "weight": 15,
+      "description": "输入就绪检查、fill_status、输出契约和 state revision 建议是否完整。"
+    },
+    {
+      "dimension": "storyline_fidelity_and_dummy_contract",
+      "weight": 20,
+      "description": "是否保持 storyline 含义，并产出真正的 dummy page/page brief。"
+    },
+    {
+      "dimension": "proof_and_evidence_grounding",
+      "weight": 25,
+      "description": "每页证明链、证据引用、来源、口径和 data_gaps 是否完整。"
+    },
+    {
+      "dimension": "visual_and_content_planning",
+      "weight": 15,
+      "description": "content_blocks、visual_plan、callouts 和 appendix_candidates 是否能支撑页面结论。"
+    },
+    {
+      "dimension": "format_and_audience_fit",
+      "weight": 10,
+      "description": "是否按受众、汇报性质和文档/PPT/HTML 载体调整内容颗粒度。"
+    },
+    {
+      "dimension": "handoff_readiness",
+      "weight": 15,
+      "description": "是否给 format、Q&A、逐字稿提供清楚的交接信息，同时不越权生成正式材料。"
+    }
+  ],
+  "pass_policy": {
+    "p0": "任何阻断型 P0 命中都必须返工；特别是输入未就绪却硬填、改写 storyline、没有 page_brief/proof_chain、缺 expected evidence/source/gap 状态、编造图表数据、有可用 PPT 图表数据但缺 chart_spec 草稿（PF-P0-011）、文档输出没有 DOCX 草稿结构（PF-P0-012）、缺失 page_content.v1 契约字段、缺失 draft_material 草稿材料（PF-DRAFT-001），或越权做正式版精排时不得放行。",
+    "conditional_p0": "format_specific_dummy 和 draft_material_contract 按运行场景判定：若本轮目标是输出 PPT/HTML/文档草稿或进入渲染后端，则为 P0；若本轮明确只做 JSON 内容准备，可降为 warning 但必须显式说明。",
+    "p1": "P1 不强制阻断，但必须进入 human_review；若 content_density、chart_choice_quality、handoff_clarity 或 draft_quality_boundary 连续偏弱，应沉淀为 page_filling memory。",
+    "score": "如果启用打分，低于 7/10 不建议放行给 format；低于 6/10 必须重做 page filling。"
+  }
+}

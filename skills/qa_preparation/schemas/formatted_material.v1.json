@@ -1,0 +1,34 @@
+{
+  "schema": "formatted_material.v1",
+  "type": "object",
+  "required": ["agent_id", "schema", "format", "audience", "topic", "material_units", "open_design_tasks", "quality_checks"],
+  "properties": {
+    "agent_id": { "const": "format" },
+    "schema": { "const": "formatted_material.v1" },
+    "format": { "type": "string", "enum": ["document", "ppt", "html"] },
+    "audience": { "type": "string", "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"] },
+    "topic": { "type": "string" },
+    "artifact_manifest": { "type": "object" },
+    "material_units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["unit_id", "source_page_no", "headline", "finalized_content", "source_display", "gap_display", "quality_status"],
+        "properties": {
+          "unit_id": { "type": "string" },
+          "source_page_no": { "type": "integer" },
+          "headline": { "type": "string" },
+          "finalized_content": { "type": "object" },
+          "source_display": { "type": "object" },
+          "gap_display": { "type": "object" },
+          "question_risk_tags": { "type": "array" },
+          "quality_status": { "type": "string" }
+        }
+      }
+    },
+    "appendix_units": { "type": "array" },
+    "open_design_tasks": { "type": "array" },
+    "downstream_handoff": { "type": "object" },
+    "quality_checks": { "type": "array" }
+  }
+}

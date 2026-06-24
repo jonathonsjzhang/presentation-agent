@@ -1,0 +1,221 @@
+{
+  "version": "v1.0",
+  "agent_id": "qa_preparation",
+  "purpose": "Evaluate whether the Q&A agent has stress-tested the formal material from the target audience's perspective, produced likely questions, classified answerability, prepared evidence-grounded answer plans where possible, and flagged questions that require presenter input, data closure, appendix backup, or meeting handling tactics.",
+  "rubrics": [
+    {
+      "id": "QA-P0-001",
+      "severity": "P0",
+      "dimension": "question_coverage",
+      "criterion": "必须覆盖正式材料中最可能被追问的来源：强结论、建议动作、关键图表、数据口径、假设、风险、data_gaps、open_design_tasks。",
+      "check": "question_source_coverage 明确扫描 material_units、appendix_units、gap_display、open_design_tasks、downstream_handoff；top_questions 和 page_level_questions 覆盖高风险来源。",
+      "fail_examples": [
+        "只生成 5 个通用问题，没有对应任何页面。",
+        "材料有阻断型 data gap，但 Q&A 没有任何追问。",
+        "资源申请页没有关于投入产出或替代方案的问题。"
+      ],
+      "fix": "按页面/模块逐一扫描，补上来自 headline、visual、source、gap、recommendation、risk 的问题。"
+    },
+    {
+      "id": "QA-P0-002",
+      "severity": "P0",
+      "dimension": "audience_lens",
+      "criterion": "问题必须按汇报对象生成，不得只有通用 FAQ。",
+      "check": "每个 top question 有 audience_lens；问题角度匹配 board / exec_office / strategy_lead / business_team / external。",
+      "fail_examples": [
+        "董事会版本只问数据口径，不问风险收益和替代方案。",
+        "业务团队版本只问长期战略，不问怎么落地。",
+        "外部分享版本追问内部资源授权。"
+      ],
+      "fix": "按听众真实关切重写问题：董事会重取舍，总办重拍板协调，战略负责人重假设，业务团队重动作，外部重可信与可公开。"
+    },
+    {
+      "id": "QA-P0-003",
+      "severity": "P0",
+      "dimension": "answerability_classification",
+      "criterion": "每个问题必须分类 answerability：answerable_from_material / needs_presenter_input / needs_data / should_defer。",
+      "check": "answer_plan.answer_mode 非空；不能回答的问题必须列 required_input 或 followup_action；不得假装材料已能回答。",
+      "fail_examples": [
+        "问题问“预算能否翻倍”，材料没有预算数据，却直接答“可以”。",
+        "所有问题都标 strong confidence。",
+        "需要汇报人判断的问题没有 required_presenter_input。"
+      ],
+      "fix": "把答案分流：材料可答则给答案；需要汇报人补充则给现场边界话术和会前追问；需要数据则进入 data_gaps_to_close。"
+    },
+    {
+      "id": "QA-P0-004",
+      "severity": "P0",
+      "dimension": "answer_plan_completeness",
+      "criterion": "高风险问题必须有完整 answer_plan：短答、展开答或占位策略、证据引用、边界话术、回主线桥接、follow-up。",
+      "check": "severity=high 的问题包含 short_answer、expanded_answer 或 response_strategy、evidence_refs、boundary_statement、bridge_back、followup_action。",
+      "fail_examples": [
+        "高风险问题只有一句“需要进一步讨论”。",
+        "没有 bridge_back，回答展开成另一份报告。",
+        "没有 boundary_statement，容易被继续追问击穿。"
+      ],
+      "fix": "补齐现场可用的一句话短答、如被追问的展开、边界、证据 refs 和回到主线的话术。"
+    },
+    {
+      "id": "QA-P0-005",
+      "severity": "P0",
+      "dimension": "evidence_grounding",
+      "criterion": "答案不得新增材料中没有的事实；所有实质性回答必须能回指 material_units、appendix_units、sources 或明确标记为待补。",
+      "check": "answerable_from_material 的问题必须有 evidence_refs/source_unit_ids；needs_input/needs_data 不得写确定性答案。",
+      "fail_examples": [
+        "材料没有竞品数据，答案却说竞品份额下滑。",
+        "把 low confidence 证据包装成确定结论。",
+        "外部分享答案引用内部敏感数据。"
+      ],
+      "fix": "删除新增事实；用材料内证据回答，或改成边界话术 + followup。"
+    },
+    {
+      "id": "QA-P0-006",
+      "severity": "P0",
+      "dimension": "followup_and_owner",
+      "criterion": "所有 high+weak、needs_presenter_input、needs_data、blocking gap 问题必须进入 pre_meeting_followups 或 data_gaps_to_close。",
+      "check": "pre_meeting_followups 包含 question_id、needed_input、owner_or_question、deadline_or_timing、impact_if_missing。",
+      "fail_examples": [
+        "高风险弱答案没有会前补充任务。",
+        "需要业务负责人确认的口径没有标 owner_or_question。",
+        "阻断型数据缺口只在问题里提到，没有进入 data_gaps_to_close。"
+      ],
+      "fix": "生成会前追问清单，明确要问谁、补什么、缺失会影响哪页和现场怎么处理。"
+    },
+    {
+      "id": "QA-P0-007",
+      "severity": "P0",
+      "dimension": "meeting_handling",
+      "criterion": "必须给出现场处理策略：正面回答、转附录、承认边界、会后补充、桥回主线，以及 do_not_say。",
+      "check": "meeting_handling_plan、defensive_notes、do_not_say 非空；高风险问题有 handling_mode。",
+      "fail_examples": [
+        "没有告诉汇报人哪些问题不要硬答。",
+        "所有问题都建议正面回答。",
+        "被追问到缺数据时没有会后补充话术。"
+      ],
+      "fix": "为每类问题指定处理模式和安全话术，尤其是弱证据、敏感信息和超出范围问题。"
+    },
+    {
+      "id": "QA-P0-008",
+      "severity": "P0",
+      "dimension": "scope_control",
+      "criterion": "Q&A 不得扩展成另一份报告；quick_sync 场景必须少而关键，deep_dive 才需要完整压力测试。",
+      "check": "report_type=quick_sync 时 top_questions 数量克制，答案聚焦事实、影响、下一步观察；deep_dive 覆盖反方和假设。",
+      "fail_examples": [
+        "信息快速同步生成 40 个战略质询。",
+        "答案引入新框架，变成新的分析报告。",
+        "每个问题都写成长篇推演。"
+      ],
+      "fix": "按 report_type 压缩问题数量和答案长度；把延展问题放入 optional_questions 或会后 follow-up。"
+    },
+    {
+      "id": "QA-P0-009",
+      "severity": "P0",
+      "dimension": "role_boundary",
+      "criterion": "Q&A 不得改写正式材料、不得补造数据、不得生成逐字稿或新增未支撑结论。",
+      "check": "输出只包含 qa_pack；不修改 formatted_material；speaker_script 只接收风险提示和桥接话术。",
+      "fail_examples": [
+        "为了回答问题修改了页面结论。",
+        "生成完整 30 分钟讲稿。",
+        "补了一组未提供的数据。"
+      ],
+      "fix": "把材料修改建议写入 backup_appendix_requests 或 pre_meeting_followups；逐字稿交给 speaker_script。"
+    },
+    {
+      "id": "QA-P1-001",
+      "severity": "P1",
+      "dimension": "prioritization_quality",
+      "criterion": "问题排序应体现会场真实风险，而不是平均分配。",
+      "check": "top_questions 优先 high severity/high likelihood/high impact；page_level_questions 可更细。",
+      "weak_examples": [
+        "把术语解释排在资源风险前面。",
+        "所有问题 severity 都是 medium。",
+        "top_questions 与 page_level_questions 重复。"
+      ],
+      "improvement": "按 likelihood、impact、speaker_vulnerability 排序，合并重复问题。"
+    },
+    {
+      "id": "QA-P1-002",
+      "severity": "P1",
+      "dimension": "answer_tone",
+      "criterion": "答案语气应适合受众：高层短、稳、可决策；外部公开、克制、可验证。",
+      "check": "answer_tone_guidance 和 answer_plan 语气一致；不过度防御或过度承诺。",
+      "weak_examples": [
+        "董事会答案像技术说明。",
+        "外部分享答案带内部黑话。",
+        "业务团队答案过于抽象。"
+      ],
+      "improvement": "按 audience 重写短答和桥接话术。"
+    },
+    {
+      "id": "QA-P1-003",
+      "severity": "P1",
+      "dimension": "bridge_back_quality",
+      "criterion": "bridge_back 应自然回到主线，而不是机械地说“回到主题”。",
+      "check": "bridge_back 能把回答重新连接到核心结论、决策请求或下一步行动。",
+      "weak_examples": [
+        "这个问题很好，回到我们的主题。",
+        "后面再说。",
+        "如前所述。"
+      ],
+      "improvement": "改成“所以这个问题最后仍回到我们今天要确认的资源节奏：先补齐 X，再决定是否扩大投入”。"
+    },
+    {
+      "id": "QA-P1-004",
+      "severity": "P1",
+      "dimension": "appendix_usefulness",
+      "criterion": "backup_appendix_requests 应帮助补强会场防守，而不是泛泛要求加附录。",
+      "check": "每个 appendix request 包含 linked_question_id、needed_material、purpose、priority。",
+      "weak_examples": [
+        "建议多加几页附录。",
+        "补充更多数据。",
+        "没有说明附录对应哪个问题。"
+      ],
+      "improvement": "把附录请求绑定到高风险问题，例如“Q-004 需要补 cohort 留存口径表，用于防守节假日 outlier 质疑”。"
+    },
+    {
+      "id": "QA-P1-005",
+      "severity": "P1",
+      "dimension": "speaker_readiness",
+      "criterion": "qa_pack 应能帮助逐字稿预防高风险追问。",
+      "check": "speaker_script_handoff 包含 risk_lines_to_preempt、do_not_overstate、safe_bridges。",
+      "weak_examples": [
+        "只有问题，没有给讲稿任何提示。",
+        "没有标记哪些点要在正文中提前垫一句。",
+        "do_not_say 为空但材料里有 weak evidence。"
+      ],
+      "improvement": "补充讲稿前置风险提示和安全边界句。"
+    }
+  ],
+  "scoring_dimensions": [
+    {
+      "dimension": "coverage_and_prioritization",
+      "weight": 25,
+      "description": "是否覆盖关键质询来源，并按风险排序。"
+    },
+    {
+      "dimension": "answerability_and_followup",
+      "weight": 25,
+      "description": "是否正确区分可答、需汇报人补充、需补数据和应延后处理的问题。"
+    },
+    {
+      "dimension": "evidence_and_boundary",
+      "weight": 20,
+      "description": "答案是否有证据、边界和回主线话术，且不新增未支撑事实。"
+    },
+    {
+      "dimension": "audience_and_meeting_handling",
+      "weight": 15,
+      "description": "是否按受众调整问题角度、语气和现场处理策略。"
+    },
+    {
+      "dimension": "downstream_readiness",
+      "weight": 15,
+      "description": "是否给会前补强、附录、逐字稿和现场防守提供清晰交接。"
+    }
+  ],
+  "pass_policy": {
+    "p0": "任何 P0 命中都必须返工；特别是问题覆盖不足、未分类 answerability、硬答缺证问题、high+weak 未进入 follow-up、没有边界话术或新增未支撑事实时不得放行。",
+    "p1": "P1 不强制阻断，但必须进入 human_review；若 prioritization、answer_tone 或 bridge_back 连续偏弱，应沉淀为 Q&A memory。",
+    "score": "如果启用打分，低于 7/10 不建议放行给 speaker_script；低于 6/10 必须重做 Q&A。"
+  }
+}

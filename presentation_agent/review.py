@@ -1,0 +1,410 @@
+from __future__ import annotations
+
+import json
+from typing import Any, Optional
+
+from presentation_agent.io import flatten_text
+from presentation_agent.llm.client import LLMClient
+from presentation_agent.llm.schema import validate
+from presentation_agent.llm.types import LLMRequest, SchemaValidationError
+from presentation_agent.machine_check import run_machine_checks
+from presentation_agent.memory import MemoryStore
+from presentation_agent.models import AgentSpec, Objection, ReviewReport, StopDecision
+
+# Schema for what the LLM reviewer must return.
+_REVIEW_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["objections"],
+    "properties": {
+        "objections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["rubric_id", "severity", "dimension", "message"],
+                "properties": {
+                    "rubric_id": {"type": "string"},
+                    "severity": {"enum": ["P0", "P1"]},
+                    "dimension": {"type": "string"},
+                    "message": {"type": "string"},
+                    "evidence": {"type": "string"},
+                    "suggestion": {"type": "string"},
+                },
+            },
+        }
+    },
+}
+
+
+class ArtifactReviewer:
+    """Three-layer reviewer for any agent.
+
+    Layer 1 (deterministic P0 hard gate): schema compliance + identity fields,
+    driven by the agent's own output schema from the skill package — no
+    hard-coded field lists. PLUS any rubric that declares a structured
+    ``machine_check`` block (enum / length / count / required) is evaluated here
+    deterministically, so mechanically-decidable P0 never depends on an LLM.
+    Fast and reliable; owns objective correctness.
+
+    Layer 2 (LLM subjective review, optional): reads rubrics.json in a clean
+    context and judges the genuinely subjective criteria a regex can't — hook,
+    pacing, memorability, MECE, title-read test, etc. Rubrics already covered by
+    a machine check are excluded from the LLM prompt to avoid double-reporting.
+    When ``upstream_artifact`` is provided, the L2 prompt also includes an
+    "upstream signal check" that detects contradictions, degradation, or missing
+    inheritance from the upstream artifact. Skipped gracefully when no LLM is
+    injected (e.g. pure offline schema check).
+
+    Layer 3 (memory scan): surfaces historical lessons as P1 reminders.
+    """
+
+    def __init__(self, llm: Optional[LLMClient] = None) -> None:
+        self.llm = llm
+
+    def review(
+        self,
+        spec: AgentSpec,
+        artifact: dict[str, Any],
+        memory: MemoryStore,
+        skill_package: Optional[dict[str, Any]] = None,
+        upstream_artifact: Optional[dict[str, Any]] = None,
+    ) -> ReviewReport:
+        objections: list[Objection] = []
+        objections.extend(self._schema_gate(spec, artifact, skill_package))
+        objections.extend(self._llm_review(spec, artifact, skill_package, upstream_artifact))
+        objections.extend(self._memory_scan(artifact, memory))
+        reviewer = "llm+deterministic" if self.llm is not None else "deterministic"
+        return ReviewReport(reviewer=reviewer, objections=objections)
+
+    # -- layer 1: deterministic schema hard gate -------------------------
+
+    def _schema_gate(
+        self,
+        spec: AgentSpec,
+        artifact: dict[str, Any],
+        skill_package: Optional[dict[str, Any]],
+    ) -> list[Objection]:
+        objections: list[Objection] = []
+        if artifact.get("schema") != spec.output_schema:
+            objections.append(
+                Objection(
+                    id="P0-schema",
+                    severity="P0",
+                    dimension="接口",
+                    message=f"artifact schema 必须为 {spec.output_schema}",
+                    evidence="schema",
+                    suggestion="按本环节 output_schema 重写 artifact",
+                )
+            )
+
+        schema = (skill_package or {}).get("schemas", {}).get(spec.output_schema)
+        if schema:
+            errors = validate(artifact, schema)
+            for index, error in enumerate(errors, start=1):
+                objections.append(
+                    Objection(
+                        id=f"P0-schema-{index}",
+                        severity="P0",
+                        dimension="接口",
+                        message=f"schema 不合规: {error}",
+                        evidence="schema",
+                        suggestion="补齐/修正字段以符合 output schema",
+                    )
+                )
+
+        # Mechanically-decidable rubrics (enum / length / count / required)
+        # declared via machine_check are evaluated deterministically here,
+        # not handed to the probabilistic LLM layer.
+        rubrics = self._rubrics(skill_package)
+        if rubrics:
+            objections.extend(run_machine_checks(artifact, rubrics))
+        return objections
+
+    @staticmethod
+    def _rubrics(skill_package: Optional[dict[str, Any]]) -> list[dict[str, Any]]:
+        rubrics = (skill_package or {}).get("rubrics", [])
+        return rubrics if isinstance(rubrics, list) else []
+
+    @staticmethod
+    def _machine_checked_ids(rubrics: list[dict[str, Any]]) -> set[str]:
+        return {
+            r.get("id")
+            for r in rubrics
+            if isinstance(r.get("machine_check"), dict) and r.get("id")
+        }
+
+    # -- layer 2: LLM subjective review against rubrics ------------------
+
+    def _llm_review(
+        self,
+        spec: AgentSpec,
+        artifact: dict[str, Any],
+        skill_package: Optional[dict[str, Any]],
+        upstream_artifact: Optional[dict[str, Any]] = None,
+    ) -> list[Objection]:
+        if self.llm is None or not skill_package:
+            return []
+        all_rubrics = self._rubrics(skill_package)
+        if not all_rubrics:
+            return []
+        # Exclude rubrics already covered deterministically in Layer 1 so the
+        # LLM doesn't re-report the same mechanical failures.
+        machine_ids = self._machine_checked_ids(all_rubrics)
+        rubrics = [r for r in all_rubrics if r.get("id") not in machine_ids]
+        if not rubrics:
+            return []
+
+        system = (
+            "你是汇报助手流水线的独立审查 Agent，工作在干净上下文里，只依据 rubrics 判断产物质量，"
+            "不参与生成、不揣测作者意图。逐条对照 rubrics 检查 artifact，命中即报异议。"
+            "P0 是必须返工的硬伤，P1 是质量改进项。只报真实命中的条目，不要凑数。"
+        )
+        # drop the structured machine_check noise from what the LLM reads
+        llm_rubrics = [
+            {k: v for k, v in r.items() if k != "machine_check"} for r in rubrics
+        ]
+
+        # Build the user prompt sections: rubrics + artifact + optional
+        # upstream-signal-check + output instruction.
+        sections: list[str] = [
+            "## 评审 rubrics(逐条对照)",
+            self._json_block(llm_rubrics),
+            "## 待审查 artifact",
+            self._json_block(artifact),
+        ]
+
+        if upstream_artifact is not None:
+            sections.extend([
+                "## 上游信号检查 (upstream signal)",
+                self._json_block(self._signal_snapshot(upstream_artifact)),
+                "",
+                "检查上游 artifact 的关键信号是否在当前 artifact 中被正确地继承或演化：",
+                "- **矛盾**：当前 artifact 的结论、预设受众、方向是否与上游的明确信号正面冲突？",
+                "- **退化**：上游的尖锐判断在当前 artifact 中是否被模糊化、稀释或退回为中性描述？",
+                "- **缺失继承**：上游明确提出的约束（受众类型、页数上限、目标 action）是否在当前 artifact "
+                "中被忽略？",
+                "",
+                "如果发现上述任一问题，以 rubric_id=UPSTREAM-SIG-001、dimension=上游信号 报一条 P1 objection。",
+                "没有发现任何问题时，无需报这条。",
+            ])
+
+        sections.extend([
+            "## 输出要求",
+            "只输出一个 ```json 代码块，形如 "
+            '{"objections": [{"rubric_id","severity","dimension","message","evidence","suggestion"}]}。'
+            "没有任何命中时输出 {\"objections\": []}。",
+        ])
+
+        user = "\n\n".join(sections)
+        request = LLMRequest(
+            system=system,
+            user=user,
+            purpose="review",
+            schema=_REVIEW_OUTPUT_SCHEMA,
+            schema_name="review_report.v1",
+            agent_id=spec.id,
+        )
+        try:
+            response = self.llm.complete(request)
+        except SchemaValidationError:
+            # A reviewer that itself fails to produce valid output should not
+            # crash the loop; treat as "no LLM objections this round".
+            return []
+
+        objections: list[Objection] = []
+        for index, raw in enumerate(response.data.get("objections", []), start=1):
+            severity = raw.get("severity")
+            if severity not in ("P0", "P1"):
+                continue
+            objections.append(
+                Objection(
+                    id=f"{severity}-{raw.get('rubric_id', f'llm-{index}')}",
+                    severity=severity,
+                    dimension=str(raw.get("dimension", "")),
+                    message=str(raw.get("message", "")),
+                    evidence=str(raw.get("evidence", raw.get("rubric_id", ""))),
+                    suggestion=str(raw.get("suggestion", "")),
+                )
+            )
+        return objections
+
+    @staticmethod
+    def _signal_snapshot(upstream: dict[str, Any]) -> dict[str, Any]:
+        """Extract the signal-relevant fields from an upstream artifact.
+
+        Only keeps lightweight fields that downstream agents should inherit or
+        consciously deviate from — strips heavy payloads (material_units, pages,
+        evidence_bank, etc.) to keep the review prompt lean.
+        """
+        heavy = {"material_units", "pages", "evidence_bank", "style_guidance", "raw_text",
+                  "reference_patterns", "historical_reference_materials", "input_inventory"}
+        return {
+            k: v for k, v in upstream.items()
+            if k not in heavy and v not in ("", [], {}, None)
+        }
+
+    # -- layer 3: memory scan -------------------------------------------
+
+    def _memory_scan(self, artifact: dict[str, Any], memory: MemoryStore) -> list[Objection]:
+        content = dict(artifact)
+        content.pop("style_guidance", None)
+        text = flatten_text(content)
+        objections: list[Objection] = []
+        for item in memory.scan(text):
+            objections.append(
+                Objection(
+                    id=f"P1-memory-{item.id}",
+                    severity="P1",
+                    dimension=item.dimension,
+                    message=f"命中历史 memory: {item.trigger}",
+                    evidence=item.id,
+                    suggestion=item.suggestion,
+                )
+            )
+        return objections
+
+    @staticmethod
+    def _json_block(data: Any) -> str:
+        return "```json\n" + json.dumps(data, ensure_ascii=False, indent=2) + "\n```"
+
+
+# Lightweight output schema the stop-check LLM must return.
+_STOP_CHECK_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["can_stop", "confidence"],
+    "properties": {
+        "can_stop": {"type": "boolean"},
+        "confidence": {"enum": ["high", "medium", "low"]},
+        "notes": {"type": "string"},
+        "flags": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Short labels for systemic concerns, e.g. 'thin_evidence', 'missing_exec_summary', 'inconsistent_tone'",
+        },
+    },
+}
+
+
+class StopChecker:
+    """Clean-context stop gate: hard constraints + independent LLM sanity check.
+
+    Layer 1 (deterministic): P0 objection count > 0 → block; schema mismatch → block.
+    Layer 2 (LLM sanity): a lightweight, independent LLM context checks whether the
+    artifact is genuinely converged or whether there are systemic issues the
+    dedicated reviewer (L2 per-rubric LLM) might have missed.
+
+    When ``llm`` is None the checker gracefully degrades to mechanical-only mode.
+    The LLM here MUST be a separate client instance from both the maker and the
+    reviewer, so the stop gate truly has independent reasoning.
+    """
+
+    def __init__(self, llm: Optional[LLMClient] = None) -> None:
+        self.llm = llm
+
+    def check(
+        self,
+        spec: AgentSpec,
+        artifact: dict[str, Any],
+        review: ReviewReport,
+    ) -> StopDecision:
+        # -- layer 1: deterministic hard gates --------------------------------
+        if review.p0:
+            return StopDecision(can_stop=False, reason=f"blocked by {len(review.p0)} P0 objection(s)")
+        if artifact.get("schema") != spec.output_schema:
+            return StopDecision(can_stop=False, reason="output schema mismatch")
+
+        # -- layer 2: independent LLM sanity check ----------------------------
+        assessment: Optional[dict[str, Any]] = None
+        if self.llm is not None:
+            try:
+                assessment = self._llm_sanity_check(spec, artifact, review)
+            except Exception:
+                # A broken stop-check LLM must not crash the loop — treat as
+                # "LLM unavailable, fall through to mechanical pass".
+                assessment = None
+
+        if assessment is None:
+            return StopDecision(
+                can_stop=True,
+                reason="all hard constraints passed; waiting for human review",
+            )
+
+        llm_stop = not assessment.get("can_stop", True)
+        confidence = assessment.get("confidence", "medium")
+        notes = assessment.get("notes", "")
+        flags = assessment.get("flags", [])
+
+        if llm_stop:
+            flag_detail = f" flags={flags}" if flags else ""
+            return StopDecision(
+                can_stop=False,
+                reason=f"independent stop-check disagrees (confidence={confidence}): {notes}{flag_detail}",
+                llm_assessment=assessment,
+            )
+
+        return StopDecision(
+            can_stop=True,
+            reason=f"all hard constraints + independent check passed (confidence={confidence})",
+            llm_assessment=assessment,
+        )
+
+    def _llm_sanity_check(
+        self,
+        spec: AgentSpec,
+        artifact: dict[str, Any],
+        review: ReviewReport,
+    ) -> dict[str, Any]:
+        """Send the artifact + review summary to the LLM for a lightweight sanity pass.
+
+        The prompt is deliberately short — this is not a second full review; it
+        only asks "is there anything the per-rubric reviewer obviously missed?"
+        """
+        # Strip bulk fields to keep the prompt light.
+        safe = dict(artifact)
+        safe.pop("style_guidance", None)
+        safe.pop("material_units", None)  # too large, use count hint instead
+        units = artifact.get("material_units")
+        if isinstance(units, list):
+            safe["_material_unit_count"] = len(units)
+
+        review_summary = {
+            "p0_count": len(review.p0),
+            "p1_count": len(review.p1),
+            "p1_samples": [obj.message for obj in review.p1[:3]],
+        }
+
+        system = (
+            "You are an independent quality gate for a strategy presentation pipeline. "
+            "The agent that produced this artifact and a dedicated per-rubric reviewer "
+            "have both already run. Your job is NOT to re-review every rubric — it is "
+            "to scan for SYSTEMIC concerns that a rubric-by-rubric reviewer might miss:\n"
+            "- Does the argument actually ANSWER the prompt/objective?\n"
+            "- Is the evidence thin, circular, or self-referential?\n"
+            "- Are there missing structural elements (no exec summary, no action items)?\n"
+            "- Is the tone or framing inconsistent with the audience/objective?\n"
+            "- Could a reader plausibly misunderstand the central claim?\n\n"
+            "Be strict: if you see ANY of these systemic issues, set can_stop=false. "
+            "Only set can_stop=true when you are genuinely confident the artifact is "
+            "ready for human review. Confidence should reflect your certainty level."
+        )
+
+        user = (
+            f"Agent: {spec.name} (stage {spec.stage})\n"
+            f"Output schema: {spec.output_schema}\n\n"
+            f"--- ARTIFACT SUMMARY ---\n"
+            f"{json.dumps(safe, ensure_ascii=False, indent=2, default=str)[:3000]}\n\n"
+            f"--- REVIEW SUMMARY ---\n"
+            f"{json.dumps(review_summary, ensure_ascii=False, indent=2)}\n\n"
+            f"Based on the above, can this artifact stop for human review? "
+            f"Return your assessment as JSON."
+        )
+
+        request = LLMRequest(
+            system=system,
+            user=user,
+            purpose="stop_check",
+            schema=_STOP_CHECK_SCHEMA,
+            schema_name="stop_check",
+            agent_id=spec.id,
+        )
+        response = self.llm.complete(request)
+        return response.data

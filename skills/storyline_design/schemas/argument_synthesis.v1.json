@@ -1,0 +1,59 @@
+{
+  "schema": "argument_synthesis.v1",
+  "type": "object",
+  "required": [
+    "topic",
+    "executive_summary",
+    "core_question",
+    "core_thesis",
+    "expected_action",
+    "key_arguments",
+    "evidence_bank",
+    "storyline_handoff"
+  ],
+  "properties": {
+    "topic": { "type": "string" },
+    "context_summary": { "type": "string" },
+    "executive_summary": {
+      "type": "object",
+      "required": ["core_conclusion", "expected_action", "decision_request", "why_now", "supporting_arguments"],
+      "properties": {
+        "core_conclusion": { "type": "string" },
+        "expected_action": { "type": "string" },
+        "decision_request": { "type": "string" },
+        "why_now": { "type": "string" },
+        "supporting_arguments": { "type": "array" }
+      }
+    },
+    "core_question": { "type": "string" },
+    "core_thesis": { "type": "string" },
+    "expected_action": { "type": "string" },
+    "key_arguments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim", "logic_chain", "evidence_refs", "so_what", "confidence"],
+        "properties": {
+          "claim": { "type": "string" },
+          "logic_chain": { "type": "string" },
+          "evidence_refs": { "type": "array", "items": { "type": "string" } },
+          "so_what": { "type": "string" },
+          "confidence": { "type": "string" }
+        }
+      }
+    },
+    "evidence_bank": { "type": "array" },
+    "risks_and_counterarguments": { "type": "array" },
+    "storyline_handoff": {
+      "type": "object",
+      "properties": {
+        "executive_summary_to_use": { "type": "string" },
+        "argument_order": { "type": "array", "items": { "type": "string" } },
+        "evidence_refs_by_argument": { "type": "object" },
+        "boundaries_not_to_overclaim": { "type": "array", "items": { "type": "string" } },
+        "full_evidence_location": { "type": "string" }
+      }
+    },
+    "open_questions": { "type": "array" }
+  }
+}

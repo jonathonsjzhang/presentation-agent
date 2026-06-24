@@ -1,0 +1,196 @@
+{
+  "schema": "qa_pack.v1",
+  "type": "object",
+  "required": [
+    "agent_id",
+    "schema",
+    "topic",
+    "audience",
+    "format",
+    "question_source_coverage",
+    "top_questions",
+    "page_level_questions",
+    "risk_register",
+    "data_gaps_to_close",
+    "pre_meeting_followups",
+    "backup_appendix_requests",
+    "defensive_notes",
+    "meeting_handling_plan",
+    "speaker_script_handoff",
+    "answer_tone_guidance"
+  ],
+  "properties": {
+    "agent_id": { "const": "qa_preparation" },
+    "schema": { "const": "qa_pack.v1" },
+    "topic": { "type": "string" },
+    "audience": { "type": "string", "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"] },
+    "format": { "type": "string", "enum": ["document", "ppt", "html"] },
+    "question_source_coverage": {
+      "type": "object",
+      "properties": {
+        "material_units_scanned": { "type": "array", "items": { "type": "string" } },
+        "appendix_units_scanned": { "type": "array", "items": { "type": "string" } },
+        "data_gaps_scanned": { "type": "array" },
+        "open_design_tasks_scanned": { "type": "array" },
+        "coverage_notes": { "type": "string" }
+      }
+    },
+    "top_questions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/question" }
+    },
+    "page_level_questions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/question" }
+    },
+    "risk_register": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["risk_id", "risk", "severity", "related_question_ids", "mitigation"],
+        "properties": {
+          "risk_id": { "type": "string" },
+          "risk": { "type": "string" },
+          "severity": { "type": "string" },
+          "related_question_ids": { "type": "array", "items": { "type": "string" } },
+          "mitigation": { "type": "string" },
+          "owner_or_question": { "type": "string" }
+        }
+      }
+    },
+    "data_gaps_to_close": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["gap_id", "related_question_ids", "needed_input", "impact_if_missing", "blocking_level"],
+        "properties": {
+          "gap_id": { "type": "string" },
+          "related_question_ids": { "type": "array", "items": { "type": "string" } },
+          "needed_input": { "type": "string" },
+          "owner_or_question": { "type": "string" },
+          "impact_if_missing": { "type": "string" },
+          "blocking_level": { "type": "string" }
+        }
+      }
+    },
+    "pre_meeting_followups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["followup_id", "related_question_ids", "needed_input", "impact_if_missing"],
+        "properties": {
+          "followup_id": { "type": "string" },
+          "related_question_ids": { "type": "array", "items": { "type": "string" } },
+          "needed_input": { "type": "string" },
+          "owner_or_question": { "type": "string" },
+          "timing": { "type": "string" },
+          "impact_if_missing": { "type": "string" },
+          "fallback_if_not_closed": { "type": "string" }
+        }
+      }
+    },
+    "backup_appendix_requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["request_id", "linked_question_ids", "needed_material", "purpose", "priority"],
+        "properties": {
+          "request_id": { "type": "string" },
+          "linked_question_ids": { "type": "array", "items": { "type": "string" } },
+          "needed_material": { "type": "string" },
+          "purpose": { "type": "string" },
+          "priority": { "type": "string" }
+        }
+      }
+    },
+    "defensive_notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["note_id", "related_question_ids", "note", "do_not_say"],
+        "properties": {
+          "note_id": { "type": "string" },
+          "related_question_ids": { "type": "array", "items": { "type": "string" } },
+          "note": { "type": "string" },
+          "do_not_say": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "meeting_handling_plan": {
+      "type": "object",
+      "properties": {
+        "answer_directly": { "type": "array", "items": { "type": "string" } },
+        "route_to_appendix": { "type": "array", "items": { "type": "string" } },
+        "defer_to_followup": { "type": "array", "items": { "type": "string" } },
+        "ask_presenter_before_meeting": { "type": "array", "items": { "type": "string" } },
+        "safe_bridge_lines": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "speaker_script_handoff": {
+      "type": "object",
+      "properties": {
+        "risk_lines_to_preempt": { "type": "array" },
+        "do_not_overstate": { "type": "array" },
+        "safe_bridges": { "type": "array" },
+        "questions_to_prepare_for": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "answer_tone_guidance": { "type": "string" }
+  },
+  "$defs": {
+    "question": {
+      "type": "object",
+      "required": [
+        "question_id",
+        "question",
+        "audience_lens",
+        "question_source",
+        "severity",
+        "likelihood",
+        "impact",
+        "answer_mode",
+        "answer_confidence",
+        "answer_plan",
+        "handling_mode",
+        "followup_needed"
+      ],
+      "properties": {
+        "question_id": { "type": "string" },
+        "question": { "type": "string" },
+        "audience_lens": { "type": "string" },
+        "source_unit_ids": { "type": "array", "items": { "type": "string" } },
+        "source_page_nos": { "type": "array", "items": { "type": "integer" } },
+        "question_source": { "type": "string" },
+        "severity": { "type": "string", "enum": ["high", "medium", "low"] },
+        "likelihood": { "type": "string", "enum": ["high", "medium", "low"] },
+        "impact": { "type": "string", "enum": ["high", "medium", "low"] },
+        "speaker_vulnerability": { "type": "string" },
+        "answer_mode": {
+          "type": "string",
+          "enum": ["answerable_from_material", "needs_presenter_input", "needs_data", "should_defer"]
+        },
+        "answer_confidence": { "type": "string", "enum": ["strong", "moderate", "weak"] },
+        "answer_plan": {
+          "type": "object",
+          "required": ["short_answer", "boundary_statement", "bridge_back"],
+          "properties": {
+            "short_answer": { "type": "string" },
+            "expanded_answer": { "type": "string" },
+            "response_strategy": { "type": "string" },
+            "evidence_refs": { "type": "array", "items": { "type": "string" } },
+            "boundary_statement": { "type": "string" },
+            "bridge_back": { "type": "string" },
+            "required_presenter_input": { "type": "array", "items": { "type": "string" } },
+            "followup_action": { "type": "string" },
+            "do_not_say": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "handling_mode": {
+          "type": "string",
+          "enum": ["answer_directly", "route_to_appendix", "defer_to_followup", "ask_presenter_before_meeting"]
+        },
+        "followup_needed": { "type": "boolean" }
+      }
+    }
+  }
+}

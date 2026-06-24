@@ -1,0 +1,50 @@
+# ===== OS / editor =====
+.DS_Store
+**/.DS_Store
+*.swp
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ===== Virtual environments =====
+.venv/
+venv/
+env/
+ENV/
+
+# ===== Local host-agent / IDE configs (canonical copies live in templates/host_adapters/) =====
+.claude/
+.codex/
+
+# ===== Internal dev memory & logs (not for distribution) =====
+.workbuddy/
+.learnings/
+
+# ===== Runtime data & outputs =====
+# init-workspace seeds a fresh user workspace; the repo intentionally ships no accumulated state.
+data/
+runs/
+artifacts/
+outputs/
+tmp/
+
+# ===== Junk pending deletion =====
+_pending_delete/
+
+# ===== Internal dev logs & third-party reference materials (business / IP sensitive) =====
+docs/开发日志_*.md
+docs/references/
+
+# ===== Real business analysis data (excluded per maintainer decision) =====
+examples/

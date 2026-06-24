@@ -1,0 +1,14 @@
+{
+  "schema": "raw_brief.v1",
+  "type": "object",
+  "properties": {
+    "topic": { "type": "string" },
+    "audience": { "type": "string", "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"] },
+    "report_type": { "type": "string", "enum": ["deep_dive", "quick_sync"] },
+    "output_format": { "type": "string", "enum": ["document", "ppt", "html"] },
+    "template": { "type": "array" },
+    "historical_reference_materials": { "type": "array" },
+    "brief": { "type": "string" },
+    "materials": { "type": "array" }
+  }
+}

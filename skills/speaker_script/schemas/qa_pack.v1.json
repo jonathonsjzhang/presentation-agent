@@ -1,0 +1,51 @@
+{
+  "schema": "qa_pack.v1",
+  "type": "object",
+  "required": [
+    "agent_id",
+    "schema",
+    "topic",
+    "audience",
+    "top_questions",
+    "risk_register",
+    "speaker_script_handoff",
+    "answer_tone_guidance"
+  ],
+  "properties": {
+    "agent_id": { "const": "qa_preparation" },
+    "schema": { "const": "qa_pack.v1" },
+    "topic": { "type": "string" },
+    "audience": { "type": "string", "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"] },
+    "format": { "type": "string", "enum": ["document", "ppt", "html"] },
+    "top_questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["question_id", "question", "severity", "answer_mode", "answer_plan"],
+        "properties": {
+          "question_id": { "type": "string" },
+          "question": { "type": "string" },
+          "severity": { "type": "string" },
+          "answer_mode": { "type": "string" },
+          "answer_plan": { "type": "object" },
+          "handling_mode": { "type": "string" }
+        }
+      }
+    },
+    "page_level_questions": { "type": "array" },
+    "risk_register": { "type": "array" },
+    "pre_meeting_followups": { "type": "array" },
+    "defensive_notes": { "type": "array" },
+    "meeting_handling_plan": { "type": "object" },
+    "speaker_script_handoff": {
+      "type": "object",
+      "properties": {
+        "risk_lines_to_preempt": { "type": "array" },
+        "do_not_overstate": { "type": "array" },
+        "safe_bridges": { "type": "array" },
+        "questions_to_prepare_for": { "type": "array" }
+      }
+    },
+    "answer_tone_guidance": { "type": "string" }
+  }
+}

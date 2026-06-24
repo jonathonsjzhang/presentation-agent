@@ -1,0 +1,24 @@
+{
+  "default_provider": "codex",
+  "max_retries": 1,
+  "providers": {
+    "mock": { "kind": "mock", "fixtures_dir": "tests/fixtures/llm" },
+    "cli": {
+      "kind": "cli",
+      "command": "claude",
+      "args": ["-p", "--bare", "--output-format", "json", "--allowedTools", ""],
+      "stdout_format": "envelope",
+      "result_field": "result",
+      "timeout": 240
+    },
+    "codex": {
+      "kind": "cli",
+      "command": "codex",
+      "args": ["exec", "--skip-git-repo-check", "--sandbox", "read-only", "-"],
+      "stdout_format": "text",
+      "timeout": 600
+    },
+    "inline": { "kind": "inline" }
+  },
+  "purpose_overrides": {}
+}

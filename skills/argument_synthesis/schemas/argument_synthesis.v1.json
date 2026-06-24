@@ -1,0 +1,158 @@
+{
+  "schema": "argument_synthesis.v1",
+  "type": "object",
+  "required": [
+    "topic",
+    "executive_summary",
+    "core_question",
+    "core_thesis",
+    "expected_action",
+    "thesis_candidates",
+    "selection_reason",
+    "key_arguments",
+    "evidence_bank",
+    "risks_and_counterarguments",
+    "argument_read_test"
+  ],
+  "properties": {
+    "topic": { "type": "string" },
+    "context_summary": { "type": "string" },
+    "executive_summary": {
+      "type": "object",
+      "required": ["core_conclusion", "expected_action", "decision_request", "why_now", "supporting_arguments"],
+      "properties": {
+        "core_conclusion": { "type": "string" },
+        "expected_action": { "type": "string" },
+        "decision_request": { "type": "string" },
+        "why_now": { "type": "string" },
+        "supporting_arguments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["claim", "evidence_refs", "so_what"],
+            "properties": {
+              "claim": { "type": "string" },
+              "evidence_refs": { "type": "array", "items": { "type": "string" } },
+              "so_what": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "core_question": { "type": "string" },
+    "core_thesis": { "type": "string" },
+    "expected_action": { "type": "string" },
+    "desired_direction_alignment": {
+      "type": "object",
+      "properties": {
+        "desired_direction": { "type": "string" },
+        "alignment": { "type": "string" },
+        "tensions": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "thesis_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["thesis", "decision_value", "evidence_strength", "audience_fit", "pros", "cons_or_risks"],
+        "properties": {
+          "thesis": { "type": "string" },
+          "decision_value": { "type": "string" },
+          "evidence_strength": { "type": "string" },
+          "audience_fit": { "type": "string" },
+          "story_potential": { "type": "string" },
+          "pros": { "type": "array", "items": { "type": "string" } },
+          "cons_or_risks": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "selection_reason": { "type": "string" },
+    "key_arguments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim", "logic_chain", "evidence_refs", "assumptions", "so_what", "confidence"],
+        "properties": {
+          "claim": { "type": "string" },
+          "why_it_matters": { "type": "string" },
+          "logic_chain": { "type": "string" },
+          "evidence": { "type": "array", "items": { "type": "string" } },
+          "evidence_refs": { "type": "array", "items": { "type": "string" } },
+          "assumptions": { "type": "array", "items": { "type": "string" } },
+          "counterarguments": { "type": "array", "items": { "type": "string" } },
+          "boundary_conditions": { "type": "array", "items": { "type": "string" } },
+          "so_what": { "type": "string" },
+          "confidence": { "type": "string" }
+        }
+      }
+    },
+    "evidence_bank": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "content", "type", "confidence"],
+        "properties": {
+          "id": { "type": "string" },
+          "content": { "type": "string" },
+          "type": { "type": "string" },
+          "source": { "type": "string" },
+          "needs_source": { "type": "boolean" },
+          "timeframe": { "type": "string" },
+          "metric_or_scope": { "type": "string" },
+          "confidence": { "type": "string" },
+          "limitations": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "assumptions": { "type": "array" },
+    "risks_and_counterarguments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "risk_or_counterargument": { "type": "string" },
+          "attacks": { "type": "string" },
+          "boundary_condition": { "type": "string" },
+          "evidence_needed": { "type": "string" },
+          "impact_on_thesis": { "type": "string" }
+        }
+      }
+    },
+    "argument_read_test": {
+      "type": "object",
+      "required": ["passes", "micro_argument", "notes"],
+      "properties": {
+        "passes": { "type": "boolean" },
+        "micro_argument": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    },
+    "evidence_gaps": { "type": "array" },
+    "open_questions": { "type": "array" },
+    "storyline_handoff": {
+      "type": "object",
+      "properties": {
+        "executive_summary_to_use": { "type": "string" },
+        "argument_order": { "type": "array", "items": { "type": "string" } },
+        "evidence_refs_by_argument": { "type": "object" },
+        "boundaries_not_to_overclaim": { "type": "array", "items": { "type": "string" } },
+        "full_evidence_location": { "type": "string" }
+      }
+    },
+    "recommended_story_angles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["angle", "best_for", "tradeoff", "required_evidence", "risk"],
+        "properties": {
+          "angle": { "type": "string" },
+          "best_for": { "type": "string" },
+          "tradeoff": { "type": "string" },
+          "required_evidence": { "type": "array", "items": { "type": "string" } },
+          "risk": { "type": "string" }
+        }
+      }
+    },
+    "format_guidance": { "type": "object" }
+  }
+}

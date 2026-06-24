@@ -1,0 +1,311 @@
+{
+  "version": "v1.1",
+  "agent_id": "speaker_script",
+  "purpose": "Evaluate whether the speaker-script agent has converted the formal material and Q&A pack into a grounded, audience-fit spoken script with page/module-level talk tracks, transitions, timing control, compressed versions, risk handling lines, and rehearsal guidance without adding unsupported facts.",
+  "rubrics": [
+    {
+      "id": "SS-P0-000",
+      "severity": "P0",
+      "dimension": "input_readiness",
+      "criterion": "在生成逐字稿前，必须检查正式材料、Q&A pack、任务上下文和目标时长是否足够支撑正式讲稿；关键输入缺失时不得硬生成最终稿。",
+      "check": "input_readiness.status in [ready, partial, blocked]；若缺 formatted_material.material_units[]，status 必须为 blocked；若缺 qa_pack 或 expected_action/decision_goal，必须标记 provisional_speaker_script=true、open_questions/unresolved_input_needed，并不得伪装成已吸收全部风险。",
+      "fail_examples": [
+        "没有 formatted_material，只根据 storyline 写出完整逐字稿。",
+        "qa_pack 缺失，但讲稿仍宣称已吸收高风险 Q&A。",
+        "没有 expected_action，却在结尾自行写成申请资源授权。",
+        "材料存在 blocking gap，但讲稿没有 unresolved_input_needed。"
+      ],
+      "fix": "补做输入就绪检查；缺正式材料则停止生成完整讲稿；缺 Q&A 或决策请求则输出 provisional_speaker_script，并列明需要补齐的输入和现场边界。"
+    },
+    {
+      "id": "SS-P0-001",
+      "severity": "P0",
+      "dimension": "script_contract",
+      "criterion": "必须产出完整可讲的逐字稿包，而不是演讲建议或页面摘要。",
+      "check": "speaker_script.v1 包含 opening、page_scripts、transition_lines、risk_lines、qa_bridge_lines、closing、time_plan、compressed_version、one_minute_version、input_readiness；blocked 时不得输出完整稿。",
+      "fail_examples": [
+        "只写“开场讲背景，然后讲三点”。",
+        "只有每页要点，没有 spoken_script。",
+        "没有结尾收束或压缩版。"
+      ],
+      "fix": "补齐正式口头表达：开场、逐页讲稿、转场、风险话术、结尾、时间规划和压缩版本。"
+    },
+    {
+      "id": "SS-P0-002",
+      "severity": "P0",
+      "dimension": "material_grounding",
+      "criterion": "逐字稿必须逐页/逐模块对应 formatted_material，不得新增未经支撑的事实、判断或承诺。",
+      "check": "每个 page_script 有 source_unit_id/source_page_no/evidence_refs；新增表述能回指材料或 Q&A 边界；unsupported_claims 为空。",
+      "fail_examples": [
+        "讲稿加入竞品数据，但正式材料没有。",
+        "把 weak evidence 讲成确定事实。",
+        "为了收尾新增了未授权资源承诺。"
+      ],
+      "fix": "删除或降级未支撑表述；用边界话术说明不确定性。"
+    },
+    {
+      "id": "SS-P0-003",
+      "severity": "P0",
+      "dimension": "time_control",
+      "criterion": "必须有总时长和逐页时长规划；默认完整稿控制在 30 分钟以内，除非 task brief 明确给出其他时长。",
+      "check": "time_plan.target_duration_minutes、total_estimated_minutes、page_allocations 完整；未授权更长时 total_estimated_minutes <= target_duration_minutes；超时页有 compression_instruction；若用户授权更长时长，也必须提供 compressed_version 和 one_minute_version。",
+      "fail_examples": [
+        "没有任何时间规划。",
+        "完整稿估计 42 分钟但没有压缩方案。",
+        "每页都写 3 分钟，主线 15 页直接超时。"
+      ],
+      "fix": "按页面重要性重新分配时长，压缩低优先级页，生成 half_time_version 和 one_minute_version。"
+    },
+    {
+      "id": "SS-P0-004",
+      "severity": "P0",
+      "dimension": "opening_and_closing",
+      "criterion": "开场必须快速说明主题、为什么现在讲、核心结论和听众需要关注/决定什么；结尾必须回扣 expected action。",
+      "check": "opening 包含 context_hook、core_message、audience_ask；closing 包含 recap、decision_or_next_step、risk_boundary；若 expected_action 缺失，不得擅自生成强 action，必须进入 open_questions/unresolved_input_needed。",
+      "fail_examples": [
+        "开场铺长背景，60 秒内没有核心结论。",
+        "董事会汇报结尾只说“谢谢”。",
+        "quick_sync 开场像专题汇报。"
+      ],
+      "fix": "重写开场和结尾，让听众马上知道要听什么、为什么重要、最后要做什么。"
+    },
+    {
+      "id": "SS-P0-005",
+      "severity": "P0",
+      "dimension": "page_talk_track",
+      "criterion": "每页/模块脚本必须包含 key_message、spoken_script、evidence_to_say、what_to_skip、transition_to_next、suggested_duration。",
+      "check": "page_scripts 覆盖所有 main material_units；每个脚本有对应字段，且 spoken_script 不是空泛摘要。",
+      "fail_examples": [
+        "只给页面标题，没有怎么讲。",
+        "没有 what_to_skip，导致汇报人可能念完所有内容。",
+        "没有 transition_to_next，页间跳跃。"
+      ],
+      "fix": "为每页补齐口头表达、要讲证据、要跳过信息、转场和时长。"
+    },
+    {
+      "id": "SS-P0-006",
+      "severity": "P0",
+      "dimension": "not_reading_slides",
+      "criterion": "逐字稿不能机械复读页面文字，必须把标题、证据和 so what 转成口头解释。",
+      "check": "spoken_script 不逐字复制 finalized_content；每页有口头化解释和听众含义。",
+      "fail_examples": [
+        "逐字稿只是把 bullet 串起来念。",
+        "每页都说“如页面所示”。",
+        "没有解释数据对听众意味着什么。"
+      ],
+      "fix": "用口语化但正式的表达解释主证据，只讲最关键支撑，并补 so what。"
+    },
+    {
+      "id": "SS-P0-007",
+      "severity": "P0",
+      "dimension": "qa_risk_absorption",
+      "criterion": "必须吸收 Q&A 高风险问题和 speaker_script_handoff，在正文或风险话术中提前处理。",
+      "check": "risk_lines、qa_bridge_lines、page_scripts[].qa_preemptions 覆盖 high severity questions、do_not_overstate、safe_bridges；若 qa_pack 缺失，必须标记 provisional_speaker_script=true 和 Q&A 风险未吸收。",
+      "fail_examples": [
+        "Q&A 标记数据口径高风险，但讲稿完全没提。",
+        "没有任何不硬答的话术。",
+        "讲稿继续使用 Q&A 标记的 do_not_say。"
+      ],
+      "fix": "把高风险点前置为一句限定，或写入 risk_bridge_lines 和 qa_bridge_lines。"
+    },
+    {
+      "id": "SS-P0-008",
+      "severity": "P0",
+      "dimension": "unresolved_input_handling",
+      "criterion": "对 Q&A 中 needs_presenter_input / needs_data / should_defer 的问题，不得在讲稿中假装已经解决。",
+      "check": "unresolved_input_needed 汇总未闭合问题；讲稿中使用边界表达，不给确定承诺。",
+      "fail_examples": [
+        "Q&A 需要汇报人确认预算，讲稿直接说预算已确定。",
+        "缺数据问题在讲稿中被讲成已验证。",
+        "没有提醒汇报人会前必须补什么。"
+      ],
+      "fix": "把未闭合问题转为会前提醒或边界话术；必要时缩短对应页讲法。"
+    },
+    {
+      "id": "SS-P0-009",
+      "severity": "P0",
+      "dimension": "audience_and_format_fit",
+      "criterion": "讲法必须匹配 audience 和 material format；PPT 按页讲，HTML 按模块讲，文档讲摘要和关键章节。",
+      "check": "delivery_strategy 说明 audience tone、format_strategy、detail_level；page_scripts 的粒度与 format 一致。",
+      "fail_examples": [
+        "董事会讲稿像技术培训。",
+        "文档汇报逐段念正文。",
+        "HTML 分享不说明哪些内容可展开阅读。"
+      ],
+      "fix": "按受众和载体重写讲述策略、细节密度和转场。"
+    },
+    {
+      "id": "SS-P0-010",
+      "severity": "P0",
+      "dimension": "role_boundary",
+      "criterion": "逐字稿不得修改正式材料、生成新 Q&A、补造数据或改变决策请求。",
+      "check": "输出只包含 speaker_script；材料修改建议进入 rehearsal_notes 或 open_questions，不直接改材料。",
+      "fail_examples": [
+        "讲稿里新增一页建议。",
+        "为了顺畅改了核心结论。",
+        "重新生成完整 Q&A。"
+      ],
+      "fix": "删除越权内容；把问题记录为 rehearsal_note 或 unresolved_input_needed。"
+    },
+    {
+      "id": "SS-P0-011",
+      "severity": "P0",
+      "dimension": "output_contract",
+      "criterion": "必须输出结构化 speaker_script.v1，而不是自然语言建议；字段应支持人工排练、现场讲述和后续复用。",
+      "check": "speaker_script.v1 包含 agent_id/schema/topic/audience/format/input_readiness/target_duration_minutes/delivery_strategy/opening/time_plan/page_scripts/compressed_version/one_minute_version/risk_lines/qa_bridge_lines/unresolved_input_needed/rehearsal_notes/closing；每个 page_script 包含 source_unit_id、spoken_script、suggested_duration_seconds、risk_bridge_lines、qa_preemptions、timing_status。",
+      "fail_examples": [
+        "只输出一段连续讲稿，没有 page_scripts。",
+        "没有 input_readiness 和 unresolved_input_needed，无法判断稿子是否可用。",
+        "没有 source_unit_id，无法回指正式材料。",
+        "没有 compressed_version 或 one_minute_version。"
+      ],
+      "fix": "按 speaker_script.v1 补齐结构化字段；逐页/逐模块输出讲法、证据、跳过项、转场、风险话术和时长。"
+    },
+    {
+      "id": "SS-P1-001",
+      "severity": "P1",
+      "dimension": "spoken_quality",
+      "criterion": "口头表达应自然、清楚、有节奏，不像书面报告。",
+      "check": "句子长度适中，有停顿点、强调点和自然转场；不堆长从句。",
+      "weak_examples": [
+        "一句话超过 120 个字。",
+        "连续使用书面化名词堆叠。",
+        "没有停顿或强调提示。"
+      ],
+      "improvement": "拆短句，加入 pause_cues 和 emphasis_cues。"
+    },
+    {
+      "id": "SS-P1-002",
+      "severity": "P1",
+      "dimension": "pacing_quality",
+      "criterion": "时间分配应体现重点，不是平均分给每页。",
+      "check": "核心结论、关键证据、决策页时长更高；附录和低风险页可跳过或压缩。",
+      "weak_examples": [
+        "每页固定 90 秒。",
+        "关键决策页只有 30 秒。",
+        "低价值背景页占用过多时间。"
+      ],
+      "improvement": "按重要性重排 time_plan，并标记 optional_skip。"
+    },
+    {
+      "id": "SS-P1-003",
+      "severity": "P1",
+      "dimension": "transition_quality",
+      "criterion": "转场应推动听众认知，而不是机械地说“下一页”。",
+      "check": "transition_to_next 解释因果、递进、转折或收束关系。",
+      "weak_examples": [
+        "下面看下一页。",
+        "接下来介绍数据。",
+        "然后是建议。"
+      ],
+      "improvement": "改成“如果这个判断成立，下一步要回答的就是它是否足以支持资源倾斜”。"
+    },
+    {
+      "id": "SS-P1-004",
+      "severity": "P1",
+      "dimension": "compression_quality",
+      "criterion": "压缩版应保留主线，而不是简单砍后半部分。",
+      "check": "compressed_version 保留核心结论、2-3 个关键证据和 action；说明哪些页跳过、哪些只一句带过。",
+      "weak_examples": [
+        "时间不够就讲前 5 页。",
+        "压缩版没有结尾 action。",
+        "一分钟版只讲背景。"
+      ],
+      "improvement": "按标题连读逻辑压缩，而不是按页数截断。"
+    },
+    {
+      "id": "SS-P1-005",
+      "severity": "P1",
+      "dimension": "rehearsal_usefulness",
+      "criterion": "应给汇报人可执行的排练提示。",
+      "check": "rehearsal_notes 包含易超时页、易被追问页、需要会前确认的内容和语气提醒。",
+      "weak_examples": [
+        "多练几遍。",
+        "注意时间。",
+        "没有指出具体风险页。"
+      ],
+      "improvement": "补充具体页码、风险、排练动作和兜底话术。"
+    },
+    {
+      "id": "SS-P1-006",
+      "severity": "P1",
+      "dimension": "memory_feedback_capture",
+      "criterion": "checker 或 human review 的反馈应能归入 speaker_script memory 维度，便于后续沉淀。",
+      "check": "反馈能归入 Spoken Wording、Pacing、Transition、Opening/Closing、Risk Handling、Audience Fit、Rehearsal 等维度；若连续出现同类问题，应建议写入 learning-log 或更新 memory。",
+      "weak_examples": [
+        "用户说“太像念稿”，但没有归入 spoken wording / not_reading_slides。",
+        "用户说“这里容易被追问”，但没有归入 risk handling。",
+        "多次超时反馈没有进入 pacing memory。"
+      ],
+      "improvement": "把反馈按维度写入 speaker_script learning-log，记录修改前后和触发场景；重复命中后提炼为 memory。"
+    }
+  ],
+  "scoring_dimensions": [
+    {
+      "dimension": "grounding_and_boundary",
+      "weight": 25,
+      "description": "是否逐页对应正式材料，不新增未支撑事实，并正确处理未闭合问题。"
+    },
+    {
+      "dimension": "script_completeness",
+      "weight": 25,
+      "description": "是否有完整开场、逐页脚本、转场、风险话术、结尾和压缩版本。"
+    },
+    {
+      "dimension": "time_and_pacing",
+      "weight": 20,
+      "description": "是否控制在目标时长内，默认不超过 30 分钟，并能按重点分配时间。"
+    },
+    {
+      "dimension": "audience_and_delivery_fit",
+      "weight": 15,
+      "description": "是否符合受众、汇报性质和文档/PPT/HTML 讲述方式。"
+    },
+    {
+      "dimension": "qa_and_rehearsal_readiness",
+      "weight": 15,
+      "description": "是否吸收 Q&A 风险，并给汇报人排练和现场兜底提示。"
+    }
+  ],
+  "pass_policy": {
+    "p0": "任何 P0 命中都必须返工；特别是缺正式材料仍输出完整稿、新增未支撑事实、缺时间规划、超过目标时长且无授权、机械复读页面、未吸收高风险 Q&A、硬答未闭合问题、或不符合 speaker_script.v1 输出契约时不得放行。",
+    "p1": "P1 不强制阻断，但必须进入 human_review；若 spoken_quality、pacing、transition、compression、rehearsal 或 risk handling 连续偏弱，应沉淀为 speaker_script memory。",
+    "score": "如果启用打分，低于 7/10 不建议作为正式讲稿；低于 6/10 必须重写逐字稿。"
+  },
+  "rubric_layers": {
+    "blocking_p0": [
+      "input_readiness",
+      "script_contract",
+      "material_grounding",
+      "time_control",
+      "opening_and_closing",
+      "page_talk_track",
+      "qa_risk_absorption",
+      "unresolved_input_handling",
+      "role_boundary",
+      "output_contract"
+    ],
+    "conditional_p0": [
+      {
+        "dimension": "time_control",
+        "condition": "当 task_positioning 未授权更长时长，完整稿默认不得超过 30 分钟；若授权更长，必须遵循用户指定时长并提供压缩版。"
+      },
+      {
+        "dimension": "qa_risk_absorption",
+        "condition": "若 qa_pack 缺失，可输出 provisional_speaker_script，但必须显式标记 Q&A 风险未吸收；不得伪装成正式可用最终稿。"
+      },
+      {
+        "dimension": "opening_and_closing",
+        "condition": "当 expected_action/decision_goal 缺失时，不得自行生成强决策请求；必须降级为对齐判断/观察点并进入 open_questions。"
+      }
+    ],
+    "p1_quality": [
+      "spoken_quality",
+      "pacing_quality",
+      "transition_quality",
+      "compression_quality",
+      "rehearsal_usefulness",
+      "memory_feedback_capture"
+    ]
+  }
+}

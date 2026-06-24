@@ -1,0 +1,689 @@
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+from presentation_agent.launch import BriefError, launch_report
+from presentation_agent.learning import LearningEventStore, compare_material_versions
+from presentation_agent.loop import LoopRunner
+from presentation_agent.memory import MemoryStore
+from presentation_agent.pipeline import Pipeline
+from presentation_agent.step import PipelineStepper, StepError, StepRunner
+from presentation_agent.workspace import init_workspace, resolve_workspace, workspace_status
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="presentation-agent")
+    parser.add_argument("--root", default=".", help="Project root. Defaults to current directory.")
+    parser.add_argument("--workspace", help="User workspace for memory/runs/artifacts.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("list-agents", help="List configured pipeline agents.")
+
+    init_ws = sub.add_parser("init-workspace", help="Initialize a user workspace.")
+    init_ws.add_argument("--force", action="store_true", help="Rewrite seed files such as config/global state.")
+
+    sub.add_parser("doctor", help="Check repo and workspace health. Emits JSON.")
+
+    report = sub.add_parser("report", help="High-level host report commands.")
+    report_subs = report.add_subparsers(dest="report_command", required=True)
+
+    report_start = report_subs.add_parser("start", help="Start a report run and return first instruction.")
+    report_start.add_argument("--brief-file", required=True, help="raw_brief JSON file path.")
+
+    report_next = report_subs.add_parser("next", help="Return the current report instruction.")
+    report_next.add_argument("--run", required=True, help="Run id or run directory.")
+
+    report_submit = report_subs.add_parser("submit", help="Submit host output for the current instruction.")
+    report_submit.add_argument("--run", required=True, help="Run id or run directory.")
+    report_submit.add_argument("--output-file", help="JSON output file produced by the host model.")
+
+    report_approve = report_subs.add_parser("approve", help="Approve current stage and advance.")
+    report_approve.add_argument("--run", required=True, help="Run id or run directory.")
+
+    report_status = report_subs.add_parser("status", help="Show report run status.")
+    report_status.add_argument("--run", required=True, help="Run id or run directory.")
+
+    run = sub.add_parser("run", help="Run one agent loop.")
+    run.add_argument("agent_id")
+    run.add_argument("--input", required=True, help="Input artifact JSON path.")
+    run.add_argument("--out", help="Optional output directory.")
+    run.add_argument("--provider", help="Override LLM provider (mock/cli/codex/inline).")
+
+    pipe = sub.add_parser("pipeline", help="Run the 7-agent report pipeline.")
+    pipe.add_argument("--input", required=True, help="Initial raw brief JSON path.")
+    pipe.add_argument("--out", help="Optional output directory.")
+    pipe.add_argument("--auto", action="store_true", help="Run all stages back to back.")
+    pipe.add_argument("--start-stage", type=int, default=1, help="Stage to start from (resume).")
+    pipe.add_argument("--provider", help="Override LLM provider (mock/cli/codex/inline).")
+
+    launch = sub.add_parser(
+        "launch",
+        help="Host entry: normalize a brief (file or inline JSON) and run the pipeline.",
+    )
+    launch.add_argument(
+        "--brief",
+        required=True,
+        help="raw_brief JSON: a file path, or an inline JSON string the host assembled.",
+    )
+    launch.add_argument("--out", help="Optional output directory.")
+    launch.add_argument("--auto", action="store_true", help="Run all stages back to back.")
+    launch.add_argument(
+        "--provider",
+        default="cli",
+        help="LLM provider (default: cli — borrow the host's coding-agent CLI).",
+    )
+    launch.add_argument(
+        "--init-only",
+        action="store_true",
+        help="Only initialize the pipeline (write brief, create stage dirs); do not run any agent.",
+    )
+
+    # ---- inline step commands (host-self-execution) -------------------------
+    step = sub.add_parser("step", help="Inline step commands (host-driven single-step execution).")
+    step_subs = step.add_subparsers(dest="step_command", required=True)
+
+    step_status = step_subs.add_parser("status", help="Show current step state of a stage run_dir.")
+    step_status.add_argument("--run-dir", required=True, help="Path to stage run_dir.")
+
+    step_prepare = step_subs.add_parser("prepare", help="Assemble instruction and write handoff file.")
+    step_prepare.add_argument("--run-dir", required=True, help="Path to stage run_dir.")
+
+    step_commit = step_subs.add_parser("commit", help="Read handoff output, validate, and advance state.")
+    step_commit.add_argument("--run-dir", required=True, help="Path to stage run_dir.")
+
+    step_abort = step_subs.add_parser("abort", help="Abort the current stage.")
+    step_abort.add_argument("--run-dir", required=True, help="Path to stage run_dir.")
+
+    # ---- pipeline level inline commands -------------------------------------
+    pipe_init = sub.add_parser("pipeline-init", help="Initialize inline pipeline (write brief, create stage 1 dir).")
+    pipe_init.add_argument("--brief", required=True, help="Brief JSON file path or inline JSON string.")
+    pipe_init.add_argument("--out", help="Optional pipeline output directory.")
+
+    pipe_adv = sub.add_parser("pipeline-advance", help="Advance to next stage (after current stage is done).")
+    pipe_adv.add_argument("--run-dir", required=True, help="Pipeline root run_dir (same as --out of pipeline-init).")
+
+    pipe_status = sub.add_parser("pipeline-status", help="Show pipeline-level status (all stages).")
+    pipe_status.add_argument("--run-dir", required=True, help="Pipeline root run_dir.")
+
+    feedback = sub.add_parser("feedback", help="Append human feedback and update hot memory.")
+    feedback.add_argument("agent_id")
+    feedback.add_argument("--dimension", required=True)
+    feedback.add_argument("--problem", required=True)
+    feedback.add_argument("--reason", default="")
+    feedback.add_argument("--change", required=True)
+    feedback.add_argument("--scene", default="human_review")
+    feedback.add_argument("--scope", default="agent", choices=["agent", "global"])
+
+    feedback_text = sub.add_parser(
+        "feedback-text",
+        help="Parse natural-language human feedback from chat and update memory.",
+    )
+    feedback_text.add_argument("agent_id")
+    feedback_text.add_argument("--text", required=True, help="Raw feedback sentence from the conversation.")
+    feedback_text.add_argument("--dimension", help="Optional explicit memory dimension.")
+    feedback_text.add_argument("--scene", default="human_review_chat")
+    feedback_text.add_argument("--scope", default="agent", choices=["agent", "global"])
+    feedback_text.add_argument("--run-state", help="Optional run_state.json to append the feedback log id to.")
+
+    success = sub.add_parser("success-memory", help="Record a reusable successful pattern into memory.")
+    success.add_argument("agent_id")
+    success.add_argument("--dimension", required=True)
+    success.add_argument("--pattern", required=True, help="What worked and should be reused.")
+    success.add_argument("--why", default="", help="Why the pattern worked.")
+    success.add_argument("--scene", default="success_review")
+
+    compare = sub.add_parser(
+        "compare-reflect",
+        help="Compare two material versions and record a reusable comparison lesson.",
+    )
+    compare.add_argument("agent_id")
+    compare.add_argument("--before", required=True, help="Earlier material path.")
+    compare.add_argument("--after", required=True, help="Later/final material path.")
+    compare.add_argument("--dimension", default="", help="Optional explicit memory dimension.")
+    compare.add_argument("--lesson", default="", help="Optional human-written lesson to store.")
+    compare.add_argument("--scene", default="version_comparison")
+
+    memory = sub.add_parser("show-memory", help="Show hot memory for one agent.")
+    memory.add_argument("agent_id")
+
+    maintain = sub.add_parser(
+        "memory-maintain",
+        help="Promote frequent memory to rubrics and/or lint hot memory for one agent.",
+    )
+    maintain.add_argument("agent_id")
+    maintain.add_argument("--promote", action="store_true", help="Show promotion candidates.")
+    maintain.add_argument("--lint", action="store_true", help="Show lint diagnosis.")
+    maintain.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply the selected maintenance (promote confirmed ids / lint cleanup).",
+    )
+    maintain.add_argument(
+        "--ids",
+        default="",
+        help="Comma-separated memory ids to promote (required with --promote --apply).",
+    )
+
+    dream = sub.add_parser(
+        "memory-dream",
+        help="Summarize and clean fragmented memory for one agent or all agents.",
+    )
+    dream.add_argument("agent_id", nargs="?", help="Agent id. Omit when using --all.")
+    dream.add_argument("--all", action="store_true", help="Run memory dreaming for all configured agents.")
+    dream.add_argument("--apply", action="store_true", help="Apply deterministic cleanup while dreaming.")
+    dream.add_argument("--reason", default="manual", help="Reason label stored in dream report.")
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    root = Path(args.root).resolve()
+    workspace = resolve_workspace(getattr(args, "workspace", None), start=root)
+
+    if args.command == "init-workspace":
+        _print_json(init_workspace(workspace, root, force=args.force))
+        return
+
+    if args.command == "doctor":
+        import platform
+        import subprocess
+
+        report = workspace_status(workspace, root)
+        report["python"] = platform.python_version()
+        try:
+            commit = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            report["git_commit"] = commit.stdout.strip() if commit.returncode == 0 else ""
+        except Exception:
+            report["git_commit"] = ""
+        _print_json(report)
+        return
+
+    if args.command == "report":
+        _handle_report_command(args, root, workspace)
+        return
+
+    if args.command == "list-agents":
+        runner = LoopRunner(root)
+        for spec in runner.list_agents():
+            print(
+                f"{spec.stage}. {spec.id} ({spec.name}) skill={spec.skill} "
+                f"in={spec.input_schema} out={spec.output_schema}"
+            )
+        return
+
+    if args.command == "run":
+        runner = LoopRunner(root, provider_override=getattr(args, "provider", None))
+        result = runner.run(args.agent_id, Path(args.input).resolve(), Path(args.out).resolve() if args.out else None)
+        print(f"status: {result['status']}")
+        print(f"artifact: {result['artifact_path']}")
+        print(f"human_review: {result['human_review_path']}")
+        return
+
+    if args.command == "pipeline":
+        pipeline = Pipeline(root, provider_override=getattr(args, "provider", None))
+        summary = pipeline.run(
+            Path(args.input).resolve(),
+            run_dir=Path(args.out).resolve() if args.out else None,
+            auto=args.auto,
+            start_stage=args.start_stage,
+        )
+        print(f"pipeline status: {summary['status']} ({summary['mode']})")
+        for record in summary["stages"]:
+            print(f"  stage {record['stage']} {record['agent_id']}: {record['status']}")
+        if summary["stopped_reason"]:
+            print(f"note: {summary['stopped_reason']}")
+        print(f"overview: {summary['output_dir']}/pipeline_overview.md")
+        return
+
+    if args.command == "launch":
+        try:
+            result = launch_report(
+                args.brief,
+                root=root,
+                provider=args.provider,
+                auto=args.auto,
+                out=Path(args.out).resolve() if args.out else None,
+                init_only=getattr(args, "init_only", False),
+            )
+        except BriefError as exc:
+            print(f"brief error: {exc}")
+            raise SystemExit(2)
+        if getattr(args, "init_only", False):
+            print(f"brief: {result['brief_path']}")
+            print(f"pipeline dir: {result['output_dir']}")
+            print(f"stage 1 dir: {result['stage_1_dir']}")
+            print("pipeline initialized. Use step commands to drive each stage.")
+            return
+        print(f"brief: {result['brief_path']}")
+        print(f"provider: {result['provider']}")
+        print(f"pipeline status: {result['status']} ({result['mode']})")
+        for record in result["stages"]:
+            print(f"  stage {record['stage']} {record['agent_id']}: {record['status']}")
+        if result["stopped_reason"]:
+            print(f"note: {result['stopped_reason']}")
+        print(f"overview: {result['output_dir']}/pipeline_overview.md")
+        return
+
+    if args.command == "step":
+        run_dir = Path(args.run_dir).resolve()
+        runner = StepRunner(root, run_dir)
+        try:
+            if args.step_command == "status":
+                s = runner.status()
+                print(f"agent: {s['agent_name']} ({s['agent_id']}) stage={s['stage']}")
+                print(f"current_step: {s['current_step']} round={s['round_index']}")
+                print(f"p0_open: {s['p0_open_count']}")
+                if s['instruction_path']:
+                    print(f"instruction: {s['instruction_path']}")
+                if s['output_path']:
+                    print(f"output: {s['output_path']}")
+            elif args.step_command == "prepare":
+                r = runner.prepare()
+                print(f"step: {r['step']} round={r.get('round_index', 0)}")
+                print(f"instruction: {r['instruction_path']}")
+                print(f"output: {r['output_path']}")
+            elif args.step_command == "commit":
+                r = runner.commit()
+                # ---- human-in-the-loop: always show content ----
+                present = r.get("present_to_user")
+                if present:
+                    print(present)
+                    print("")
+                if r.get("review_summary") and r["step"] != "done":
+                    print(f"🔍 {r['review_summary']}")
+                if r.get("revision_reason"):
+                    print(f"🔧 {r['revision_reason']}")
+                if r.get("memory_notes") and r["step"] != "done":
+                    print(f"🧠 {r['memory_notes']}")
+                if r["step"] == "done":
+                    print(f"artifact: {r.get('artifact_path', '')}")
+                    print(f"status: {r.get('status', 'done')}")
+                else:
+                    print(f"next instruction: {r['instruction_path']}")
+            elif args.step_command == "abort":
+                r = runner.abort()
+                print(f"status: {r['status']}")
+        except StepError as exc:
+            print(f"step error: {exc}")
+            raise SystemExit(3)
+        return
+
+    if args.command == "pipeline-init":
+        from presentation_agent.launch import normalize_brief
+        from presentation_agent.io import write_json
+        from presentation_agent.models import now_iso
+        run_id = f"pipeline-{now_iso().replace(':', '').replace('+', 'Z')}"
+        out_root = Path(args.out).resolve() if args.out else (root / "artifacts" / run_id)
+        normalized = normalize_brief(args.brief, root)
+        brief_path = out_root / "raw_brief.json"
+        out_root.mkdir(parents=True, exist_ok=True)
+        write_json(brief_path, normalized)
+        stepper = PipelineStepper(root, out_root)
+        stage1 = stepper.init_pipeline(brief_path)
+        print(f"pipeline dir: {out_root}")
+        print(f"brief: {brief_path}")
+        print(f"stage 1: {stage1['agent_name']} ({stage1['agent_id']})")
+        print(f"stage 1 dir: {stage1['stage_dir']}")
+        print("ready — use step prepare/commit on stage dirs to drive the pipeline")
+        return
+
+    if args.command == "pipeline-advance":
+        run_dir = Path(args.run_dir).resolve()
+        stepper = PipelineStepper(root, run_dir)
+        try:
+            result = stepper.advance_stage()
+            print(f"next stage: {result['agent_name']} ({result['agent_id']})")
+            print(f"stage dir: {result['stage_dir']}")
+            print(f"input: {result['input_path']}")
+        except StepError as exc:
+            print(f"advance error: {exc}")
+            raise SystemExit(3)
+        return
+
+    if args.command == "pipeline-status":
+        run_dir = Path(args.run_dir).resolve()
+        stepper = PipelineStepper(root, run_dir)
+        ps = stepper.pipeline_status()
+        print(f"pipeline: {ps['pipeline_id']}")
+        print(f"current stage: {ps['current_stage']}")
+        for s in ps["stages"]:
+            marker = "←" if s["index"] == ps["current_stage"] else " "
+            print(f"  {marker} {s['index']}. {s['agent_name']}: {s['status']}")
+        return
+
+    if args.command == "feedback":
+        store = MemoryStore(root, args.agent_id, data_root=workspace.data_dir)
+        log_id = store.record_feedback(
+            scope=args.scope,
+            dimension=args.dimension,
+            trigger_scene=args.scene,
+            problem=args.problem,
+            reason=args.reason,
+            change=args.change,
+            source="human",
+        )
+        print(f"recorded: {log_id}")
+        return
+
+    if args.command == "feedback-text":
+        store = MemoryStore(root, args.agent_id, data_root=workspace.data_dir)
+        parsed = store.record_text_feedback(
+            text=args.text,
+            trigger_scene=args.scene,
+            source="human-chat",
+            dimension=args.dimension,
+            scope=args.scope,
+        )
+        if args.run_state:
+            from presentation_agent.io import read_json, write_json
+            from presentation_agent.models import now_iso
+
+            run_state_path = Path(args.run_state).resolve()
+            state = read_json(run_state_path)
+            state.setdefault("feedback_logged", []).append(parsed["log_id"])
+            state.setdefault("history", []).append(
+                {
+                    "at": now_iso(),
+                    "step": "learning_capture",
+                    "message": f"Chat feedback recorded: {parsed['log_id']}",
+                }
+            )
+            state["updated_at"] = now_iso()
+            write_json(run_state_path, state)
+        print(f"recorded: {parsed['log_id']}")
+        print(f"dimension: {parsed['dimension']}")
+        print(f"problem: {parsed['problem']}")
+        print(f"change: {parsed['change']}")
+        return
+
+    if args.command == "success-memory":
+        store = MemoryStore(root, args.agent_id, data_root=workspace.data_dir)
+        log_id = store.record_success(
+            dimension=args.dimension,
+            trigger_scene=args.scene,
+            pattern=args.pattern,
+            why_it_worked=args.why,
+        )
+        print(f"recorded success: {log_id}")
+        return
+
+    if args.command == "compare-reflect":
+        store = MemoryStore(root, args.agent_id, data_root=workspace.data_dir)
+        before = Path(args.before).resolve()
+        after = Path(args.after).resolve()
+        comparison = compare_material_versions(before, after)
+        dimension = args.dimension or MemoryStore._infer_dimension(" ".join(comparison.get("change_tags", [])))
+        lesson = args.lesson.strip()
+        if not lesson:
+            tags = ", ".join(comparison.get("change_tags", []))
+            lesson = f"后续同类材料应参考版本演化中的稳定修改方向：{tags}"
+        log_id = store.record_comparison(
+            dimension=dimension,
+            trigger_scene=args.scene,
+            before_ref=str(before),
+            after_ref=str(after),
+            change_summary=", ".join(comparison.get("change_tags", [])),
+            lesson=lesson,
+        )
+        LearningEventStore(root, data_root=workspace.data_dir).append(
+            event_type="comparison",
+            agent_id=args.agent_id,
+            source="cli",
+            payload={"log_id": log_id, "comparison": comparison, "lesson": lesson},
+        )
+        print(f"recorded comparison: {log_id}")
+        print(f"dimension: {dimension}")
+        print(f"tags: {', '.join(comparison.get('change_tags', []))}")
+        print(f"lesson: {lesson}")
+        return
+
+    if args.command == "show-memory":
+        store = MemoryStore(root, args.agent_id, data_root=workspace.data_dir)
+        for item in store.load_items():
+            print(f"{item.id} [{item.dimension}] hits={item.hit_count}: {item.suggestion}")
+        return
+
+    if args.command == "memory-maintain":
+        store = MemoryStore(root, args.agent_id)
+        if args.promote:
+            if args.apply:
+                ids = [i.strip() for i in args.ids.split(",") if i.strip()]
+                if not ids:
+                    print("promote --apply requires --ids (confirm which candidates to promote)")
+                    return
+                result = store.apply_promotion(ids)
+                print(f"promoted: {result['promoted']}; skipped: {result['skipped']}")
+                print(f"rubrics: {result['rubrics_path']}")
+            else:
+                candidates = store.promotion_candidates()
+                if not candidates:
+                    print(f"no promotion candidates (threshold={store.promotion_threshold()})")
+                for item in candidates:
+                    print(f"  {item.id} [{item.dimension}] hits={item.hit_count}: {item.suggestion}")
+        if args.lint:
+            if args.apply:
+                result = store.apply_lint()
+                print(f"evicted: {result['evicted']}; remaining: {result['remaining']}")
+            else:
+                report = store.lint()
+                print(f"total={report['total']} soft_limit={report['soft_limit']}")
+                print(f"  over_limit: {report['over_limit']}")
+                print(f"  orphan_links: {report['orphan_links']}")
+                print(f"  duplicates: {report['duplicates']}")
+        if not args.promote and not args.lint:
+            print("specify --promote and/or --lint")
+        return
+
+    if args.command == "memory-dream":
+        if args.all:
+            runner = LoopRunner(root)
+            agent_ids = [spec.id for spec in runner.list_agents()]
+        elif args.agent_id:
+            agent_ids = [args.agent_id]
+        else:
+            print("memory-dream requires <agent_id> or --all")
+            raise SystemExit(2)
+        for agent_id in agent_ids:
+            result = MemoryStore(
+                root,
+                agent_id,
+                data_root=workspace.data_dir,
+            ).dream(apply=args.apply, reason=args.reason)
+            print(
+                f"{agent_id}: before={result['before_count']} after={result['after_count']} "
+                f"conflicts={len(result['potential_conflicts'])} report={result['report_path']}"
+            )
+        return
+
+
+def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> None:
+    if args.report_command == "start":
+        from presentation_agent.io import write_json
+        from presentation_agent.launch import normalize_brief
+        from presentation_agent.models import now_iso
+
+        init_workspace(workspace, root)
+        run_id = f"report-{now_iso().replace(':', '').replace('+', 'Z')}"
+        run_dir = workspace.runs_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        normalized = normalize_brief(str(Path(args.brief_file).expanduser().resolve()), root)
+        brief_path = run_dir / "raw_brief.json"
+        write_json(brief_path, normalized)
+        stepper = PipelineStepper(root, run_dir, data_root=workspace.data_dir)
+        stage = stepper.init_pipeline(brief_path)
+        runner = StepRunner(root, Path(stage["stage_dir"]), data_root=workspace.data_dir)
+        prepared = runner.prepare()
+        _print_json({
+            "ok": True,
+            "run_id": run_id,
+            "run_dir": str(run_dir),
+            "brief_path": str(brief_path),
+            "stage": stage,
+            "instruction": prepared,
+            "next_action": "host_write_output_then_report_submit",
+        })
+        return
+
+    run_dir = workspace.run_dir(args.run)
+    stepper = PipelineStepper(root, run_dir, data_root=workspace.data_dir)
+
+    if args.report_command == "status":
+        _print_json({"ok": True, "run_dir": str(run_dir), "pipeline": stepper.pipeline_status()})
+        return
+
+    stage_dir = _current_stage_dir(stepper, run_dir)
+    if stage_dir is None:
+        _print_json({"ok": True, "run_dir": str(run_dir), "status": "completed", "message": "all stages completed"})
+        return
+    runner = StepRunner(root, stage_dir, data_root=workspace.data_dir)
+
+    if args.report_command == "next":
+        status = runner.status()
+        if status.get("current_step") == "done":
+            _print_json({
+                "ok": True,
+                "run_dir": str(run_dir),
+                "stage_dir": str(stage_dir),
+                "status": "awaiting_approval",
+                "message": "Current stage is done. Ask user to approve, then call report approve.",
+                "stage": status,
+            })
+            return
+        try:
+            prepared = runner.prepare()
+        except StepError:
+            status = runner.status()
+            prepared = {
+                "step": status.get("current_step"),
+                "instruction_path": status.get("instruction_path"),
+                "output_path": status.get("output_path"),
+            }
+        _print_json({
+            "ok": True,
+            "run_dir": str(run_dir),
+            "stage_dir": str(stage_dir),
+            "stage": runner.status(),
+            "instruction": prepared,
+            "next_action": "host_write_output_then_report_submit",
+        })
+        return
+
+    if args.report_command == "submit":
+        if args.output_file:
+            _copy_report_output(runner, Path(args.output_file).expanduser().resolve())
+        try:
+            result = runner.commit()
+        except StepError as exc:
+            _print_json({"ok": False, "error": str(exc), "stage": runner.status()})
+            raise SystemExit(3)
+        _print_json({
+            "ok": True,
+            "run_dir": str(run_dir),
+            "stage_dir": str(stage_dir),
+            "result": result,
+            "stage": runner.status(),
+            "next_action": "ask_user_to_approve" if result.get("step") == "done" else "continue_report_next",
+        })
+        return
+
+    if args.report_command == "approve":
+        status = runner.status()
+        if status.get("current_step") != "done":
+            _print_json({
+                "ok": False,
+                "error": "current stage is not done; call report next/submit until it reaches done",
+                "stage": status,
+            })
+            raise SystemExit(3)
+        ps = stepper.pipeline_status()
+        current = int(ps.get("current_stage", 1))
+        _mark_stage_approved(stage_dir)
+        if current >= len(stepper.ordered):
+            _mark_pipeline_completed(run_dir)
+            _print_json({
+                "ok": True,
+                "run_dir": str(run_dir),
+                "status": "completed",
+                "message": "all stages approved",
+                "pipeline": stepper.pipeline_status(),
+            })
+            return
+        try:
+            next_stage = stepper.advance_stage()
+            next_runner = StepRunner(root, Path(next_stage["stage_dir"]), data_root=workspace.data_dir)
+            prepared = next_runner.prepare()
+        except StepError as exc:
+            _print_json({"ok": False, "error": str(exc), "pipeline": stepper.pipeline_status()})
+            raise SystemExit(3)
+        _print_json({
+            "ok": True,
+            "run_dir": str(run_dir),
+            "advanced_to": next_stage,
+            "instruction": prepared,
+            "pipeline": stepper.pipeline_status(),
+            "next_action": "host_write_output_then_report_submit",
+        })
+        return
+
+
+def _current_stage_dir(stepper: PipelineStepper, run_dir: Path) -> Path | None:
+    status = stepper.pipeline_status()
+    current = int(status.get("current_stage", 1))
+    if current > len(stepper.ordered):
+        return None
+    spec = stepper.ordered[current - 1]
+    return run_dir / f"stage_{spec.stage}_{spec.id}"
+
+
+def _copy_report_output(runner: StepRunner, output_file: Path) -> None:
+    status = runner.status()
+    step = status.get("current_step")
+    kind_map = {
+        "awaiting_gen_output": "gen",
+        "awaiting_review_output": "review",
+        "awaiting_revise_output": "revise",
+    }
+    kind = kind_map.get(str(step))
+    if not kind:
+        raise StepError(f"current step {step} is not awaiting host output")
+    target = runner.handoff_dir / f"output_{kind}.json"
+    target.write_text(output_file.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def _mark_pipeline_completed(run_dir: Path) -> None:
+    from presentation_agent.io import read_json, write_json
+
+    state_path = run_dir / "pipeline_state.json"
+    state = read_json(state_path, default={})
+    state["status"] = "completed"
+    write_json(state_path, state)
+
+
+def _mark_stage_approved(stage_dir: Path) -> None:
+    from presentation_agent.io import read_json, write_json
+    from presentation_agent.models import now_iso
+
+    state_path = stage_dir / "run_state.json"
+    state = read_json(state_path, default={})
+    state["status"] = "approved"
+    state["approved_at"] = now_iso()
+    state.setdefault("history", []).append(
+        {"at": state["approved_at"], "step": "human_review", "message": "Stage approved by human"}
+    )
+    write_json(state_path, state)
+
+
+def _print_json(data: object) -> None:
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

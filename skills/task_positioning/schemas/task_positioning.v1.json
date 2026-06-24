@@ -1,0 +1,73 @@
+{
+  "schema": "task_positioning.v1",
+  "type": "object",
+  "required": [
+    "topic",
+    "report_brief",
+    "audience",
+    "report_type",
+    "output_format",
+    "input_inventory",
+    "template_requirements",
+    "historical_reference_materials",
+    "reference_patterns",
+    "decision_goal",
+    "scope",
+    "out_of_scope",
+    "constraints",
+    "success_criteria",
+    "open_questions",
+    "downstream_guidance"
+  ],
+  "properties": {
+    "topic": { "type": "string" },
+    "report_brief": { "type": "string" },
+    "audience": { "type": "string", "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"] },
+    "secondary_audience": { "type": "array", "items": { "type": "string", "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"] } },
+    "report_type": { "type": "string", "enum": ["deep_dive", "quick_sync"] },
+    "output_format": { "type": "string", "enum": ["document", "ppt", "html"] },
+    "input_inventory": {
+      "type": "object",
+      "properties": {
+        "user_brief": { "type": "string" },
+        "template": { "type": "array" },
+        "historical_reference_materials": { "type": "array" },
+        "research_materials": { "type": "array" },
+        "manual_notes": { "type": "array" },
+        "missing_inputs": { "type": "array" }
+      }
+    },
+    "template_requirements": {
+      "type": "object",
+      "properties": {
+        "source": { "type": "string" },
+        "structure": { "type": "array" },
+        "format_rules": { "type": "array" },
+        "page_or_length_constraints": { "type": "array" },
+        "brand_or_confidentiality_rules": { "type": "array" }
+      }
+    },
+    "historical_reference_materials": { "type": "array" },
+    "reference_patterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string" },
+          "reusable_pattern": { "type": "string" },
+          "do_not_copy": { "type": "string" }
+        }
+      }
+    },
+    "decision_goal": { "type": "string" },
+    "context": { "type": "string" },
+    "scope": { "type": "array", "items": { "type": "string" } },
+    "out_of_scope": { "type": "array", "items": { "type": "string" } },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "success_criteria": { "type": "array", "items": { "type": "string" } },
+    "open_questions": { "type": "array", "items": { "type": "string" } },
+    "assumed_defaults": { "type": "array", "items": { "type": "string" } },
+    "context_conflicts": { "type": "array", "items": { "type": "string" } },
+    "downstream_guidance": { "type": "object" }
+  }
+}

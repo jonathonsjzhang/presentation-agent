@@ -1,0 +1,420 @@
+{
+  "version": "v1.1",
+  "agent_id": "format",
+  "purpose": "Evaluate whether the format agent has transformed dummy page content into formal deliverable materials for PPT, HTML, or document formats while preserving storyline meaning, evidence, source/gap status, audience fit, and render readiness.",
+  "rubric_layers": {
+    "blocking_p0": [
+      "input_readiness",
+      "formal_material_contract",
+      "input_fidelity",
+      "format_specific_output",
+      "source_and_gap_preservation",
+      "render_readiness",
+      "role_boundary",
+      "output_contract",
+      "mckinsey_action_title",
+      "mckinsey_layout_enum",
+      "mckinsey_chart_limits",
+      "mckinsey_visual_first_ppt",
+      "docx_report_contract"
+    ],
+    "conditional_p0": [
+      "PPT-only McKinsey rules apply only when format=ppt and unit is not exempt.",
+      "DOCX report contract applies only when format=document.",
+      "HTML navigation/evidence expansion requirements apply only when format=html.",
+      "Render completion checks apply only after backend render_result is returned; before render, deliverables may be render_ready but not completed."
+    ],
+    "p1_quality": [
+      "visual_quality",
+      "copy_polish",
+      "cross_unit_consistency",
+      "appendix_usability",
+      "downstream_readiness",
+      "mckinsey_color_typography",
+      "mckinsey_hierarchy_density",
+      "memory_feedback_capture"
+    ]
+  },
+  "rubrics": [
+    {
+      "id": "FM-P0-000",
+      "severity": "P0",
+      "dimension": "input_readiness",
+      "criterion": "进入正式 format 前，必须确认 page_content、目标格式、来源/缺口状态和渲染路径足以支撑 formatted_material；缺失时不得伪造成 completed deliverable。",
+      "check": "input_readiness.status in [ready, partial, blocked]；缺 page_content/material_units、format、sources/gaps 或 renderer 能力时，必须写 open_design_tasks/gap_display/provisional_formatted_material；deliverable status 不得写 completed。",
+      "fail_examples": [
+        "没有 page_content.v1，却直接生成完整 PPT。",
+        "output_format 缺失，仍自行选择 ppt 且未写 assumed/open issue。",
+        "mck_ppt renderer 不支持某 layout，却把 render_status 写 completed。",
+        "上游 fill_status=blocked 的页面被做成 ready_to_publish。"
+      ],
+      "fix": "补做 input readiness；将缺失项写入 open_design_tasks 和 unit.gap_display；必要时输出 provisional_formatted_material=true；deliverable status 改为 render_ready/blocked_by_gap/blocked_by_renderer。"
+    },
+    {
+      "id": "FM-P0-001",
+      "severity": "P0",
+      "dimension": "formal_material_contract",
+      "criterion": "必须输出正式材料级内容，而不是继续停留在版式建议或 dummy page。",
+      "check": "formatted_material.v1 包含 artifact_manifest、render_plan、material_units；每个 unit 有 finalized_content、layout_or_structure、source_display、gap_display、quality_status。",
+      "fail_examples": [
+        "只写“建议使用左右结构”，没有正式页面内容。",
+        "继续保留 dummy page 的 draft_content，没有转成最终表达。",
+        "只有风格原则，没有每页/模块/章节的完整材料。"
+      ],
+      "fix": "把 page_content 转成可交付的 slide/module/section：标题、正式正文、视觉对象、来源脚注、缺口呈现和附录都要落到单元级。"
+    },
+    {
+      "id": "FM-P0-002",
+      "severity": "P0",
+      "dimension": "input_fidelity",
+      "criterion": "不得改变 page_content 的结论、证据含义、故事线顺序、来源状态或缺口状态。",
+      "check": "每个 material_unit 可回指 source_page_no；headline 和 finalized_content 不改变 page_takeaway；data_gaps/open_design_tasks 不被隐藏。",
+      "fail_examples": [
+        "为了标题更漂亮，把审慎结论改成确定结论。",
+        "删除了 low confidence 和口径限制。",
+        "把第 4 页提前到第 2 页但没有结构理由。"
+      ],
+      "fix": "恢复原顺序和原结论；所有来源、限定条件、缺口状态必须进入 source_display/gap_display/open_design_tasks。"
+    },
+    {
+      "id": "FM-P0-003",
+      "severity": "P0",
+      "dimension": "format_specific_output",
+      "criterion": "必须匹配目标 output_format：PPT、HTML、文档的正式材料结构不能简单复用；仅对目标格式作为阻断型 P0。",
+      "check": "当 format=ppt 时输出 slides/mck_ppt render_plan；format=html 时输出 modules/navigation/evidence expansion；format=document 时输出 DOCX sections/paragraphs/tables/footnotes。非目标格式不强制生成。",
+      "fail_examples": [
+        "PPT 输出长段落文档。",
+        "HTML 只有线性 slide 列表，没有导航和展开层级。",
+        "文档输出每页 bullet，无法独立阅读。"
+      ],
+      "fix": "按目标格式重构 material_units 和 render_plan。"
+    },
+    {
+      "id": "FM-P0-004",
+      "severity": "P0",
+      "dimension": "information_hierarchy",
+      "criterion": "每个正式单元必须建立清晰 L1-L4 信息层级，不能所有内容同等强调。",
+      "check": "每个 unit 至少区分 headline、primary_content、supporting_content、source_or_caveat；视觉焦点服务 page_takeaway。",
+      "fail_examples": [
+        "标题、证据、口径、附录全部平铺。",
+        "最关键证据被放在脚注，次要背景占据主视觉。",
+        "没有 source/footer/caveat 层级。"
+      ],
+      "fix": "重排层级：L1 结论，L2 主证据/主视觉，L3 口径和限制，L4 附录。"
+    },
+    {
+      "id": "FM-P0-005",
+      "severity": "P0",
+      "dimension": "source_and_gap_preservation",
+      "criterion": "必须保留来源、口径、confidence、data_gaps 和 open_design_tasks；缺图/缺数据不能伪装成完成。",
+      "check": "source_policy、gap_policy、unit.source_display、unit.gap_display、open_design_tasks 完整；blocking gap 在 quality_status 中标明。",
+      "fail_examples": [
+        "缺 cohort 数据，但正式页画出了留存曲线。",
+        "删除了“样本不足”的限制说明。",
+        "open_design_tasks 为空，但多个 visual_plan data_status 为 missing。"
+      ],
+      "fix": "把缺口做成明确占位、脚注、待补任务或附录说明；阻断型缺口不得标 ready_to_publish。"
+    },
+    {
+      "id": "FM-P0-006",
+      "severity": "P0",
+      "dimension": "render_readiness",
+      "criterion": "正式材料必须具备可渲染/可落版的结构；render_result 只有后端实际执行后才可标 completed。",
+      "check": "artifact_manifest 包含 target_format、deliverables、render_status；render_plan 说明生成路径；每个 unit 有 layout_or_structure、asset_requirements/text/visual/source_footer；未渲染前 status 只能是 render_ready/blocked/needs_render_fix，不能伪造 completed。",
+      "fail_examples": [
+        "只写“这里放一个图”。",
+        "没有文件/页面/模块的编号和目标路径。",
+        "视觉资产缺失但未进入 asset_requirements。"
+      ],
+      "fix": "补齐渲染所需字段；无法实际生成文件时，deliverable status 标 render_ready 或 blocked_by_gap，不能写 completed。"
+    },
+    {
+      "id": "FM-P0-007",
+      "severity": "P0",
+      "dimension": "audience_and_confidentiality",
+      "criterion": "正式材料必须符合汇报对象和保密要求，尤其外部分享不能暴露内部数据或行动指令。",
+      "check": "audience_policy/redaction_policy 处理敏感字段；external 版本做公开化表达；board/exec_office 版本突出决策点。",
+      "fail_examples": [
+        "外部分享保留内部资源申请。",
+        "董事会材料塞大量操作细节，核心决策被淹没。",
+        "敏感数据只在 source_policy 提到，但正文仍原样显示。"
+      ],
+      "fix": "应用 redaction/generalization；按 audience 重写呈现密度和行动表达。"
+    },
+    {
+      "id": "FM-P0-008",
+      "severity": "P0",
+      "dimension": "role_boundary",
+      "criterion": "format 不得新增未经支撑的结论，不得重做 storyline/page_filling，不得生成 Q&A 或完整逐字稿。",
+      "check": "新增内容只限表达、层级、排版和格式适配；任何新事实都有 evidence_ref 或被标记为 open issue。",
+      "fail_examples": [
+        "为了页面完整新增了竞品数据。",
+        "重排故事线并改写页面结论。",
+        "在 format 输出中生成一整套 Q&A。"
+      ],
+      "fix": "删除新增事实，把问题交给 open_design_tasks 或 data_gaps；Q&A 和逐字稿留给后续 Agent。"
+    },
+    {
+      "id": "FM-P0-009",
+      "severity": "P0",
+      "dimension": "output_contract",
+      "criterion": "必须按 formatted_material.v1 输出结构化正式材料契约，不能只输出自然语言版式建议或渲染说明。",
+      "check": "包含 agent_id/schema/input_readiness/format/audience/topic/artifact_manifest/render_plan/material_units/source_policy/gap_policy/open_design_tasks/downstream_handoff/quality_checks；每个 material_unit 有 unit_id/source_page_no/unit_type/headline/layout_or_structure/finalized_content/source_display/gap_display/quality_status。",
+      "fail_examples": [
+        "只说每页适合用什么版式，没有 material_units。",
+        "缺 artifact_manifest 或 render_plan，后端不知道如何渲染。",
+        "material_unit 没有 source_page_no，无法追溯上游页面。"
+      ],
+      "fix": "按 formatted_material.v1 schema 补齐顶层字段和 material_units；无法确认的字段写入 open_design_tasks 或 gap_display，不得省略。"
+    },
+    {
+      "id": "FM-MCK-001",
+      "severity": "P0",
+      "dimension": "mckinsey_action_title",
+      "criterion": "当 format=ppt 时，正式版每个非豁免单元的 headline 必须是完整洞见句（含动词、含 so-what），不得是主题词。",
+      "check": "headline 长度 10-45 字；cover/section_divider/closing/appendix 豁免。",
+      "fail_examples": [
+        "标题写成“用户增长”而非“用户增长放缓，获客成本上升 27% 侵蚀利润”。",
+        "标题只有名词短语，没有判断。"
+      ],
+      "fix": "把标题改写成一句可独立成立的结论句：主语 + 动词 + so-what，控制在 10-45 字。",
+      "machine_check": {
+        "each": "material_units",
+        "exempt_when": {
+          "path": "layout_or_structure.layout_type",
+          "values": [
+            "cover",
+            "section_divider",
+            "closing"
+          ]
+        },
+        "rules": [
+          {
+            "kind": "str_len",
+            "path": "headline",
+            "min": 10,
+            "max": 45,
+            "label": "headline 长度(10-45字)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "FM-MCK-002",
+      "severity": "P0",
+      "dimension": "mckinsey_layout_enum",
+      "criterion": "当 format=ppt 时，layout_type 必须取自渲染引擎支持的版式枚举，保证可被确定性渲染。",
+      "check": "每个 PPT unit.layout_or_structure.layout_type 必须属于稳定 layout 集合；相邻单元避免重复版式；纯文本/大字报页全篇 ≤1。",
+      "fail_examples": [
+        "layout_type 写成自由文本“左右对比图”，渲染器无法识别。",
+        "连续 5 页都是 key_takeaway。"
+      ],
+      "fix": "为每页按任务选择枚举版式。",
+      "machine_check": {
+        "each": "material_units",
+        "rules": [
+          {
+            "kind": "enum",
+            "path": "layout_or_structure.layout_type",
+            "label": "layout_type",
+            "values": [
+              "cover",
+              "section_divider",
+              "executive_summary",
+              "key_takeaway",
+              "four_column",
+              "scorecard",
+              "donut",
+              "pie",
+              "grouped_bar",
+              "stacked_bar",
+              "horizontal_bar",
+              "waterfall",
+              "line_chart",
+              "pareto",
+              "multi_bar_panel",
+              "dashboard_kpi_chart",
+              "dashboard_table_chart",
+              "matrix_2x2",
+              "process_chevron",
+              "timeline",
+              "data_table",
+              "table_insight",
+              "value_chain",
+              "closing",
+              "text"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "FM-MCK-003",
+      "severity": "P0",
+      "dimension": "mckinsey_chart_limits",
+      "criterion": "当 format=ppt 且使用图表页时，图表数量和数据维度必须落在 McKinsey 可读阈值内。",
+      "check": "图表页必须有 visual_object.chart_spec；donut/pie 段数≤6；grouped_bar 类别≤6且系列≤3；stacked_bar periods≤6且series≤5；horizontal_bar/pareto items≤8；multi_bar_panel panels 2-3。",
+      "fail_examples": [
+        "饼图画了 9 个分段。",
+        "layout_type=grouped_bar 但没有 categories / series / values。",
+        "有 10 个竞品却塞进一个 grouped_bar。"
+      ],
+      "fix": "补齐 chart_spec；必要时 top5+其他、拆 panel、合并流程或转 table_insight。"
+    },
+    {
+      "id": "FM-MCK-006",
+      "severity": "P0",
+      "dimension": "mckinsey_visual_first_ppt",
+      "criterion": "当 format=ppt 时，正式页必须避免“大标题 + bullet + 大数字”的大字报形态；有可用数据时必须转成主视觉或结构化图表。",
+      "check": "非 cover/section_divider/closing/text 豁免页必须有 visual_object；图表型 layout 必须有 chart_spec；若数据缺失导致无法作图，gap_display.blocking_level 或 open_design_tasks 必须明确。",
+      "fail_examples": [
+        "页面只有一个大数字和三条 bullet，没有 chart_spec 或主视觉。",
+        "数据缺失却画成完整趋势图。"
+      ],
+      "fix": "把证据转成结构化图表或 table_insight；若数据不足，则标阻断缺口。"
+    },
+    {
+      "id": "FM-DOC-001",
+      "severity": "P0",
+      "dimension": "docx_report_contract",
+      "criterion": "当 format=document 时，正式产物必须是可渲染的 DOCX 报告结构，包含 Executive Summary、多级标题、bullet-first 证据链、图表/表格/引用块、caption/source/caveat。",
+      "check": "artifact_manifest.deliverables 至少有 file_type=docx；render_plan.generation_path=docx_report_renderer；material_units[].unit_type=document_section；第一个正文单元是 Executive Summary；章节有 heading_level/document_role；量化图表章节有 visual_object.chart_spec、caption/source_note 或明确 gap/open_design_task。",
+      "fail_examples": [
+        "format=document 但 deliverable 写成 markdown/html。",
+        "正式文档直接从分析章节开始，没有 Executive Summary。",
+        "文档章节是连续长段落，没有 bullet 证据链。"
+      ],
+      "fix": "重写为 DOCX 报告单元：补 Executive Summary、document_section、heading_level、bullet_groups、chart_spec、caption/source_note；无法渲染写入 open_design_tasks。"
+    },
+    {
+      "id": "FM-P1-001",
+      "severity": "P1",
+      "dimension": "visual_quality",
+      "criterion": "视觉布局应服务理解，避免装饰性排版和一页过载。",
+      "check": "layout_or_structure 有明确视觉焦点、留白、对齐、阅读顺序；复杂页拆主附或增加附录。",
+      "weak_examples": [
+        "所有页都是同一种左右结构。",
+        "一页放 6 个图表。",
+        "为了好看加入无关插图。"
+      ],
+      "improvement": "按页面任务选择布局：结论页突出一句话，证据页突出主图，风险页突出条件和边界。"
+    },
+    {
+      "id": "FM-P1-002",
+      "severity": "P1",
+      "dimension": "copy_polish",
+      "criterion": "正式材料文字应简洁、准确、有分寸，避免草稿味和过度口语。",
+      "check": "finalized_content 不含 TODO、草稿注释、过度绝对化词；标题和正文语法一致。",
+      "weak_examples": [
+        "这里需要补一个数据。",
+        "这个结论非常非常重要。",
+        "可能就是因为用户变多了吧。"
+      ],
+      "improvement": "改成正式汇报语言，并把缺口放到 gap_display/open_design_tasks。"
+    },
+    {
+      "id": "FM-P1-003",
+      "severity": "P1",
+      "dimension": "cross_unit_consistency",
+      "criterion": "跨页/模块/章节的术语、口径、标题语法、来源格式和附录标记应统一。",
+      "check": "quality_checks 包含 terminology/source/title/appendix consistency；相同指标不出现多个名字。",
+      "weak_examples": [
+        "同一指标有“DAU”“日活”“活跃用户数”三种叫法。",
+        "来源脚注格式每页不同。"
+      ],
+      "improvement": "建立 naming/source/footer conventions，并在 quality_checks 中确认。"
+    },
+    {
+      "id": "FM-P1-004",
+      "severity": "P1",
+      "dimension": "appendix_usability",
+      "criterion": "附录应可供 Q&A 使用，不是垃圾桶。",
+      "check": "appendix_units 有用途说明、关联主线页、证据 refs 和查找标签。",
+      "weak_examples": [
+        "附录只是把所有长表堆进去。",
+        "主线页引用了附录，但附录无编号。"
+      ],
+      "improvement": "给附录加 index、linked_page_no、use_case 和 source refs。"
+    },
+    {
+      "id": "FM-P1-005",
+      "severity": "P1",
+      "dimension": "downstream_readiness",
+      "criterion": "输出应方便 Q&A 和逐字稿继续使用。",
+      "check": "每个 unit 有 speaker_note_seed、question_risk_tags、source refs；高风险页能被 Q&A 识别。",
+      "weak_examples": [
+        "正式页完成了，但没有任何风险标签。",
+        "Q&A 无法定位数据缺口来自哪页。"
+      ],
+      "improvement": "补充 downstream_handoff，标记高风险页、证据弱点和讲解重点。"
+    },
+    {
+      "id": "FM-MCK-004",
+      "severity": "P1",
+      "dimension": "mckinsey_color_typography",
+      "criterion": "当 format=ppt 时，配色与字号应遵循 McKinsey 设计系统，避免随意用色和字号混乱。",
+      "check": "style_tokens.color_policy/typography 显式声明；禁用亮青 #00A9F4；标题 >=20pt、正文 14pt、脚注 9pt。",
+      "weak_examples": [
+        "页面用了 7 种饱和色。",
+        "标题字号比正文还小。"
+      ],
+      "improvement": "收敛到品牌色板，统一字号层级并写入 style_tokens。"
+    },
+    {
+      "id": "FM-MCK-005",
+      "severity": "P1",
+      "dimension": "mckinsey_hierarchy_density",
+      "criterion": "每个单元须建立清晰视觉层级且内容区不空旷，体现一页一结论。",
+      "check": "每个单元 ≥3 视觉块；L1-L4 层级齐全；一页只有一个核心结论。",
+      "weak_examples": [
+        "整页只有一句话，大片空白。",
+        "标题、证据、来源全平铺无层级。"
+      ],
+      "improvement": "补足主视觉与来源栏，拆分多结论页，按 L1-L4 重排层级。"
+    },
+    {
+      "id": "FM-P1-006",
+      "severity": "P1",
+      "dimension": "memory_feedback_capture",
+      "criterion": "format 阶段的 review 反馈应能归因到可沉淀的 memory 维度，而不是只做一次性修改。",
+      "check": "对反复出现的版式、层级、标题、图表、来源/缺口、渲染失败、受众密度问题，输出或记录对应 feedback dimension 和修改前后。",
+      "weak_examples": [
+        "用户多次说不要大字报，但未进入 Layout/Visual Hierarchy memory。",
+        "同一种 chart_spec 维度错误重复出现，但没有沉淀 Renderer Constraint memory。"
+      ],
+      "improvement": "把反馈写入 format learning-log，并按 Layout / Visual Hierarchy / Copy Polish / Chart Spec / Source & Gap Display / Format Fit / Renderer Constraint / Audience & Confidentiality 归类。"
+    }
+  ],
+  "scoring_dimensions": [
+    {
+      "dimension": "formal_material_completeness",
+      "weight": 25,
+      "description": "是否产出正式材料级内容，而不是格式建议或 dummy page。"
+    },
+    {
+      "dimension": "fidelity_and_evidence_status",
+      "weight": 25,
+      "description": "是否保持结论、证据、来源、缺口和故事线顺序。"
+    },
+    {
+      "dimension": "format_specific_render_readiness",
+      "weight": 20,
+      "description": "是否按 PPT/HTML/文档生成可渲染结构和交付清单。"
+    },
+    {
+      "dimension": "hierarchy_and_audience_fit",
+      "weight": 15,
+      "description": "信息层级、视觉焦点、受众密度和保密处理是否合适。"
+    },
+    {
+      "dimension": "downstream_readiness",
+      "weight": 15,
+      "description": "是否为 Q&A、逐字稿和人工补齐提供清楚交接。"
+    }
+  ],
+  "pass_policy": {
+    "p0": "任何 P0 命中都必须返工；特别是输入未就绪却伪造成 completed、未产出 formatted_material.v1、改写结论、隐藏数据缺口、目标格式错误、不可渲染、新增未经支撑事实，或违反目标格式的 McKinsey/DOCX 硬规则时不得放行。",
+    "p1": "P1 不强制阻断，但必须进入 human_review；若 visual_quality、copy_polish、consistency、downstream_readiness 或 memory_feedback_capture 连续偏弱，应沉淀为 format memory。",
+    "score": "如果启用打分，低于 7/10 不建议放行给 Q&A；低于 6/10 必须重做 format。"
+  }
+}
