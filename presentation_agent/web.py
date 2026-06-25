@@ -34,7 +34,6 @@ READABLE_PREFIXES = EDITABLE_PREFIXES + (
     "outputs/",
     "presentation_agent/",
     "README.md",
-    "pyproject.toml",
     "汇报助手系统设计方案.md",
 )
 
