@@ -1,33 +1,17 @@
 # 汇报助手系统框架介绍
 
-> 本文用于介绍当前汇报助手项目的整体框架、关键模块和实现方式，可作为后续 Web Cockpit 说明页与对外介绍文档的底稿。
 
 ## 一、系统总框架
 
-汇报助手不是一个单一 agent 脚本，而是一套 **loop-first 的战略汇报生产系统**。它把从需求到材料交付的过程拆成 7 个 Agent，每个 Agent 都由可编辑的 skill 定义行为，由 loop 执行、review 拦截、state/memory 持续学习，并通过 Web Cockpit 可视化管理整个 harness。
+- **7-Agent 流水线**：汇报助手是一套面向战略汇报生产的 7-Agent Loop Harness，它把汇报材料从任务定位、论点提炼、故事线、单页内容、格式化、Q&A 到逐字稿拆成 7 个独立 Agent。
+- **自演进闭环**：每个 Agent 由可编辑 skill 定义工作方式，由 loop 执行、review 拦截、state/memory 持续学习，并通过 Web Cockpit 可视化管理整个 harness。
+- **覆盖场景**：支持董事会、总办、战略负责人、业务团队、外部等不同汇报对象，覆盖专题深度分析与信息快速同步两种汇报性质，可产出文档、PPT 或 HTML 三种材料格式。
 
-一句话概括：
+整体架构如下：
 
-> 汇报助手是一套面向战略汇报生产的 7-Agent Loop Harness：它把汇报材料从任务定位、论点提炼、故事线、单页内容、格式化、Q&A 到逐字稿拆成 7 个独立 Agent；每个 Agent 由可编辑 skill 定义工作方式，由 loop 执行、review 拦截、state/memory 持续学习，并通过 Web Cockpit 可视化管理整个 harness。它支持董事会、总办、战略负责人、业务团队、外部等不同汇报对象，覆盖专题深度分析与信息快速同步两种汇报性质，可产出文档、PPT 或 HTML 三种材料格式。
+![汇报助手系统架构图](assets/architecture.jpg)
 
-整体架构可以理解为四层：
-
-```mermaid
-flowchart TD
-  A["用户 / 宿主 Agent 终端"] --> B["7-Agent 汇报流水线"]
-  B --> C["单 Agent Loop: workflow → review → stop_check → human_review"]
-  C --> D["Skill Package: SOP + rubrics + schema"]
-  C --> E["State & Memory: global state + agent memory + learning events"]
-  D --> F["Connectors / Renderers / LLM Adapters"]
-  E --> C
-  C --> G["Artifacts: JSON / PPT / HTML / Docx / human_review"]
-  H["Web Cockpit"] --> B
-  H --> D
-  H --> E
-  H --> G
-```
-
-这个系统的核心不是“一个模型一次性写完整汇报”，而是把汇报生产拆成可控的环节：每个环节有明确输入、明确产物、明确审查标准、明确人工放行点，并把过程中的反馈沉淀为后续可复用的 memory。
+这个系统的核心不是「一个模型一次性写完整汇报」，而是把汇报生产拆成可控的环节：每个环节有明确输入、明确产物、明确审查标准、明确人工放行点，并把过程中的反馈沉淀为后续可复用的 memory。
 
 ## 二、7-Agent 流水线模块
 
@@ -595,3 +579,11 @@ report next  →  读取指令，用自身模型产出 JSON  →  report submit 
 - **无需填写表单**：用户的修改意见以对话原话形式自动沉淀为 memory，不需要切换到另一个界面填写反馈。
 - **repo 与 workspace 分离**：版本更新（`git pull`）不会覆盖用户数据。用户每次做汇报积累的记忆和经验持续有效。
 - **三条命令完成一次汇报**：安装一条话、发起汇报一条话、修改反馈就是正常对话。用户界面始终只是与一个 AI Agent 的聊天窗口。
+
+## 八、TODOs
+
+当前系统已完成 MVP 架构与插件化分发，后续迭代方向包括：
+
+1. **Skill 原子化拆解**：将各 Agent 的 skill 按汇报对象（董事会、总办、战略负责人、业务团队、外部）、汇报性质（专题深度分析与信息快速同步）和材料格式（文档、PPT、HTML）拆成多个原子能力。Agent 调用时根据 brief 参数自由组装组合，减少单次任务的上下文漂移。
+2. **Skill 多轮迭代**：当前 7 个 Agent 的 skill 包均为初版，需在实际使用中持续迭代 SOP、rubrics 和 schema，提升输出质量与稳定性。
+3. **注入先验 Memory**：为系统预置一批经过验证的基础 memory（如战略汇报常见措辞偏好、高频 P0 红线等），让首次使用的用户也能获得一定的审查与风格引导，而非从零积累全部经验。
