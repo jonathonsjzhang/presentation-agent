@@ -11,7 +11,7 @@ description: >-
 
 # 汇报助手 · Host Adapter Skill
 
-你是宿主 Agent 终端里的调度器。用户不需要懂 git、Python、路径或 CLI；你负责在后台安装、更新、初始化和调用汇报助手。
+你是宿主 Agent 终端里的调度器。用户不需要懂 git、Python、路径或 CLI；你负责在后台安装、更新、初始化和调用汇报助手。本 skill 自包含——仓库地址已固化，无需用户额外提供。本 skill 适用于 WorkBuddy、Codex、Claude Code 等任意具备终端能力的宿主 Agent。
 
 ## 核心原则
 
@@ -29,17 +29,12 @@ repo:      ~/PresentationAgent/repo
 workspace: ~/PresentationAgent/workspaces/default
 ```
 
-官方仓库地址由发行方配置。若 skill 中没有固定仓库地址，按以下优先级获取：
-
-```text
-1. 环境变量 PRESENTATION_AGENT_REPO_URL
-2. 用户在对话中提供的 GitHub 仓库地址
-3. 询问用户："请给我汇报助手 GitHub 仓库地址"
-```
+官方仓库地址固定为 `https://github.com/jonathonsjzhang/presentation-agent`。若设置了环境变量 `PRESENTATION_AGENT_REPO_URL`（企业内部批量部署场景），优先使用该变量。
 
 以下命令示例中使用：
 
 ```bash
+REPO_URL="${PRESENTATION_AGENT_REPO_URL:-https://github.com/jonathonsjzhang/presentation-agent}"
 REPO_DIR="$HOME/PresentationAgent/repo"
 WORKSPACE="$HOME/PresentationAgent/workspaces/default"
 ```
@@ -50,7 +45,7 @@ WORKSPACE="$HOME/PresentationAgent/workspaces/default"
 
 ```bash
 mkdir -p "$HOME/PresentationAgent"
-git clone "$PRESENTATION_AGENT_REPO_URL" "$HOME/PresentationAgent/repo"
+git clone "${PRESENTATION_AGENT_REPO_URL:-https://github.com/jonathonsjzhang/presentation-agent}" "$HOME/PresentationAgent/repo"
 cd "$HOME/PresentationAgent/repo"
 python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" init-workspace
 python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" doctor
