@@ -576,6 +576,7 @@ report next  →  读取指令，用自身模型产出 JSON  →  report submit 
 当前系统已完成 v0 MVP 架构与插件化分发，后续迭代方向包括：
 
 1. 框架优化：
+- **增加 Manager agent**：当前为 7 个 Agent 串行工作，缺少一个整体的 Manager agent 掌控全局和调度任务
 - **多Agent 和 Sub_agent机制**：当前的多阶段生成和 review 实际由同一个 agent 进行，在不同阶段使用不同skill，存在上下文积累，导致上下文漂移和执行效率、效果较差。
 - **项目接入**：当前采用自行部署 Git 包 + skill的方式进行调用，方式复杂且不易于版本管理，需讨论如何接入WB官方插件库。
 

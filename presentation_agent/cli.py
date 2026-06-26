@@ -7,7 +7,9 @@ from pathlib import Path
 from presentation_agent.launch import BriefError, launch_report
 from presentation_agent.learning import LearningEventStore, compare_material_versions
 from presentation_agent.loop import LoopRunner
+from presentation_agent.manager import ManagerController
 from presentation_agent.memory import MemoryStore
+from presentation_agent.memory_router import MemoryRouter
 from presentation_agent.pipeline import Pipeline
 from presentation_agent.step import PipelineStepper, StepError, StepRunner
 from presentation_agent.workspace import init_workspace, resolve_workspace, workspace_status
@@ -44,6 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     report_status = report_subs.add_parser("status", help="Show report run status.")
     report_status.add_argument("--run", required=True, help="Run id or run directory.")
+
+    report_manager_status = report_subs.add_parser("manager-status", help="Show manager state for a report run.")
+    report_manager_status.add_argument("--run", required=True, help="Run id or run directory.")
+
+    report_manager_plan = report_subs.add_parser("manager-plan", help="Show manager plan for a report run.")
+    report_manager_plan.add_argument("--run", required=True, help="Run id or run directory.")
 
     run = sub.add_parser("run", help="Run one agent loop.")
     run.add_argument("agent_id")
@@ -374,14 +382,28 @@ def main() -> None:
         return
 
     if args.command == "feedback-text":
-        store = MemoryStore(root, args.agent_id, data_root=workspace.data_dir)
-        parsed = store.record_text_feedback(
-            text=args.text,
-            trigger_scene=args.scene,
-            source="human-chat",
-            dimension=args.dimension,
-            scope=args.scope,
-        )
+        route_result = None
+        if args.agent_id == "auto":
+            router = MemoryRouter(root, data_root=workspace.data_dir)
+            route_result = router.record_text_feedback(
+                text=args.text,
+                trigger_scene=args.scene,
+                run_state_path=Path(args.run_state).resolve() if args.run_state else None,
+                explicit_dimension=args.dimension,
+                scope=args.scope,
+            )
+            parsed = route_result["parsed"]
+            target_agent_id = route_result["route"]["target_agent_id"]
+        else:
+            store = MemoryStore(root, args.agent_id, data_root=workspace.data_dir)
+            parsed = store.record_text_feedback(
+                text=args.text,
+                trigger_scene=args.scene,
+                source="human-chat",
+                dimension=args.dimension,
+                scope=args.scope,
+            )
+            target_agent_id = args.agent_id
         if args.run_state:
             from presentation_agent.io import read_json, write_json
             from presentation_agent.models import now_iso
@@ -393,12 +415,17 @@ def main() -> None:
                 {
                     "at": now_iso(),
                     "step": "learning_capture",
-                    "message": f"Chat feedback recorded: {parsed['log_id']}",
+                    "message": f"Chat feedback recorded: {parsed['log_id']} -> {target_agent_id}",
                 }
             )
+            if route_result:
+                state.setdefault("feedback_routes", []).append(route_result["route"])
             state["updated_at"] = now_iso()
             write_json(run_state_path, state)
         print(f"recorded: {parsed['log_id']}")
+        print(f"agent: {target_agent_id}")
+        if route_result:
+            print(f"route_reason: {route_result['route']['reason']}")
         print(f"dimension: {parsed['dimension']}")
         print(f"problem: {parsed['problem']}")
         print(f"change: {parsed['change']}")
@@ -521,6 +548,12 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
         stage = stepper.init_pipeline(brief_path)
         runner = StepRunner(root, Path(stage["stage_dir"]), data_root=workspace.data_dir)
         prepared = runner.prepare()
+        manager = ManagerController(root, run_dir, data_root=workspace.data_dir)
+        manager_state = manager.initialize_run(
+            brief_path=brief_path,
+            first_stage=stage,
+            instruction=prepared,
+        )
         _print_json({
             "ok": True,
             "run_id": run_id,
@@ -528,20 +561,41 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "brief_path": str(brief_path),
             "stage": stage,
             "instruction": prepared,
+            "manager": manager_state,
             "next_action": "host_write_output_then_report_submit",
         })
         return
 
     run_dir = workspace.run_dir(args.run)
     stepper = PipelineStepper(root, run_dir, data_root=workspace.data_dir)
+    manager = ManagerController(root, run_dir, data_root=workspace.data_dir)
 
     if args.report_command == "status":
-        _print_json({"ok": True, "run_dir": str(run_dir), "pipeline": stepper.pipeline_status()})
+        _print_json({
+            "ok": True,
+            "run_dir": str(run_dir),
+            "pipeline": stepper.pipeline_status(),
+            "manager": manager.status(),
+        })
+        return
+
+    if args.report_command == "manager-status":
+        _print_json({"ok": True, "run_dir": str(run_dir), "manager": manager.status().get("state", {})})
+        return
+
+    if args.report_command == "manager-plan":
+        _print_json({"ok": True, "run_dir": str(run_dir), "manager_plan": manager.status().get("plan", {})})
         return
 
     stage_dir = _current_stage_dir(stepper, run_dir)
     if stage_dir is None:
-        _print_json({"ok": True, "run_dir": str(run_dir), "status": "completed", "message": "all stages completed"})
+        _print_json({
+            "ok": True,
+            "run_dir": str(run_dir),
+            "status": "completed",
+            "message": "all stages completed",
+            "manager": manager.status(),
+        })
         return
     runner = StepRunner(root, stage_dir, data_root=workspace.data_dir)
 
@@ -572,6 +626,11 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "stage_dir": str(stage_dir),
             "stage": runner.status(),
             "instruction": prepared,
+            "manager": manager.record_instruction(
+                stage_dir=stage_dir,
+                stage_status=runner.status(),
+                instruction=prepared,
+            ),
             "next_action": "host_write_output_then_report_submit",
         })
         return
@@ -584,12 +643,18 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
         except StepError as exc:
             _print_json({"ok": False, "error": str(exc), "stage": runner.status()})
             raise SystemExit(3)
+        manager_state = manager.record_submit(
+            stage_dir=stage_dir,
+            stage_status=runner.status(),
+            result=result,
+        )
         _print_json({
             "ok": True,
             "run_dir": str(run_dir),
             "stage_dir": str(stage_dir),
             "result": result,
             "stage": runner.status(),
+            "manager": manager_state,
             "next_action": "ask_user_to_approve" if result.get("step") == "done" else "continue_report_next",
         })
         return
@@ -605,21 +670,25 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             raise SystemExit(3)
         ps = stepper.pipeline_status()
         current = int(ps.get("current_stage", 1))
+        manager.record_approval(stage_dir=stage_dir, stage_status=status)
         _mark_stage_approved(stage_dir)
         if current >= len(stepper.ordered):
             _mark_pipeline_completed(run_dir)
+            manager_state = manager.mark_completed()
             _print_json({
                 "ok": True,
                 "run_dir": str(run_dir),
                 "status": "completed",
                 "message": "all stages approved",
                 "pipeline": stepper.pipeline_status(),
+                "manager": manager_state,
             })
             return
         try:
             next_stage = stepper.advance_stage()
             next_runner = StepRunner(root, Path(next_stage["stage_dir"]), data_root=workspace.data_dir)
             prepared = next_runner.prepare()
+            manager_state = manager.record_advance(next_stage=next_stage, instruction=prepared)
         except StepError as exc:
             _print_json({"ok": False, "error": str(exc), "pipeline": stepper.pipeline_status()})
             raise SystemExit(3)
@@ -629,6 +698,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "advanced_to": next_stage,
             "instruction": prepared,
             "pipeline": stepper.pipeline_status(),
+            "manager": manager_state,
             "next_action": "host_write_output_then_report_submit",
         })
         return

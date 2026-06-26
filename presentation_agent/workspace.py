@@ -161,7 +161,10 @@ def _touch(path: Path) -> bool:
 def _agent_ids(repo_root: Path) -> list[str]:
     config = read_json(repo_root / "configs" / "agents.json", default={})
     agents = config.get("agents", []) if isinstance(config, dict) else []
-    return [item["id"] for item in agents if isinstance(item, dict) and item.get("id")]
+    ids = [item["id"] for item in agents if isinstance(item, dict) and item.get("id")]
+    if "manager" not in ids:
+        ids.append("manager")
+    return ids
 
 
 def _check(name: str, ok: bool, detail: str) -> dict[str, str]:
