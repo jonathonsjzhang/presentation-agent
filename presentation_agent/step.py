@@ -586,7 +586,7 @@ class StepRunner:
         kind: str,
     ) -> None:
         lines = [
-            f"# {self.spec.name}（阶段 {self.spec.stage}/7）· {kind}",
+            f"# Worker Agent：{self.spec.name} · {kind}",
             "",
             f"## 角色与 SOP",
             "",
@@ -829,7 +829,7 @@ class StepRunner:
         render_note: str = "",
     ) -> str:
         lines = [
-            f"## ✅ 阶段 {self.spec.stage}/7 完成：{self.spec.name}",
+            f"## 阶段执行完成：{self.spec.name}",
             "",
             "### 产物内容摘要",
             "",

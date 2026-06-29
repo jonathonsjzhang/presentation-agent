@@ -9,7 +9,7 @@ from presentation_agent.models import now_iso
 
 
 class Pipeline:
-    """Chain the seven agents into one report-building flow.
+    """Legacy direct pipeline for the six specialist workers.
 
     Each stage's approved artifact becomes the next stage's input. Two modes,
     both honoring the design's human-in-the-loop principle:
@@ -19,8 +19,9 @@ class Pipeline:
     - auto (`--auto`): run all reachable stages back to back, stopping only when
       a stage is blocked by an open P0. Convenient for debugging / dry runs.
 
-    The pipeline never re-implements agent logic; it only orchestrates LoopRunner
-    runs and passes artifacts downstream.
+    New high-level report runs are controlled by ManagerOrchestrator. This
+    class remains as a compatibility/debug path that runs workers in the
+    declared order and passes artifacts downstream.
     """
 
     def __init__(self, root: Path, provider_override: Optional[str] = None) -> None:

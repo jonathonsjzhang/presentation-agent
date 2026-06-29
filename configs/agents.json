@@ -1,9 +1,19 @@
 {
   "version": "agent-definition.v2",
+  "control_plane": {
+    "id": "manager",
+    "name": "汇报项目 Manager",
+    "skill": "manager",
+    "input_schema": "manager_context.v1",
+    "output_schema": "manager_decision.v1",
+    "memory_dimensions": ["任务定义", "任务拆解", "调度", "验收", "返工", "人审偏好", "跨阶段一致性"],
+    "human_gates": ["plan", "final"],
+    "worker_execution": "isolated_task_directory",
+    "decision_actions": ["dispatch", "revise", "ask_human", "complete"]
+  },
   "pipeline": {
-    "mode": "human_triggered_sequential",
+    "mode": "manager_controlled",
     "stages": [
-      "task_positioning",
       "argument_synthesis",
       "storyline_design",
       "page_filling",
@@ -44,7 +54,7 @@
       "name": "任务定位",
       "stage": 1,
       "skill": "task_positioning",
-      "description": "把汇报对象、汇报性质、材料格式、模板和历史参考材料收束成可执行的汇报 brief，并初始化全局约束。",
+      "description": "兼容旧运行记录的任务定位 Agent；新 report 流程已由 Manager 的 report_charter 取代。",
       "previous_agent_id": null,
       "next_agent_id": "argument_synthesis",
       "input_schema": "raw_brief.v1",
@@ -99,12 +109,12 @@
     {
       "id": "argument_synthesis",
       "name": "核心论点提炼",
-      "stage": 2,
+      "stage": 1,
       "skill": "argument_synthesis",
       "description": "基于研究结论、完整论据和希望推动的方向，形成 Executive Summary：核心结论、关键论点和预期 action。",
-      "previous_agent_id": "task_positioning",
+      "previous_agent_id": "manager",
       "next_agent_id": "storyline_design",
-      "input_schema": "task_positioning.v1",
+      "input_schema": "manager_task.v1",
       "output_schema": "argument_synthesis.v1",
       "input_contract": {
         "required_inputs": ["汇报 brief", "研究结论与完整论据", "希望推动的方向"],
@@ -156,7 +166,7 @@
     {
       "id": "storyline_design",
       "name": "storyline 设计",
-      "stage": 3,
+      "stage": 2,
       "skill": "storyline_design",
       "description": "把 Executive Summary 和完整论据转成每页/模块标题、关键问题、so what 和预期放置的论据素材。",
       "previous_agent_id": "argument_synthesis",
@@ -214,7 +224,7 @@
     {
       "id": "page_filling",
       "name": "单页内容填充",
-      "stage": 4,
+      "stage": 3,
       "skill": "page_filling",
       "description": "基于 storyline 生成 dummy page：每页 page brief、页内结构、图表信息、证据摆放和缺口标记。",
       "previous_agent_id": "storyline_design",
@@ -271,7 +281,7 @@
     {
       "id": "format",
       "name": "format",
-      "stage": 5,
+      "stage": 4,
       "skill": "format",
       "description": "把 dummy page 转成对应格式的正式材料，支持 PPT、HTML 或文档，并保持结论与证据不变形。",
       "previous_agent_id": "page_filling",
@@ -328,7 +338,7 @@
     {
       "id": "qa_preparation",
       "name": "Q&A 梳理",
-      "stage": 6,
+      "stage": 5,
       "skill": "qa_preparation",
       "description": "基于正式材料和汇报对象，梳理可能提问、挑战角度、回答策略，以及需要汇报人补充的信息。",
       "previous_agent_id": "format",
@@ -385,7 +395,7 @@
     {
       "id": "speaker_script",
       "name": "逐字稿",
-      "stage": 7,
+      "stage": 6,
       "skill": "speaker_script",
       "description": "基于正式材料和 Q&A 包生成完整汇报逐字稿，逐页/逐模块对应材料，默认控制在 30 分钟以内。",
       "previous_agent_id": "qa_preparation",

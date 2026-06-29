@@ -694,8 +694,8 @@ function kindLabel(kind) {
 
 function fallbackOverview() {
   const stages = [
-    ["task_positioning", "任务定位", "raw_brief.v1", "task_positioning.v1", "把对象、性质、格式和历史材料收束成汇报 brief"],
-    ["argument_synthesis", "核心论点提炼", "task_positioning.v1", "argument_synthesis.v1", "形成 Executive Summary 和预期推动的 action"],
+    ["manager", "汇报项目 Manager", "manager_context.v1", "manager_decision.v1", "定义任务、规划、派发 Worker、验收与返工"],
+    ["argument_synthesis", "核心论点提炼", "manager_task.v1", "argument_synthesis.v1", "形成 Executive Summary 和预期推动的 action"],
     ["storyline_design", "storyline 设计", "argument_synthesis.v1", "storyline.v1", "设计每页标题、关键问题、证据和 so what"],
     ["page_filling", "单页内容填充", "storyline.v1", "page_content.v1", "把故事线展开成 dummy page 和图表 brief"],
     ["format", "format", "page_content.v1", "formatted_material.v1", "生成 PPT、HTML 或文档形式的正式材料"],
@@ -704,18 +704,18 @@ function fallbackOverview() {
   ];
   return {
     pipeline: {
-      mode: "human_triggered_sequential",
+      mode: "manager_controlled",
       human_review_required: true,
     },
     state_policy: {
       memory_soft_limit: 30,
     },
     loop_steps: [
-      { id: "start", owner: "human/script", description: "人发起本轮 loop，选择输入和目标 agent" },
+      { id: "planning", owner: "manager", description: "Manager 定义 report charter 和执行计划" },
+      { id: "dispatch", owner: "manager", description: "Manager 下发带验收标准的 task packet" },
       { id: "workflow", owner: "skill", description: "skill 读取 schema、global state、memory 和输入素材" },
       { id: "review", owner: "review_sub_agent", description: "干净上下文审查产物，输出 P0/P1 异议" },
-      { id: "stop_check", owner: "checker", description: "只核对 schema、P0 和可机械判定硬约束" },
-      { id: "human_review", owner: "human", description: "人决定是否放行、返工或手动回到上游" },
+      { id: "acceptance", owner: "manager", description: "Manager 决定 dispatch、revise、ask_human 或 complete" },
     ],
     agents: stages.map((stage, index) => ({
       id: stage[0],
@@ -727,7 +727,7 @@ function fallbackOverview() {
       previous_agent_id: index === 0 ? null : stages[index - 1][0],
       next_agent_id: index === stages.length - 1 ? null : stages[index + 1][0],
       input_contract: {
-        required_inputs: index === 0 ? ["汇报对象", "汇报性质", "材料格式"] : ["上游 artifact"],
+        required_inputs: index === 0 ? ["raw brief", "Worker capabilities"] : ["Manager task packet"],
         optional_inputs: ["补充素材", "历史参考"],
         accepted_material_formats: ["json", "docx", "xlsx", "csv"],
         input_preparation_focus: "围绕当前环节的输入契约整理素材",
@@ -740,8 +740,8 @@ function fallbackOverview() {
       memory_dimensions: ["受众适配", "结构", "证据", "表达"],
       state: {
         agent_memory_scope: `${stage[0]}_only`,
-        global_reads: index === 0 ? [] : ["audience_profile", "target_action"],
-        global_writes: index === 0 ? ["audience_profile", "target_action"] : [],
+        global_reads: index === 0 ? [] : ["report_charter", "target_action"],
+        global_writes: index === 0 ? ["report_charter", "execution_plan"] : [],
         generation_memory_dimensions: ["结构", "表达"],
       },
       harness: {

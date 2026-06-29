@@ -33,10 +33,10 @@
           <section class="framework-hero panel">
             <span class="section-kicker">System Framework</span>
             <h2>汇报助手系统框架介绍</h2>
-            <p>一套面向战略汇报生产的 7-Agent Loop Harness：把材料从任务定位、论点提炼、故事线、单页内容、格式化、Q&A 到逐字稿拆成可控环节；每个环节由 skill 定义行为，由 review 拦截风险，由 state/memory 持续学习。</p>
+            <p>一套面向战略汇报生产的 Manager + Worker Loop Harness：Manager 定义任务、规划、派发和验收，六个专业 Worker 负责论点、故事线、单页、格式、Q&A 与逐字稿。</p>
             <div class="framework-stat-strip" aria-label="系统核心构成">
-              <div><strong>7</strong><span>个 Agent 接力</span></div>
-              <div><strong>5</strong><span>步单 Agent loop</span></div>
+              <div><strong>1+6</strong><span>Manager + Worker</span></div>
+              <div><strong>2</strong><span>层 Agent loop</span></div>
               <div><strong>3</strong><span>类 skill 契约文件</span></div>
               <div><strong>2</strong><span>种接入方式</span></div>
             </div>
@@ -56,11 +56,11 @@
               <div class="arch-mainline">
                 <div class="arch-mainline-head">
                   <span>Production Spine</span>
-                  <strong>7-Agent 汇报流水线</strong>
-                  <em>系统主干不是一次生成整份材料，而是让 7 个专业 Agent 依次产出、审查、交接。</em>
+                  <strong>Manager 控制面 + 专业 Worker</strong>
+                  <em>Manager 围绕项目目标动态定义、派发和验收任务，Worker 在隔离上下文中执行。</em>
                 </div>
                 <div class="arch-stage-strip">
-                  <span>任务定位</span>
+                  <span>Manager</span>
                   <span>论点提炼</span>
                   <span>Storyline</span>
                   <span>单页草稿</span>
@@ -72,8 +72,8 @@
 
               <div class="arch-loop-dispatch">
                 <span>Loop Scheduler</span>
-                <strong>每个 Agent 都被同一套 loop 调度</strong>
-                <em>start → workflow → sub-agent review → human review；P0 未清除则回到 workflow revise。</em>
+                <strong>Manager loop 调度 Worker loop</strong>
+                <em>planning → dispatch → Worker review → Manager acceptance；必要时返工或向用户升级。</em>
               </div>
 
               <div class="arch-runtime">
@@ -105,29 +105,29 @@
           </section>
 
           <section class="framework-section panel">
-            <span class="section-kicker">02 · 7-Agent Pipeline</span>
-            <h2>把“做一份汇报”拆成 7 个稳定、可审查、可替换的专业环节。</h2>
+            <span class="section-kicker">02 · Manager + Workers</span>
+            <h2>Manager 对项目结果负责，专业 Worker 对各自交付物负责。</h2>
             <div class="framework-agent-timeline">
-              <div><b>01</b><strong>任务定位</strong><span>把汇报对象、性质、格式、模板、历史材料收敛为可执行 brief。</span><em>产物：汇报 brief</em></div>
-              <div><b>02</b><strong>核心论点提炼</strong><span>提炼 Executive Summary、核心结论、关键论点和希望推动的 action。</span><em>产物：Executive Summary</em></div>
-              <div><b>03</b><strong>Storyline 设计</strong><span>设计每页标题、关键问题、so what、证据安排，并通过标题连读测试。</span><em>产物：Storyline</em></div>
-              <div><b>04</b><strong>单页内容填充</strong><span>把 storyline 展开成 dummy page、page brief 和图表信息。</span><em>产物：Page content</em></div>
-              <div><b>05</b><strong>Format</strong><span>把结构化内容转成 PPT、HTML 或文档形态的正式材料。</span><em>产物：Formatted material</em></div>
-              <div><b>06</b><strong>Q&A 梳理</strong><span>预判追问、风险点、回答策略和需要汇报人补充的信息。</span><em>产物：Q&A pack</em></div>
-              <div><b>07</b><strong>逐字稿</strong><span>生成完整汇报话术、讲述节奏和时间分配，一般控制在 30 分钟内。</span><em>产物：Speaker script</em></div>
+              <div><b>M</b><strong>汇报项目 Manager</strong><span>定义 report charter、执行计划、任务包和验收标准。</span><em>产物：Manager decision</em></div>
+              <div><b>01</b><strong>核心论点提炼</strong><span>提炼 Executive Summary、核心结论、关键论点和希望推动的 action。</span><em>产物：Executive Summary</em></div>
+              <div><b>02</b><strong>Storyline 设计</strong><span>设计每页标题、关键问题、so what、证据安排，并通过标题连读测试。</span><em>产物：Storyline</em></div>
+              <div><b>03</b><strong>单页内容填充</strong><span>把 storyline 展开成 dummy page、page brief 和图表信息。</span><em>产物：Page content</em></div>
+              <div><b>04</b><strong>Format</strong><span>把结构化内容转成 PPT、HTML 或文档形态的正式材料。</span><em>产物：Formatted material</em></div>
+              <div><b>05</b><strong>Q&A 梳理</strong><span>预判追问、风险点、回答策略和需要汇报人补充的信息。</span><em>产物：Q&A pack</em></div>
+              <div><b>06</b><strong>逐字稿</strong><span>生成完整汇报话术、讲述节奏和时间分配。</span><em>产物：Speaker script</em></div>
             </div>
             <p>核心定义集中在 <code>configs/agents.json</code>：每个 Agent 声明输入输出 schema、上下游交接、memory 维度、rubrics 摘要、global state 读写范围、review policy 与可选能力。</p>
           </section>
 
           <section class="framework-section loop-panel panel">
-            <span class="section-kicker">03 · 单 Agent Loop</span>
-            <h2>每个 Agent 内部都采用同构 loop，让产物先被机器拦截，再交给人判断。</h2>
+            <span class="section-kicker">03 · 双层 Agent Loop</span>
+            <h2>Worker 先完成专业自审，再由 Manager 按项目目标验收。</h2>
             <div class="agent-loop-visual" aria-label="单 Agent loop 控制逻辑">
               <div class="loop-orbit">
                 <div class="loop-core">
                   <span>Agent Loop</span>
                   <strong>maker + checker</strong>
-                  <em>同一个结构复用于 7 个 Agent</em>
+                  <em>Worker maker + checker</em>
                 </div>
                 <div class="loop-phase phase-start"><b>01</b><strong>start</strong><span>接收人或上游 artifact</span></div>
                 <div class="loop-phase phase-workflow"><b>02</b><strong>workflow</strong><span>按 skill 生成产物</span></div>
@@ -148,15 +148,15 @@
                 </div>
                 <div class="decision-gate approved">
                   <span>Human Gate</span>
-                  <strong>人判断材料是否可用</strong>
-                  <em>approve 进入下一 Agent；revise 可回本环节或上游。</em>
+                  <strong>Manager 判断任务是否通过</strong>
+                  <em>dispatch 后续任务、revise 返工，或 ask_human 升级。</em>
                 </div>
               </div>
             </div>
             <div class="loop-support-band">
               <div>
                 <strong>3.1 Runtime 模块</strong>
-                <span><code>loop.py</code> 跑单 Agent maker-checker loop；<code>pipeline.py</code> 串起 7-Agent 流水线；<code>step.py</code> 支持宿主模型单步执行；<code>launch.py</code> 统一标准化输入并启动。</span>
+                <span><code>manager.py</code> 运行控制面；<code>step.py</code> 驱动 Worker maker-checker loop；<code>pipeline.py</code> 保留固定顺序兼容入口。</span>
               </div>
               <div>
                 <strong>3.2 Skill 模块</strong>
@@ -234,7 +234,7 @@
               <div>
                 <small>产品入口 / 使用方式</small>
                 <strong>通过 skill 接入 Agent 终端</strong>
-                <span><code>skills/report_builder/SKILL.md</code> 把整个 harness 封装成 Codex、Claude Code、WorkBuddy 可调用的 report-builder skill。宿主 Agent 读取协议后，按 prepare / commit / advance 调度流水线。</span>
+                <span><code>skills/report_builder/SKILL.md</code> 把整个 harness 封装成 Codex、Claude Code、WorkBuddy 可调用的 report-builder skill。宿主按 next / submit / approve / feedback 执行当前 Manager 或 Worker 指令。</span>
               </div>
               <div>
                 <small>底层执行抽象</small>
@@ -253,7 +253,7 @@
             <span class="section-kicker">06 · Web Cockpit</span>
             <h2>前端是系统的解释层和操作层，让非技术用户也能看懂 loop、skill、memory 和运行产物。</h2>
             <div class="framework-cards">
-              <div><strong>Loop Map</strong><span>展示 7 个 Agent 的接力关系和单 Agent loop。</span></div>
+              <div><strong>Loop Map</strong><span>展示 Manager 控制面、专业 Worker 和双层 loop。</span></div>
               <div><strong>Inline Run</strong><span>演示 prepare / commit / advance 的单步执行流程。</span></div>
               <div><strong>Agent Detail</strong><span>展示每个 Agent 的定位、输入输出契约、state、harness 与 rubrics。</span></div>
               <div><strong>Learning Loop</strong><span>展示 memory、learning log、event、dreaming、retrieval 与 routing 机制。</span></div>
@@ -278,8 +278,8 @@
         <section class="hero-panel">
           <div class="hero-copy">
             <span class="section-kicker">Current Loop Logic</span>
-            <h2>人发起任务，Agent 逐段产出，Review 负责拦截风险，Memory 只在反馈后更新。</h2>
-            <p>首页只保留系统运转的主线：7 个 Agent 如何接力、单个 Agent 内部如何自检和放行、当前 harness 是否齐备。</p>
+            <h2>人定义目标，Manager 规划和验收，Worker 在隔离任务中产出。</h2>
+            <p>首页展示 Manager 如何派发 Worker、Worker 如何自检，以及 Manager 如何通过、返工或向用户升级。</p>
           </div>
           <div class="health-strip" id="healthStrip"></div>
         </section>
@@ -288,7 +288,7 @@
           <div class="panel-heading">
             <div>
               <span class="section-kicker">Pipeline</span>
-              <h2>7 个 Agent 的产物接力</h2>
+              <h2>Manager 与 6 个专业 Worker</h2>
             </div>
             <span id="agentCount" class="tag">0 agents</span>
           </div>

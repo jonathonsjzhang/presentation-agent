@@ -10,13 +10,14 @@ from presentation_agent.skills.base import SkillContext
 
 
 class GenericSkill:
-    """One skill implementation that drives ALL seven agents.
+    """Package-driven implementation for specialist Worker agents.
 
-    The behavior of each agent is defined by its skill package
+    The behavior of each Worker is defined by its skill package
     (SKILL.md + rubrics.json + schemas/), not by hand-written Python. This class
     reads the package out of the runtime context, composes a prompt, and asks
     the LLMClient to produce an artifact that satisfies the agent's output
-    schema. Adding or changing an agent therefore means editing its package,
+    schema. Manager uses its own control-plane runtime because it emits
+    dispatch/acceptance actions. Adding or changing a Worker means editing its package,
     never this file.
 
     A mock LLMClient lets the whole pipeline run offline; a cli/inline client

@@ -22,7 +22,8 @@ description: Convert research conclusions, complete evidence, desired direction,
 
 必须读取：
 
-- `task_positioning.v1` 或 `report_context`：至少包含 `audience`、`report_type`、`output_format`、`decision_goal`。
+- Manager 下发的 `manager_task` 和 `report_charter`：至少包含 `audience`、`report_type`、`output_format`、`decision_goal`、`expected_action` 和本任务 `acceptance_criteria`。
+- 兼容旧运行时可以读取 `task_positioning.v1` 或 `report_context`。
 - `research_findings`：研究结论、分析结论、已有判断。
 - `complete_evidence`：完整论据、数据表、访谈、案例、口径说明、用户补充。
 - `desired_direction`：用户希望推动的方向、偏好的判断或待争取的 action；可以为空，但若存在必须做证据强度校准。

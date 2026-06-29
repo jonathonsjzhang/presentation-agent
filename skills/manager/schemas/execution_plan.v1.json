@@ -1,0 +1,25 @@
+{
+  "schema": "execution_plan.v1",
+  "type": "object",
+  "required": ["plan_id", "tasks", "human_gates", "completion_criteria"],
+  "properties": {
+    "plan_id": {"type": "string"},
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "agent_id", "objective", "dependencies", "status"],
+        "properties": {
+          "task_id": {"type": "string"},
+          "agent_id": {"type": "string"},
+          "objective": {"type": "string"},
+          "dependencies": {"type": "array", "items": {"type": "string"}},
+          "status": {"type": "string", "enum": ["planned", "dispatched", "completed", "accepted", "revision_required", "skipped"]}
+        }
+      }
+    },
+    "human_gates": {"type": "array"},
+    "completion_criteria": {"type": "array", "items": {"type": "string"}},
+    "planning_notes": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -5,7 +5,7 @@ description: >-
   "更新汇报助手"、"帮我做一份战略汇报 / 复盘 / 高管汇报 / 汇报 PPT / storyline /
   分析报告"，或给出汇报主题、对象、材料和希望支撑的决策时使用。宿主 Agent 负责自动
   clone/pull 官方仓库、初始化 workspace，并通过 presentation-agent report 命令推进
-  7-Agent loop。触发词：战略汇报、复盘报告、汇报PPT、高管汇报、storyline、分析报告、
+  Manager Agent 与专业 Worker loop。触发词：战略汇报、复盘报告、汇报PPT、高管汇报、storyline、分析报告、
   安装汇报助手、更新汇报助手。
 ---
 
@@ -19,8 +19,9 @@ description: >-
 - 不让用户手动执行 git 或 Python 命令。
 - 官方仓库和用户数据分离：repo 可以更新，workspace 不覆盖。
 - 只通过高层 CLI 调度：`doctor`、`init-workspace`、`report start/next/submit/approve/status`。
-- 每阶段完成后，必须把 CLI 返回的 `present_to_user` 或摘要展示给用户，等待用户确认后再 `report approve`。
-- 用户在 human review 中给出反馈时，必须自动记录到 memory，再按反馈继续修正。
+- Manager 定义任务、派发和验收 Worker；宿主不自行决定固定阶段顺序。
+- 只在 CLI 返回 `actor=human` 时把 `present_to_user` 展示给用户。
+- 用户在 Manager gate 给出反馈时，通过 `report feedback` 送回当前 run；可复用偏好再用 `feedback-text auto` 沉淀。
 
 ## 默认安装位置
 
@@ -85,13 +86,13 @@ python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces
 
 ## 发起汇报
 
-用户提出汇报需求时，先收敛 `raw_brief.v1`。三个字段缺失必须追问：
+用户提出汇报需求时，只做忠实的输入归集并形成 `raw_brief.v1`，不要在宿主层替 Manager 完成任务定位。除非连主题都无法判断，否则先启动 Manager，由 Manager 判断阻塞问题。
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `topic` | 是 | 汇报主题 |
-| `audience` | 是 | 汇报对象 |
-| `decision_goal` | 是 | 希望支撑的决策 |
+| `audience` | 否 | 汇报对象，缺失时由 Manager 识别或追问 |
+| `decision_goal` | 否 | 希望支撑的决策，由 Manager 正式定义 |
 | `report_type` | 否 | `deep_dive` 或 `quick_sync`，默认 `deep_dive` |
 | `output_format` | 否 | `ppt` / `document` / `html`，默认 `ppt` |
 | `context` | 否 | 背景 |
@@ -119,22 +120,28 @@ CLI 会返回 JSON，记录：
 
 - `run_id`
 - `run_dir`
+- 当前 `instruction.actor`
 - 当前 `instruction.instruction_path`
 - 当前 `instruction.output_path`
 
-## 逐阶段调度循环
+第一条指令一定属于 Manager planning。Manager 会输出 `report_charter`、`execution_plan` 和首个 `task_packet`。
 
-对每个阶段执行：
+## Manager / Worker 调度循环
+
+持续执行：
 
 ```text
-1. report next 返回 instruction_path / output_path
-2. 你读取 instruction_path
-3. 你亲自生成严格 JSON，写入 output_path
-4. report submit 提交
-5. 若返回 step != done：继续 report next / submit，不等用户
-6. 若返回 step == done：展示 present_to_user，等待用户确认
-7. 用户确认后 report approve，进入下一阶段
+1. report next 返回当前 actor 和 instruction
+2. 读取 instruction_path，在独立上下文中执行对应 Manager 或 Worker Skill
+3. 把严格 JSON 写入 output_path
+4. report submit
+5. actor=manager/worker：继续 next/submit，不自行改变调度
+6. actor=human：展示 present_to_user，等待用户决策
+7. 用户确认：report approve
+8. 用户要求调整或回答 Manager 问题：report feedback
 ```
+
+宿主支持 sub-agent 时，每个 Worker 指令必须在新的隔离 sub-agent 上下文中执行；Manager 指令也应与 Worker 生成上下文隔离。宿主不支持 sub-agent 时，仍须只把当前 instruction 提供的上下文作为本轮依据。
 
 命令：
 
@@ -150,9 +157,13 @@ python -m presentation_agent.cli \
 python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
   report approve --run "<run_id>"
+
+python -m presentation_agent.cli \
+  --workspace "$HOME/PresentationAgent/workspaces/default" \
+  report feedback --run "<run_id>" --text '<用户原话>'
 ```
 
-如果你把模型输出先写到了别的文件，也可以：
+若模型输出先写到了别的文件：
 
 ```bash
 python -m presentation_agent.cli \
@@ -160,26 +171,20 @@ python -m presentation_agent.cli \
   report submit --run "<run_id>" --output-file "<output_json>"
 ```
 
-## 自动记录 human review 反馈
+## 自动记录可复用反馈
 
-当阶段停在 human review，且用户给出质量反馈、修改意见或偏好时，不要让用户另填表。你必须自动记录：
+当用户反馈包含可跨项目复用的质量标准或偏好时，不要让用户另填表。使用多目标自动归因：
 
 ```bash
 python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
-  feedback-text <agent_id> \
+  feedback-text auto \
   --text '<用户原话>' \
   --scene human_review_chat \
-  --run-state '<stage_dir>/run_state.json'
+  --run-state '<run_dir>/manager_state.json'
 ```
 
-若能判断维度，可加：
-
-```bash
---dimension "结构"
-```
-
-记录后再按用户反馈修正，或等待用户确认。回复中简短说明："我已把这条反馈记入本阶段 memory。"
+同一条反馈可以同时写入 Manager 和专业 Worker memory。一次性项目事实只通过 `report feedback` 进入当前 run，不写长期 memory。
 
 ## 成功经验与版本对比
 
@@ -220,7 +225,7 @@ python -m presentation_agent.cli \
 ## 边界
 
 - 不绕过 harness 自己写最终材料。
-- 必填字段缺失必须追问。
+- 不在宿主层替 Manager 做任务定位、阶段选择或产物验收。
 - 写入 output_path 时只写 JSON 对象，不加 markdown、前言或结语。
 - 不在命令里放 token / API key。
 - 不执行会覆盖用户 workspace 的命令。

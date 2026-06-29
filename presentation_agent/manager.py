@@ -1,23 +1,290 @@
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 from typing import Any, Optional
 
 from presentation_agent.cross_review import CrossStageReviewer
 from presentation_agent.io import append_jsonl, read_json, write_json
+from presentation_agent.llm.schema import validate
 from presentation_agent.memory import MemoryStore
-from presentation_agent.models import now_iso
+from presentation_agent.models import AgentSpec, now_iso
+from presentation_agent.skill_package import load_skill_package
+from presentation_agent.step import StepError, StepRunner
 
 
-class ManagerController:
-    """Project-level orchestration layer for report runs.
+MANAGER_MEMORY_DIMENSIONS = [
+    "任务定义",
+    "任务拆解",
+    "调度",
+    "验收",
+    "返工",
+    "人审偏好",
+    "跨阶段一致性",
+]
 
-    The manager records plans and decisions around the existing pipeline. It
-    does not generate stage artifacts and does not bypass StepRunner or
-    PipelineStepper.
-    """
 
-    MEMORY_DIMENSIONS = ["调度", "阶段依赖", "返工", "人审偏好", "跨阶段一致性", "并行策略"]
+class ManagerAgentRuntime:
+    """Build and validate host-executed Manager Agent turns."""
+
+    def __init__(self, root: Path, run_dir: Path, data_root: Path) -> None:
+        self.root = root
+        self.run_dir = run_dir
+        self.data_root = data_root
+        self.manager_dir = run_dir / "manager"
+        self.handoff_dir = self.manager_dir / "handoff"
+        self.handoff_dir.mkdir(parents=True, exist_ok=True)
+        self.package = load_skill_package(root, "manager")
+        self.memory = MemoryStore(root, "manager", data_root=data_root)
+
+    def prepare(self, context: dict[str, Any], phase: str) -> dict[str, Any]:
+        instruction_path = self.handoff_dir / f"instruction_{phase}.md"
+        output_path = self.handoff_dir / f"output_{phase}.json"
+        memory_guidance = self.memory.generation_guidance(MANAGER_MEMORY_DIMENSIONS, limit=6)
+        schema = self._schema("manager_decision.v1")
+        rubrics = self.package.rubrics
+
+        lines = [
+            f"# 汇报项目 Manager · {phase}",
+            "",
+            "## Manager Skill",
+            "",
+            self.package.instructions.strip(),
+            "",
+            "## 本轮 Manager Context",
+            "",
+            "```json",
+            json.dumps(context, ensure_ascii=False, indent=2),
+            "```",
+        ]
+        if memory_guidance:
+            lines.extend([
+                "",
+                "## 本轮召回的 Manager Memory",
+                "",
+                *[f"- {item}" for item in memory_guidance],
+            ])
+        lines.extend([
+            "",
+            "## Manager Rubrics",
+            "",
+            "```json",
+            json.dumps(rubrics, ensure_ascii=False, indent=2),
+            "```",
+            "",
+            "## 输出 Schema",
+            "",
+            "```json",
+            json.dumps(schema, ensure_ascii=False, indent=2),
+            "```",
+            "",
+            "## 输出操作",
+            "",
+            f"只写一个严格符合 manager_decision.v1 的 JSON 对象到 `{output_path}`。",
+            f"`phase` 必须为 `{phase}`。不要输出 Markdown、解释或思考过程。",
+        ])
+        instruction_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return {
+            "actor": "manager",
+            "step": phase,
+            "instruction_path": str(instruction_path),
+            "output_path": str(output_path),
+        }
+
+    def read_decision(self, phase: str) -> dict[str, Any]:
+        output_path = self.handoff_dir / f"output_{phase}.json"
+        if not output_path.exists():
+            raise StepError(f"Manager 输出不存在: {output_path}")
+        try:
+            decision = json.loads(output_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise StepError(f"Manager 输出不是合法 JSON: {exc}") from exc
+        if not isinstance(decision, dict):
+            raise StepError("Manager 输出必须是 JSON 对象")
+
+        errors = validate(decision, self._schema("manager_decision.v1"))
+        if decision.get("phase") != phase:
+            errors.append(f"$.phase: expected {phase!r}, got {decision.get('phase')!r}")
+
+        action = decision.get("action")
+        if phase == "planning":
+            for key, schema_name in (
+                ("report_charter", "report_charter.v1"),
+                ("execution_plan", "execution_plan.v1"),
+                ("task_packet", "task_packet.v1"),
+            ):
+                value = decision.get(key)
+                if not isinstance(value, dict):
+                    errors.append(f"$: planning decision missing object '{key}'")
+                else:
+                    errors.extend(validate(value, self._schema(schema_name), f"$.{key}"))
+            if action != "dispatch":
+                errors.append("$.action: planning must produce dispatch; runtime applies the plan human gate")
+        else:
+            report = decision.get("acceptance_report")
+            if not isinstance(report, dict):
+                errors.append("$: acceptance decision missing object 'acceptance_report'")
+            else:
+                errors.extend(
+                    validate(report, self._schema("acceptance_report.v1"), "$.acceptance_report")
+                )
+            if action in ("dispatch", "revise"):
+                packet = decision.get("task_packet")
+                if not isinstance(packet, dict):
+                    errors.append(f"$: {action} decision missing object 'task_packet'")
+                else:
+                    errors.extend(validate(packet, self._schema("task_packet.v1"), "$.task_packet"))
+            if action == "complete" and phase != "acceptance":
+                errors.append("$.action: complete is only valid during acceptance")
+
+        if errors:
+            raise StepError("Manager decision 校验失败:\n- " + "\n- ".join(errors))
+        return decision
+
+    def output_path(self, phase: str) -> Path:
+        return self.handoff_dir / f"output_{phase}.json"
+
+    def _schema(self, name: str) -> dict[str, Any]:
+        schema = self.package.schemas.get(name)
+        if not isinstance(schema, dict):
+            raise StepError(f"Manager skill 缺少 schema: {name}")
+        return schema
+
+
+class WorkerExecutor:
+    """Create isolated specialist task runs under Manager control."""
+
+    def __init__(self, root: Path, run_dir: Path, data_root: Path) -> None:
+        self.root = root
+        self.run_dir = run_dir
+        self.data_root = data_root
+        config = read_json(root / "configs" / "agents.json", default={})
+        active = set(config.get("pipeline", {}).get("stages", []))
+        self.specs = {
+            item["id"]: AgentSpec.from_dict(item)
+            for item in config.get("agents", [])
+            if item.get("id") in active
+        }
+
+    def capabilities(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "agent_id": spec.id,
+                "name": spec.name,
+                "description": spec.description,
+                "input_schema": spec.input_schema,
+                "output_schema": spec.output_schema,
+                "memory_dimensions": spec.memory_dimensions,
+            }
+            for spec in sorted(self.specs.values(), key=lambda item: item.stage)
+        ]
+
+    def create_task(
+        self,
+        packet: dict[str, Any],
+        report_charter: dict[str, Any],
+        raw_brief_path: Path,
+    ) -> dict[str, Any]:
+        agent_id = str(packet.get("agent_id") or "")
+        if agent_id not in self.specs:
+            raise StepError(
+                f"Manager 派发了未知或非活动 Worker: {agent_id}; "
+                f"可用 Worker: {sorted(self.specs)}"
+            )
+        spec = self.specs[agent_id]
+        task_id = self._safe_id(str(packet.get("task_id") or f"task-{agent_id}"))
+        task_dir = self._unique_task_dir(task_id, agent_id)
+        task_dir.mkdir(parents=True, exist_ok=False)
+        (task_dir / "handoff").mkdir(parents=True, exist_ok=True)
+
+        worker_input: dict[str, Any] = dict(report_charter)
+        resolved_inputs = []
+        for reference in packet.get("input_artifacts", []):
+            path = self._resolve_artifact(str(reference))
+            if path is None:
+                continue
+            resolved_inputs.append(str(path))
+            data = read_json(path, default={})
+            if isinstance(data, dict):
+                worker_input.update(data)
+
+        # Control-plane contracts are authoritative and cannot be overwritten
+        # by an upstream artifact that happens to carry the same field names.
+        worker_input["report_charter"] = report_charter
+        worker_input["manager_task"] = packet
+        worker_input["raw_brief"] = read_json(raw_brief_path, default={})
+
+        input_path = task_dir / "input.json"
+        write_json(input_path, worker_input)
+        run_state = {
+            "run_id": f"{task_id}-{now_iso().replace(':', '').replace('+', 'Z')}",
+            "task_id": packet.get("task_id"),
+            "agent_id": spec.id,
+            "agent_name": spec.name,
+            "stage": spec.stage,
+            "status": "init",
+            "current_step": "init",
+            "round_index": 0,
+            "max_revision_rounds": spec.max_revision_rounds or 2,
+            "input_path": str(input_path),
+            "manager_task": packet,
+            "resolved_input_artifacts": resolved_inputs,
+            "output_dir": str(task_dir),
+            "p0_open": [],
+            "p1_open": [],
+            "produced_artifacts": [],
+            "history": [],
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }
+        write_json(task_dir / "run_state.json", run_state)
+        return {
+            "task_id": packet.get("task_id"),
+            "agent_id": agent_id,
+            "agent_name": spec.name,
+            "task_dir": str(task_dir),
+            "input_path": str(input_path),
+            "packet": packet,
+            "status": "dispatched",
+            "created_at": now_iso(),
+        }
+
+    def prepare(self, task_dir: Path) -> dict[str, Any]:
+        instruction = StepRunner(
+            self.root, task_dir, data_root=self.data_root
+        ).prepare()
+        instruction["actor"] = "worker"
+        return instruction
+
+    def _resolve_artifact(self, reference: str) -> Optional[Path]:
+        candidate = Path(reference).expanduser()
+        candidates = [candidate] if candidate.is_absolute() else [
+            self.run_dir / candidate,
+            self.run_dir / "tasks" / candidate,
+        ]
+        for path in candidates:
+            if path.exists() and path.is_file() and path.suffix.lower() == ".json":
+                return path.resolve()
+        return None
+
+    def _unique_task_dir(self, task_id: str, agent_id: str) -> Path:
+        base = self.run_dir / "tasks" / f"{task_id}_{agent_id}"
+        candidate = base
+        index = 2
+        while candidate.exists():
+            candidate = base.with_name(f"{base.name}_{index}")
+            index += 1
+        return candidate
+
+    @staticmethod
+    def _safe_id(value: str) -> str:
+        safe = re.sub(r"[^A-Za-z0-9_-]+", "-", value).strip("-")
+        return (safe or "task")[:80]
+
+
+class ManagerOrchestrator:
+    """Control-plane state machine around Manager Agent and specialist Workers."""
 
     def __init__(self, root: Path, run_dir: Path, data_root: Optional[Path] = None) -> None:
         self.root = root
@@ -25,176 +292,444 @@ class ManagerController:
         self.data_root = data_root or (root / "data")
         self.state_path = run_dir / "manager_state.json"
         self.plan_path = run_dir / "manager_plan.json"
+        self.charter_path = run_dir / "report_charter.json"
         self.decisions_path = run_dir / "manager_decisions.jsonl"
-        self.memory = MemoryStore(root, "manager", data_root=self.data_root)
+        self.raw_brief_path = run_dir / "raw_brief.json"
+        self.agent = ManagerAgentRuntime(root, run_dir, self.data_root)
+        self.workers = WorkerExecutor(root, run_dir, self.data_root)
         self.cross_reviewer = CrossStageReviewer(root, run_dir)
 
-    def initialize_run(
-        self,
-        *,
-        brief_path: Path,
-        first_stage: dict[str, Any],
-        instruction: dict[str, Any],
-    ) -> dict[str, Any]:
-        config = read_json(self.root / "configs" / "agents.json", default={})
-        stages = list(config.get("pipeline", {}).get("stages", []))
-        memory_guidance = self.memory.generation_guidance(self.MEMORY_DIMENSIONS, limit=6)
-
-        plan = {
-            "version": "manager_plan.v1",
-            "mode": "sequential_with_manager",
-            "brief_path": str(brief_path),
-            "stages": stages,
-            "human_review_required": bool(config.get("pipeline", {}).get("human_review_required", True)),
-            "initial_strategy": {
-                "principle": "串行主干，保留后续局部并行和 sub-agent 调度扩展点",
-                "manager_memory_guidance": memory_guidance,
-            },
-            "created_at": now_iso(),
-        }
-        write_json(self.plan_path, plan)
-
+    def initialize_run(self, brief_path: Path) -> dict[str, Any]:
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        if brief_path.resolve() != self.raw_brief_path.resolve():
+            write_json(self.raw_brief_path, read_json(brief_path, default={}))
         state = {
-            "version": "manager_state.v1",
+            "version": "manager_state.v2",
             "run_id": self.run_dir.name,
-            "mode": "manager_sequential_v1",
+            "mode": "manager_controlled",
             "status": "running",
-            "current_stage": first_stage.get("agent_id"),
-            "current_stage_dir": first_stage.get("stage_dir"),
-            "risk_flags": [],
-            "memory_used": memory_guidance,
-            "last_instruction": instruction,
-            "last_decision": {
-                "decision": "start",
-                "reason": "report run initialized under manager control",
-                "at": now_iso(),
-            },
+            "current_actor": "manager",
+            "manager_phase": "planning",
+            "manager_step": "init",
+            "last_event": "start",
+            "human_gate": None,
+            "current_task": None,
+            "tasks": [],
+            "accepted_artifacts": [],
+            "project_state": {},
             "created_at": now_iso(),
             "updated_at": now_iso(),
         }
-        write_json(self.state_path, state)
-        self._append_decision("start", "report run initialized", {
-            "brief_path": str(brief_path),
-            "first_stage": first_stage,
-            "instruction": instruction,
-        })
-        return state
+        self._save_state(state)
+        self._append_decision("start", "Manager run initialized", {"brief_path": str(brief_path)})
+        return self.prepare()
 
-    def record_instruction(self, *, stage_dir: Path, stage_status: dict[str, Any], instruction: dict[str, Any]) -> dict[str, Any]:
+    def prepare(self) -> dict[str, Any]:
         state = self._load_state()
-        state["current_stage"] = stage_status.get("agent_id")
-        state["current_stage_dir"] = str(stage_dir)
+        actor = state.get("current_actor")
+        if actor == "human":
+            return self._human_gate_result(state)
+        if actor == "worker":
+            task_dir = self.current_worker_dir(state)
+            if task_dir is None:
+                raise StepError("Manager state 缺少当前 Worker task_dir")
+            runner = StepRunner(self.root, task_dir, data_root=self.data_root)
+            status = runner.status()
+            if str(status.get("current_step", "")).startswith("awaiting_"):
+                return {
+                    "actor": "worker",
+                    "step": status.get("current_step"),
+                    "instruction_path": status.get("instruction_path"),
+                    "output_path": status.get("output_path"),
+                }
+            return self.workers.prepare(task_dir)
+        if actor != "manager":
+            raise StepError(f"未知 current_actor: {actor}")
+
+        phase = str(state.get("manager_phase") or "planning")
+        if state.get("manager_step") == "awaiting_output":
+            instruction = state.get("last_instruction")
+            if isinstance(instruction, dict):
+                return instruction
+        context = self._manager_context(state)
+        instruction = self.agent.prepare(context, phase)
+        state["manager_step"] = "awaiting_output"
         state["last_instruction"] = instruction
-        state["last_decision"] = {
-            "decision": "prepare_instruction",
-            "reason": "stage instruction prepared or reused",
-            "at": now_iso(),
-        }
-        self._write_state(state)
-        self._append_decision("prepare_instruction", "stage instruction prepared or reused", {
-            "stage": stage_status,
-            "instruction": instruction,
-        })
-        return state
+        self._save_state(state)
+        self._append_decision("prepare_manager", f"Manager {phase} instruction prepared", {})
+        return instruction
 
-    def record_submit(self, *, stage_dir: Path, stage_status: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    def commit_manager(self) -> dict[str, Any]:
         state = self._load_state()
-        state["current_stage"] = stage_status.get("agent_id")
-        state["current_stage_dir"] = str(stage_dir)
-        state["last_submit_result"] = result
+        if state.get("current_actor") != "manager" or state.get("manager_step") != "awaiting_output":
+            raise StepError("当前没有等待提交的 Manager 输出")
+        phase = str(state.get("manager_phase") or "planning")
+        decision = self.agent.read_decision(phase)
+        if phase == "acceptance":
+            current_task = state.get("current_task") or {}
+            report = decision.get("acceptance_report") or {}
+            if report.get("task_id") != current_task.get("task_id"):
+                raise StepError(
+                    "acceptance_report.task_id 与当前任务不一致: "
+                    f"{report.get('task_id')!r} != {current_task.get('task_id')!r}"
+                )
+            verdict = report.get("verdict")
+            action = decision.get("action")
+            if action in ("dispatch", "complete") and verdict != "accept":
+                raise StepError(f"Manager action={action} 要求 acceptance verdict=accept")
+            if action == "revise" and verdict != "revise":
+                raise StepError("Manager action=revise 要求 acceptance verdict=revise")
+        self._archive_decision(decision)
+        self._append_decision(
+            str(decision.get("action")),
+            str(decision.get("reason_summary")),
+            {"phase": phase, "decision": decision},
+        )
+        state["last_manager_decision"] = decision
+        state["manager_step"] = "decision_committed"
+        state["project_state"].update(decision.get("state_updates") or {})
 
-        cross_review = None
-        risk_flags = list(state.get("risk_flags", []))
-        if result.get("step") == "done":
-            cross_review = self.cross_reviewer.review_stage(stage_dir)
-            state["last_cross_stage_review"] = cross_review
-            for issue in cross_review.get("issues", []):
-                risk_flags.append({
-                    "stage": stage_status.get("agent_id"),
-                    "severity": issue.get("severity", "P1"),
-                    "message": issue.get("message", ""),
-                    "suggested_owner": issue.get("suggested_owner"),
-                    "at": now_iso(),
-                })
-        state["risk_flags"] = risk_flags[-20:]
-        state["last_decision"] = {
-            "decision": "stage_done" if result.get("step") == "done" else "continue_stage",
-            "reason": "stage reached human review" if result.get("step") == "done" else "stage loop continues",
-            "at": now_iso(),
-        }
-        self._write_state(state)
-        self._append_decision(state["last_decision"]["decision"], state["last_decision"]["reason"], {
-            "stage": stage_status,
-            "result_step": result.get("step"),
+        if phase == "planning":
+            return self._commit_plan(state, decision)
+        return self._commit_acceptance(state, decision)
+
+    def record_worker_completed(self, result: dict[str, Any]) -> dict[str, Any]:
+        state = self._load_state()
+        task = state.get("current_task")
+        if state.get("current_actor") != "worker" or not isinstance(task, dict):
+            raise StepError("当前没有可交给 Manager 验收的 Worker")
+        task["status"] = "worker_completed"
+        task["artifact_path"] = result.get("artifact_path")
+        task["review_summary"] = result.get("review_summary")
+        task["completed_at"] = now_iso()
+        self._replace_task(state, task)
+        self._set_plan_task_status(str(task.get("task_id") or ""), "completed")
+        state["execution_plan"] = read_json(self.plan_path, default={})
+
+        task_dir = Path(str(task["task_dir"]))
+        cross_review = self.cross_reviewer.review_stage(task_dir)
+        state["worker_result"] = {
+            "task_id": task.get("task_id"),
+            "agent_id": task.get("agent_id"),
+            "artifact_path": result.get("artifact_path"),
+            "artifact": read_json(Path(str(result.get("artifact_path"))), default={}),
+            "worker_review_summary": result.get("review_summary"),
+            "worker_memory_notes": result.get("memory_notes"),
             "cross_stage_review": cross_review,
-        })
-        return state
-
-    def record_approval(self, *, stage_dir: Path, stage_status: dict[str, Any]) -> dict[str, Any]:
-        state = self._load_state()
-        state["current_stage"] = stage_status.get("agent_id")
-        state["current_stage_dir"] = str(stage_dir)
-        state["last_decision"] = {
-            "decision": "approve_stage",
-            "reason": "human approved current stage",
-            "at": now_iso(),
         }
-        self._write_state(state)
-        self._append_decision("approve_stage", "human approved current stage", {
-            "stage": stage_status,
-        })
-        return state
+        state["current_actor"] = "manager"
+        state["manager_phase"] = "acceptance"
+        state["manager_step"] = "init"
+        state["last_event"] = "worker_completed"
+        self._save_state(state)
+        self._append_decision(
+            "worker_completed",
+            "Worker result handed to Manager for acceptance",
+            {"task_id": task.get("task_id"), "agent_id": task.get("agent_id")},
+        )
+        return self.prepare()
 
-    def record_advance(self, *, next_stage: dict[str, Any], instruction: dict[str, Any]) -> dict[str, Any]:
+    def approve(self) -> dict[str, Any]:
         state = self._load_state()
-        state["current_stage"] = next_stage.get("agent_id")
-        state["current_stage_dir"] = next_stage.get("stage_dir")
-        state["last_instruction"] = instruction
-        state["last_decision"] = {
-            "decision": "advance_stage",
-            "reason": "pipeline advanced to next stage",
-            "at": now_iso(),
-        }
-        self._write_state(state)
-        self._append_decision("advance_stage", "pipeline advanced to next stage", {
-            "next_stage": next_stage,
-            "instruction": instruction,
-        })
-        return state
+        if state.get("current_actor") != "human":
+            raise StepError("当前没有等待人工确认的 Manager gate")
+        gate = state.get("human_gate")
+        decision = state.get("pending_decision") or {}
+        if gate == "plan":
+            packet = decision.get("task_packet")
+            if not isinstance(packet, dict):
+                raise StepError("已批准计划，但 Manager decision 中没有首个 task_packet")
+            state["human_gate"] = None
+            state["pending_decision"] = None
+            return self._dispatch(state, packet, reason="human approved Manager plan")
+        if gate == "final":
+            state["status"] = "completed"
+            state["current_actor"] = "human"
+            state["human_gate"] = None
+            state["pending_decision"] = None
+            state["completed_at"] = now_iso()
+            self._save_state(state)
+            self._append_decision("complete", "User approved final Manager delivery", {})
+            return {
+                "actor": "manager",
+                "step": "completed",
+                "status": "completed",
+                "run_dir": str(self.run_dir),
+                "accepted_artifacts": state.get("accepted_artifacts", []),
+                "present_to_user": decision.get("user_message") or "汇报项目已完成并通过最终确认。",
+            }
+        if gate == "decision":
+            packet = decision.get("task_packet")
+            if isinstance(packet, dict):
+                state["human_gate"] = None
+                state["pending_decision"] = None
+                return self._dispatch(state, packet, reason="human approved Manager escalation")
+            raise StepError("该 Manager 决策需要用户补充反馈，不能直接 approve")
+        raise StepError(f"未知 human gate: {gate}")
 
-    def mark_completed(self) -> dict[str, Any]:
+    def record_human_feedback(self, text: str) -> dict[str, Any]:
         state = self._load_state()
-        state["status"] = "completed"
-        state["last_decision"] = {
-            "decision": "complete",
-            "reason": "all stages approved",
+        if state.get("current_actor") != "human":
+            raise StepError("当前不在人工决策节点，不能提交 Manager feedback")
+        feedback = str(text or "").strip()
+        if not feedback:
+            raise StepError("Manager feedback 不能为空")
+        gate = state.get("human_gate")
+        state.setdefault("human_feedback", []).append({
             "at": now_iso(),
-        }
-        self._write_state(state)
-        self._append_decision("complete", "all stages approved", {})
-        return state
+            "gate": gate,
+            "text": feedback,
+        })
+        state["current_actor"] = "manager"
+        state["manager_phase"] = "planning" if gate == "plan" else "acceptance"
+        state["manager_step"] = "init"
+        state["last_event"] = "human_feedback"
+        state["human_gate"] = None
+        state["status"] = "running"
+        state["previous_pending_decision"] = state.get("pending_decision")
+        state["pending_decision"] = None
+        self._save_state(state)
+        self._append_decision(
+            "human_feedback",
+            "Human feedback returned to Manager",
+            {"gate": gate, "text": feedback},
+        )
+        return self.prepare()
 
     def status(self) -> dict[str, Any]:
+        state = self._load_state()
+        worker_status = None
+        task_dir = self.current_worker_dir(state)
+        if task_dir and (task_dir / "run_state.json").exists():
+            worker_status = StepRunner(
+                self.root, task_dir, data_root=self.data_root
+            ).status()
         return {
-            "state": read_json(self.state_path, default={}),
+            "state": state,
+            "charter": read_json(self.charter_path, default={}),
             "plan": read_json(self.plan_path, default={}),
+            "worker": worker_status,
             "decisions_path": str(self.decisions_path),
         }
 
-    def _load_state(self) -> dict[str, Any]:
-        if self.state_path.exists():
-            return read_json(self.state_path, default={})
+    def current_worker_dir(self, state: Optional[dict[str, Any]] = None) -> Optional[Path]:
+        current = (state or self._load_state()).get("current_task")
+        if not isinstance(current, dict) or not current.get("task_dir"):
+            return None
+        return Path(str(current["task_dir"]))
+
+    def copy_manager_output(self, output_file: Path) -> None:
+        state = self._load_state()
+        if state.get("current_actor") != "manager" or state.get("manager_step") != "awaiting_output":
+            raise StepError("当前没有等待外部文件的 Manager 输出")
+        phase = str(state.get("manager_phase") or "planning")
+        self.agent.output_path(phase).write_text(
+            output_file.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+
+    def _commit_plan(self, state: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
+        charter = decision["report_charter"]
+        plan = decision["execution_plan"]
+        write_json(self.charter_path, charter)
+        write_json(self.plan_path, plan)
+        global_state = dict(charter.get("global_state_seed") or {})
+        global_state.update({
+            "report_charter": charter,
+            "updated_at": now_iso(),
+        })
+        write_json(self.run_dir / "state.json", global_state)
+        state["report_charter"] = charter
+        state["execution_plan"] = plan
+        state["current_actor"] = "human"
+        state["human_gate"] = "plan"
+        state["pending_decision"] = decision
+        state["status"] = "awaiting_plan_approval"
+        self._save_state(state)
+        return self._human_gate_result(state)
+
+    def _commit_acceptance(self, state: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
+        action = decision["action"]
+        task = state.get("current_task")
+        if isinstance(task, dict):
+            task["manager_acceptance"] = decision.get("acceptance_report")
+            task["status"] = "accepted" if action in ("dispatch", "complete") else "revision_required"
+            task["accepted_at"] = now_iso() if task["status"] == "accepted" else None
+            self._replace_task(state, task)
+            self._set_plan_task_status(str(task.get("task_id") or ""), task["status"])
+            state["execution_plan"] = read_json(self.plan_path, default={})
+            if task["status"] == "accepted" and task.get("artifact_path"):
+                state.setdefault("accepted_artifacts", []).append({
+                    "task_id": task.get("task_id"),
+                    "agent_id": task.get("agent_id"),
+                    "artifact_path": task.get("artifact_path"),
+                })
+
+        if action in ("dispatch", "revise"):
+            return self._dispatch(
+                state,
+                decision["task_packet"],
+                reason=f"Manager acceptance action={action}",
+            )
+        state["current_actor"] = "human"
+        state["pending_decision"] = decision
+        state["human_gate"] = "final" if action == "complete" else "decision"
+        state["status"] = "awaiting_final_approval" if action == "complete" else "awaiting_human_decision"
+        self._save_state(state)
+        return self._human_gate_result(state)
+
+    def _dispatch(
+        self,
+        state: dict[str, Any],
+        packet: dict[str, Any],
+        *,
+        reason: str,
+    ) -> dict[str, Any]:
+        task = self.workers.create_task(
+            packet,
+            state.get("report_charter") or read_json(self.charter_path, default={}),
+            self.raw_brief_path,
+        )
+        state.setdefault("tasks", []).append(task)
+        self._set_plan_task_status(str(task.get("task_id") or ""), "dispatched", task)
+        state["execution_plan"] = read_json(self.plan_path, default={})
+        state["current_task"] = task
+        state["current_actor"] = "worker"
+        state["manager_step"] = "idle"
+        state["status"] = "running"
+        state["worker_result"] = None
+        state["last_event"] = "dispatch"
+        self._save_state(state)
+        self._append_decision(
+            "dispatch",
+            reason,
+            {"task_id": task.get("task_id"), "agent_id": task.get("agent_id")},
+        )
+        instruction = self.workers.prepare(Path(task["task_dir"]))
+        state = self._load_state()
+        state["last_instruction"] = instruction
+        self._save_state(state)
         return {
-            "version": "manager_state.v1",
-            "run_id": self.run_dir.name,
-            "mode": "manager_sequential_v1",
-            "status": "running",
-            "risk_flags": [],
-            "memory_used": [],
-            "created_at": now_iso(),
+            "actor": "worker",
+            "step": "dispatch",
+            "task": task,
+            "instruction": instruction,
+            "next_action": "host_write_output_then_report_submit",
         }
 
-    def _write_state(self, state: dict[str, Any]) -> None:
+    def _manager_context(self, state: dict[str, Any]) -> dict[str, Any]:
+        phase = str(state.get("manager_phase") or "planning")
+        feedback = state.get("human_feedback", [])
+        event = state.get("last_event") or (
+            "start" if phase == "planning" else "worker_completed"
+        )
+        return {
+            "schema": "manager_context.v1",
+            "phase": phase,
+            "event": event,
+            "run_id": state.get("run_id"),
+            "raw_brief": read_json(self.raw_brief_path, default={}),
+            "report_charter": state.get("report_charter") or read_json(self.charter_path, default={}),
+            "execution_plan": read_json(
+                self.plan_path, default=state.get("execution_plan") or {}
+            ),
+            "task_statuses": state.get("tasks", []),
+            "current_task": state.get("current_task") or {},
+            "worker_result": state.get("worker_result") or {},
+            "human_feedback": feedback[-5:],
+            "previous_manager_decision": state.get("previous_pending_decision") or {},
+            "artifact_catalog": self._artifact_catalog(state),
+            "manager_memory": self.agent.memory.generation_guidance(
+                MANAGER_MEMORY_DIMENSIONS, limit=6
+            ),
+            "available_workers": self.workers.capabilities(),
+        }
+
+    def _artifact_catalog(self, state: dict[str, Any]) -> list[dict[str, Any]]:
+        catalog = [{
+            "kind": "raw_brief",
+            "path": str(self.raw_brief_path),
+        }]
+        for task in state.get("tasks", []):
+            if task.get("artifact_path"):
+                catalog.append({
+                    "kind": "worker_artifact",
+                    "task_id": task.get("task_id"),
+                    "agent_id": task.get("agent_id"),
+                    "status": task.get("status"),
+                    "path": task.get("artifact_path"),
+                })
+        return catalog
+
+    def _human_gate_result(self, state: dict[str, Any]) -> dict[str, Any]:
+        decision = state.get("pending_decision") or {}
+        gate = state.get("human_gate")
+        return {
+            "actor": "human",
+            "step": "manager_gate",
+            "gate": gate,
+            "status": state.get("status"),
+            "report_charter": state.get("report_charter") if gate == "plan" else None,
+            "execution_plan": state.get("execution_plan") if gate == "plan" else None,
+            "acceptance_report": decision.get("acceptance_report"),
+            "questions_for_human": decision.get("questions_for_human", []),
+            "present_to_user": decision.get("user_message") or (
+                "请确认 Manager 的任务定义和执行计划。"
+                if gate == "plan"
+                else "请确认 Manager 的决策。"
+            ),
+            "next_action": "report_approve" if gate in ("plan", "final") else "human_feedback",
+        }
+
+    def _replace_task(self, state: dict[str, Any], current: dict[str, Any]) -> None:
+        tasks = state.get("tasks", [])
+        for index, item in enumerate(tasks):
+            if item.get("task_dir") == current.get("task_dir"):
+                tasks[index] = current
+                break
+        state["tasks"] = tasks
+        state["current_task"] = current
+
+    def _set_plan_task_status(
+        self,
+        task_id: str,
+        status: str,
+        task_record: Optional[dict[str, Any]] = None,
+    ) -> None:
+        if not task_id or not self.plan_path.exists():
+            return
+        plan = read_json(self.plan_path, default={})
+        tasks = plan.get("tasks", [])
+        found = False
+        for task in tasks:
+            if task.get("task_id") == task_id:
+                task["status"] = status
+                found = True
+                break
+        if not found and task_record:
+            packet = task_record.get("packet") or {}
+            tasks.append({
+                "task_id": task_id,
+                "agent_id": task_record.get("agent_id"),
+                "objective": packet.get("objective", ""),
+                "dependencies": packet.get("dependencies", []),
+                "status": status,
+            })
+        plan["tasks"] = tasks
+        plan["updated_at"] = now_iso()
+        write_json(self.plan_path, plan)
+
+    def _archive_decision(self, decision: dict[str, Any]) -> None:
+        decisions_dir = self.run_dir / "manager" / "decisions"
+        decisions_dir.mkdir(parents=True, exist_ok=True)
+        count = len(list(decisions_dir.glob("decision_*.json"))) + 1
+        write_json(decisions_dir / f"decision_{count:03d}.json", decision)
+
+    def _load_state(self) -> dict[str, Any]:
+        if not self.state_path.exists():
+            raise StepError(f"Manager run 尚未初始化: {self.state_path}")
+        return read_json(self.state_path, default={})
+
+    def _save_state(self, state: dict[str, Any]) -> None:
         state["updated_at"] = now_iso()
         write_json(self.state_path, state)
 
@@ -206,3 +741,7 @@ class ManagerController:
             "reason": reason,
             "payload": payload,
         })
+
+
+# Temporary import compatibility for callers of the first Manager MVP.
+ManagerController = ManagerOrchestrator

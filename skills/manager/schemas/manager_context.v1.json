@@ -1,0 +1,21 @@
+{
+  "schema": "manager_context.v1",
+  "type": "object",
+  "required": ["phase", "event", "run_id", "available_workers"],
+  "properties": {
+    "phase": {"type": "string", "enum": ["planning", "acceptance"]},
+    "event": {"type": "string", "enum": ["start", "worker_completed", "human_feedback", "runtime_error"]},
+    "run_id": {"type": "string"},
+    "raw_brief": {"type": "object"},
+    "report_charter": {"type": "object"},
+    "execution_plan": {"type": "object"},
+    "task_statuses": {"type": "array"},
+    "current_task": {"type": "object"},
+    "worker_result": {"type": "object"},
+    "human_feedback": {"type": "array"},
+    "previous_manager_decision": {"type": "object"},
+    "artifact_catalog": {"type": "array"},
+    "manager_memory": {"type": "array"},
+    "available_workers": {"type": "array"}
+  }
+}

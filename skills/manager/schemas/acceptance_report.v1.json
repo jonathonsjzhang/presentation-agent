@@ -1,0 +1,13 @@
+{
+  "schema": "acceptance_report.v1",
+  "type": "object",
+  "required": ["task_id", "verdict", "criteria_results", "cross_stage_findings", "reason"],
+  "properties": {
+    "task_id": {"type": "string"},
+    "verdict": {"type": "string", "enum": ["accept", "revise", "blocked"]},
+    "criteria_results": {"type": "array"},
+    "cross_stage_findings": {"type": "array"},
+    "reason": {"type": "string"},
+    "revision_requirements": {"type": "array", "items": {"type": "string"}}
+  }
+}

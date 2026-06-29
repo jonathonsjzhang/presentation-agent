@@ -160,10 +160,14 @@ def _touch(path: Path) -> bool:
 
 def _agent_ids(repo_root: Path) -> list[str]:
     config = read_json(repo_root / "configs" / "agents.json", default={})
-    agents = config.get("agents", []) if isinstance(config, dict) else []
-    ids = [item["id"] for item in agents if isinstance(item, dict) and item.get("id")]
-    if "manager" not in ids:
-        ids.append("manager")
+    if not isinstance(config, dict):
+        return []
+    active = config.get("pipeline", {}).get("stages", [])
+    ids = ["manager"] if config.get("control_plane") else []
+    ids.extend(str(agent_id) for agent_id in active if agent_id)
+    if not ids:
+        agents = config.get("agents", [])
+        ids = [item["id"] for item in agents if isinstance(item, dict) and item.get("id")]
     return ids
 
 

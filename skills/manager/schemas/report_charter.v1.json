@@ -1,0 +1,34 @@
+{
+  "schema": "report_charter.v1",
+  "type": "object",
+  "required": [
+    "topic",
+    "audience",
+    "report_type",
+    "output_format",
+    "decision_goal",
+    "expected_action",
+    "scope",
+    "out_of_scope",
+    "constraints",
+    "success_criteria",
+    "global_state_seed",
+    "blocking_questions"
+  ],
+  "properties": {
+    "topic": {"type": "string"},
+    "audience": {"type": "string"},
+    "report_type": {"type": "string"},
+    "output_format": {"type": "string"},
+    "decision_goal": {"type": "string"},
+    "expected_action": {"type": "string"},
+    "scope": {"type": "array", "items": {"type": "string"}},
+    "out_of_scope": {"type": "array", "items": {"type": "string"}},
+    "constraints": {"type": "array", "items": {"type": "string"}},
+    "success_criteria": {"type": "array", "items": {"type": "string"}},
+    "material_inventory": {"type": "array"},
+    "global_state_seed": {"type": "object"},
+    "blocking_questions": {"type": "array", "items": {"type": "string"}},
+    "assumptions": {"type": "array", "items": {"type": "string"}}
+  }
+}

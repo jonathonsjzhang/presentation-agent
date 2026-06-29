@@ -29,7 +29,7 @@ class MemoryRouter:
     """Route human feedback to manager or the relevant specialist agent."""
 
     ROUTES: list[tuple[str, str, tuple[str, ...], str]] = [
-        ("manager", "调度", ("流程", "调度", "阶段", "顺序", "先给", "摘要", "确认", "返工", "回到上游", "以后都", "每次都"), "流程或人审偏好反馈"),
+        ("manager", "调度", ("manager", "流程", "调度", "阶段", "顺序", "先给", "摘要", "确认", "返工", "回到上游", "以后都", "每次都", "验收", "放过", "通过"), "任务定义、调度或验收反馈"),
         ("argument_synthesis", "结论", ("论点", "结论", "action", "行动", "证据强度", "判断", "假设", "塔尖"), "核心论点或证据反馈"),
         ("storyline_design", "结构", ("标题", "leadline", "故事线", "storyline", "结构", "一页一问", "so what", "主线"), "故事线或标题反馈"),
         ("page_filling", "页内叙事", ("页面", "单页", "图表", "信息密度", "来源标注", "口径", "dummy", "chart"), "单页内容或图表反馈"),
@@ -72,6 +72,38 @@ class MemoryRouter:
             reason="未命中特定路由规则，回落到当前阶段或 manager",
             confidence=0.35,
         )
+
+    def routes(
+        self,
+        *,
+        text: str,
+        current_agent_id: Optional[str] = None,
+        explicit_dimension: Optional[str] = None,
+    ) -> list[MemoryRoute]:
+        """Return every materially matched owner, highest confidence first."""
+        normalized = text.lower()
+        matches: dict[str, MemoryRoute] = {}
+        for agent_id, dimension, keywords, reason in self.ROUTES:
+            hits = sum(1 for keyword in keywords if keyword.lower() in normalized or keyword in text)
+            if not hits:
+                continue
+            route = MemoryRoute(
+                target_agent_id=agent_id,
+                dimension=explicit_dimension or dimension,
+                reason=reason,
+                confidence=min(0.95, 0.55 + hits * 0.15),
+            )
+            previous = matches.get(agent_id)
+            if previous is None or route.confidence > previous.confidence:
+                matches[agent_id] = route
+        if not matches:
+            fallback = self.route(
+                text=text,
+                current_agent_id=current_agent_id,
+                explicit_dimension=explicit_dimension,
+            )
+            return [fallback]
+        return sorted(matches.values(), key=lambda item: item.confidence, reverse=True)
 
     def route_from_run_state(
         self,
@@ -125,4 +157,53 @@ class MemoryRouter:
         return {
             "route": route.to_dict(),
             "parsed": parsed,
+        }
+
+    def record_text_feedback_multi(
+        self,
+        *,
+        text: str,
+        trigger_scene: str,
+        run_state_path: Optional[Path] = None,
+        explicit_dimension: Optional[str] = None,
+        scope: str = "agent",
+        source: str = "human-chat-auto-route",
+    ) -> dict[str, Any]:
+        current_agent_id = None
+        if run_state_path and run_state_path.exists():
+            state = read_json(run_state_path, default={})
+            current_agent_id = state.get("agent_id")
+        routes = self.routes(
+            text=text,
+            current_agent_id=current_agent_id,
+            explicit_dimension=explicit_dimension,
+        )
+        records = []
+        for route in routes:
+            parsed = MemoryStore(
+                self.root, route.target_agent_id, data_root=self.data_root
+            ).record_text_feedback(
+                text=text,
+                trigger_scene=trigger_scene,
+                source=source,
+                dimension=route.dimension,
+                scope=scope,
+            )
+            LearningEventStore(self.root, data_root=self.data_root).append(
+                event_type="memory_route",
+                agent_id=route.target_agent_id,
+                source="memory_router",
+                payload={
+                    "route": route.to_dict(),
+                    "log_id": parsed["log_id"],
+                    "run_state_path": str(run_state_path) if run_state_path else "",
+                    "multi_target": len(routes) > 1,
+                },
+            )
+            records.append({"route": route.to_dict(), "parsed": parsed})
+        return {
+            "routes": [record["route"] for record in records],
+            "records": records,
+            "route": records[0]["route"],
+            "parsed": records[0]["parsed"],
         }

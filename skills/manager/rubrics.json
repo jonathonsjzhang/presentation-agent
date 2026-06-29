@@ -1,0 +1,39 @@
+{
+  "rubrics": [
+    {
+      "id": "MGR-P0-001",
+      "severity": "P0",
+      "dimension": "任务定义",
+      "check": "planning 决策必须定义受众、decision_goal、expected_action、范围、约束和成功标准。",
+      "fix": "补齐 report_charter，并把无法合理假设的缺口列为 blocking_questions。"
+    },
+    {
+      "id": "MGR-P0-002",
+      "severity": "P0",
+      "dimension": "任务派发",
+      "check": "dispatch/revise 必须包含可执行 task_packet，且目标 Worker 必须存在。",
+      "fix": "补齐 objective、输入、交付物、验收标准、依赖和 memory_dimensions。"
+    },
+    {
+      "id": "MGR-P0-003",
+      "severity": "P0",
+      "dimension": "验收",
+      "check": "不得仅凭 schema 合格验收 Worker，必须逐条判断 acceptance_criteria 和项目目标。",
+      "fix": "在 acceptance_report 中给出逐条检查和证据。"
+    },
+    {
+      "id": "MGR-P1-001",
+      "severity": "P1",
+      "dimension": "调度",
+      "check": "计划应避免不必要的固定阶段和重复工作，并保留合理依赖。",
+      "improvement": "按任务需要选择 Worker，而不是机械执行全部阶段。"
+    },
+    {
+      "id": "MGR-P1-002",
+      "severity": "P1",
+      "dimension": "跨阶段一致性",
+      "check": "下游不得弱化已接受结论、丢失证据边界或偏离 expected_action。",
+      "improvement": "返工当前 Worker，必要时回到上游重新规划。"
+    }
+  ]
+}

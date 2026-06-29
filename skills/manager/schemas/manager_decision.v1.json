@@ -1,0 +1,19 @@
+{
+  "schema": "manager_decision.v1",
+  "type": "object",
+  "required": ["schema", "phase", "action", "reason_summary", "user_message"],
+  "properties": {
+    "schema": {"type": "string", "const": "manager_decision.v1"},
+    "phase": {"type": "string", "enum": ["planning", "acceptance"]},
+    "action": {"type": "string", "enum": ["dispatch", "revise", "ask_human", "complete"]},
+    "reason_summary": {"type": "string"},
+    "report_charter": {"type": "object"},
+    "execution_plan": {"type": "object"},
+    "task_packet": {"type": "object"},
+    "acceptance_report": {"type": "object"},
+    "state_updates": {"type": "object"},
+    "questions_for_human": {"type": "array", "items": {"type": "string"}},
+    "user_message": {"type": "string"},
+    "memory_candidates": {"type": "array"}
+  }
+}

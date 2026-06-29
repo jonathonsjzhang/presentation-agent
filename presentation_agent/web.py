@@ -97,7 +97,44 @@ class WebApp:
     def overview(self) -> dict[str, Any]:
         runner = LoopRunner(self.root)
         agents = []
+        control_plane = runner.config.get("control_plane", {})
+        if control_plane:
+            manager_package = load_skill_package(self.root, "manager")
+            agents.append({
+                "id": "manager",
+                "name": control_plane.get("name", "Manager"),
+                "stage": 0,
+                "skill": "manager",
+                "description": "定义汇报任务、规划和派发 Worker、验收、返工与完结。",
+                "previous_agent_id": None,
+                "next_agent_id": None,
+                "input_schema": control_plane.get("input_schema", "manager_context.v1"),
+                "output_schema": control_plane.get("output_schema", "manager_decision.v1"),
+                "input_contract": {"required_inputs": ["raw brief", "Worker capabilities", "run state"]},
+                "output_contract": {
+                    "primary_artifact": "Manager decision",
+                    "required_handoff_fields": ["report_charter", "execution_plan", "task_packet", "acceptance_report"],
+                },
+                "memory_dimensions": control_plane.get("memory_dimensions", []),
+                "state": {"agent_memory_scope": "manager_only"},
+                "harness": {
+                    "skill_package": "skills/manager",
+                    "runtime_adapter": "manager_agent_runtime",
+                    "review_policy": "schema_validation + structured_action_execution",
+                    "implementation_status": "implemented",
+                },
+                "skill_package": {
+                    "exists": manager_package.exists,
+                    "path": self.to_rel(manager_package.path),
+                    "rubric_count": len(manager_package.rubrics),
+                    "schema_count": len(manager_package.schemas),
+                },
+                "implemented": True,
+            })
+        active_workers = set(runner.config.get("pipeline", {}).get("stages", []))
         for spec in runner.list_agents():
+            if spec.id not in active_workers:
+                continue
             skill_package = load_skill_package(self.root, spec.id)
             agent = spec.to_dict()
             agent["skill_package"] = {
@@ -131,8 +168,24 @@ class WebApp:
             event_type = str(event.get("event_type") or "unknown")
             event_counts[event_type] = event_counts.get(event_type, 0) + 1
 
-        for spec in runner.list_agents():
-            store = MemoryStore(self.root, spec.id)
+        control = runner.config.get("control_plane", {})
+        active = set(runner.config.get("pipeline", {}).get("stages", []))
+        memory_specs = []
+        if control:
+            memory_specs.append((
+                "manager",
+                control.get("name", "Manager"),
+                0,
+                control.get("memory_dimensions", []),
+            ))
+        memory_specs.extend(
+            (spec.id, spec.name, spec.stage, spec.memory_dimensions)
+            for spec in runner.list_agents()
+            if spec.id in active
+        )
+
+        for agent_id, agent_name, stage, dimensions in memory_specs:
+            store = MemoryStore(self.root, agent_id)
             items = [item.to_dict() for item in store.load_items()]
             logs = self._read_learning_log(store.log_path)
             candidates = [item.to_dict() for item in store.promotion_candidates()]
@@ -140,14 +193,14 @@ class WebApp:
             total_memory += len(items)
             total_candidates += len(candidates)
             for entry in logs:
-                entry.setdefault("agent_id", spec.id)
+                entry.setdefault("agent_id", agent_id)
                 recent_logs.append(entry)
             agents.append(
                 {
-                    "id": spec.id,
-                    "name": spec.name,
-                    "stage": spec.stage,
-                    "memory_dimensions": spec.memory_dimensions,
+                    "id": agent_id,
+                    "name": agent_name,
+                    "stage": stage,
+                    "memory_dimensions": dimensions,
                     "memory_count": len(items),
                     "learning_log_count": len(logs),
                     "promotion_candidates": candidates,
