@@ -141,7 +141,80 @@ CLI 会返回 JSON，记录：
 8. 用户要求调整或回答 Manager 问题：report feedback
 ```
 
-宿主支持 sub-agent 时，每个 Worker 指令必须在新的隔离 sub-agent 上下文中执行；Manager 指令也应与 Worker 生成上下文隔离。宿主不支持 sub-agent 时，仍须只把当前 instruction 提供的上下文作为本轮依据。
+## Sub-agent 派生（隔离上下文执行）
+
+每个 Worker / Reviewer 步骤都必须在与主对话隔离的独立 sub-agent 上下文中执行，避免上下文积累导致的漂移；Manager 决策步骤也应与 Worker 生成上下文隔离。是否真派 sub-agent 由 `report next` 返回的 `instruction.spawn` 字段决定，宿主不自行判断。
+
+### 如何识别"该派 sub-agent"
+
+`report next` 的输出是一个 JSON，其中 `instruction` 即当前指令包。当后端 spawn adapter 非 inline 时，`instruction` 会带一个 `spawn` 注解块：
+
+```json
+{
+  "instruction": {
+    "actor": "worker",
+    "step": "gen",
+    "instruction_path": "<task_dir>/handoff/instruction_gen.md",
+    "output_path": "<task_dir>/handoff/output_gen.json",
+    "spawn": {
+      "adapter": "workbuddy",
+      "role": "worker",
+      "status": "dispatched",
+      "detail": {
+        "spawn_request": "<task_dir>/spawn_request.json",
+        "executor": "host_agent_tool",
+        "subagent_type": "general-purpose"
+      }
+    }
+  }
+}
+```
+
+- 有 `instruction.spawn` 且 `status=dispatched` → 按 `spawn.role` 派一个真 sub-agent 去执行本步骤。
+- 没有 `instruction.spawn`（inline，默认）→ 退化为本对话直接读 `instruction_path`、写 `output_path`（与今天行为一致）。
+
+### 角色 → sub-agent 类型映射（终端无关契约）
+
+| `spawn.role` | 能力 | WorkBuddy 类型 | 写回文件 |
+|---|---|---|---|
+| `worker` | 可写（产内容、写产物） | `general-purpose` | `output_gen.json` / `output_revise.json` |
+| `reviewer` | 只读（仅出审查结论） | `Explore` | `output_review.json` |
+
+`subagent_type` 已由后端在 `spawn.detail.subagent_type` 给出，直接采用，不要自己换算。Reviewer 必须用只读类型，从机制上保证 maker-checker 隔离——它物理上不能改产物。
+
+> 其他宿主方言：Claude Code 用 `Task` 工具（worker=general-purpose，reviewer=只读 Explore / `disallowedTools` 去写）；Codex 用 `spawn_agent`+`wait_agent`（worker=worker，reviewer=explorer / `sandbox_mode=read-only`）。映射关系等价，仅调用动词不同。
+
+### 派生 sub-agent 的 prompt 必须自包含
+
+被派的 sub-agent 没有主对话历史，其全部依据只有指令包与输入文件。派生时把这三个绝对路径交给它（取自 `instruction` / `spawn.detail`）：
+
+- 指令包：`instruction.instruction_path`（已内嵌完整 SKILL.md、rubrics、上游产物，自包含）
+- 任务输入：`<task_dir>/input.json`
+- 写回路径：`instruction.output_path`（worker 写 gen/revise，reviewer 写 review）
+
+并向它强调：worker 只写 `output_path` 一个合法 JSON 对象（不裹 markdown）；reviewer 只读不改产物，按 `{"objections": [...]}` 写 `output_path`，无命中则 `{"objections": []}`。
+
+### 单环节闭环（实跑验证的状态机推进）
+
+一个 Worker 环节内部由 StepRunner 驱动 `gen → review → revise → done`，**review 是状态机的正式一步，不是可选项**。因此一个环节通常要派 2 次：
+
+```text
+1. report next → instruction.spawn.role=worker → 派 worker(general-purpose) 写 output_gen.json
+2. report submit → 状态机推进到 review 步骤
+3. report next → instruction.spawn.role=reviewer → 派 reviewer(Explore) 写 output_review.json
+4. report submit → 若 review 通过则 finalize artifact、record_worker_completed；
+                   若有 P0 objections 则进入 revise，回到步骤 1 的 worker 修订
+5. actor 切回 manager → 进入 Manager 验收阶段
+```
+
+宿主只需循环 `next → 按 role 派 sub-agent → submit`，状态机推进与产物验收全部由后端完成，宿主不改变调度顺序。
+
+### 框架级不变量（保持跨终端可移植）
+
+- **派生深度 = 1**：被派的 worker/reviewer 内部**不得再下派子 agent**（Codex 限制 sub-agent 深度=1）。L3 reviewer 由 Manager/宿主层派，绝不由 worker 自己派。
+- **写作用域限 task_dir**：worker 的写操作只落在 `spawn.detail` 给出的 `invariants.write_scope`（即 task_dir）内。
+
+宿主不支持 sub-agent 时，仍须只把当前 instruction 提供的上下文作为本轮依据，不引入主对话历史。
 
 命令：
 
