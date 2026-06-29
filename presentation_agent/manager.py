@@ -368,12 +368,21 @@ class ManagerOrchestrator:
             runner = StepRunner(self.root, task_dir, data_root=self.data_root)
             status = runner.status()
             if str(status.get("current_step", "")).startswith("awaiting_"):
-                return {
+                instruction = {
                     "actor": "worker",
                     "step": status.get("current_step"),
                     "instruction_path": status.get("instruction_path"),
                     "output_path": status.get("output_path"),
                 }
+                # Spawn split on the awaiting_* read path. The StepRunner already
+                # advanced into a sub-step (e.g. review/revise) whose handoff files
+                # exist on disk; prepare() short-circuits here without going through
+                # WorkerExecutor.prepare(), so native adapters would otherwise never
+                # (re-)emit a spawn_request for this sub-step. Annotate it here so the
+                # read-only reviewer / revise worker is physically dispatched with the
+                # correct capability contract instead of leaving a stale request.
+                self._annotate_spawn(task_dir, instruction)
+                return instruction
             return self.workers.prepare(task_dir)
         if actor != "manager":
             raise StepError(f"未知 current_actor: {actor}")
@@ -549,6 +558,35 @@ class ManagerOrchestrator:
         if not isinstance(current, dict) or not current.get("task_dir"):
             return None
         return Path(str(current["task_dir"]))
+
+    def _annotate_spawn(self, task_dir: Path, instruction: dict[str, Any]) -> None:
+        """Emit a spawn_request for an awaiting_* sub-step and annotate the
+        instruction. No-op for the inline adapter (preserves today's behaviour).
+
+        The sub-step's role is derived from the step name via the same rule as
+        WorkerExecutor: review/revise-review steps spawn a read-only reviewer,
+        everything else a writable worker. This keeps the maker-checker capability
+        contract physically enforced on the awaiting_* read path too, not only on
+        the dispatch/prepare transition path.
+        """
+        adapter = self.workers.spawn_adapter
+        if adapter.kind == "inline":
+            return
+        # _build_spawn_request keys off instruction["step"]; the awaiting_* short
+        # circuit only has current_step, which already carries the sub-step name
+        # (e.g. "awaiting_review_output" / "awaiting_revise_output").
+        step = str(instruction.get("step") or "")
+        sub = step[len("awaiting_"):] if step.startswith("awaiting_") else step
+        request = self.workers._build_spawn_request(
+            task_dir, {**instruction, "step": sub}
+        )
+        result = adapter.spawn(request)
+        instruction["spawn"] = {
+            "adapter": adapter.kind,
+            "role": request.role,
+            "status": result.status,
+            "detail": result.detail,
+        }
 
     def copy_manager_output(self, output_file: Path) -> None:
         state = self._load_state()
