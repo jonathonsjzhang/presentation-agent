@@ -28,6 +28,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="Check repo and workspace health. Emits JSON.")
 
+    derive = sub.add_parser(
+        "derive-agents",
+        help="Derive per-terminal sub-agent files from configs/agents.json.",
+    )
+    derive.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be written without writing files.",
+    )
+
     report = sub.add_parser("report", help="High-level host report commands.")
     report_subs = report.add_subparsers(dest="report_command", required=True)
 
@@ -216,6 +226,26 @@ def main() -> None:
         except Exception:
             report["git_commit"] = ""
         _print_json(report)
+        return
+
+    if args.command == "derive-agents":
+        from presentation_agent.derive_agents import derive_all, write_derived
+
+        derived = derive_all(root)
+        summary = [
+            {"host": d.host, "role": d.role, "agent_id": d.agent_id, "path": str(d.path)}
+            for d in derived
+        ]
+        if args.dry_run:
+            _print_json({"ok": True, "dry_run": True, "count": len(derived), "files": summary})
+            return
+        written = write_derived(root, derived)
+        _print_json({
+            "ok": True,
+            "dry_run": False,
+            "count": len(written),
+            "files": [str(p.relative_to(root)) for p in written],
+        })
         return
 
     if args.command == "report":

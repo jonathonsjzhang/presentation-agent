@@ -15,7 +15,11 @@ self-contained instruction package:
                   directory; the host SKILL.md dispatch rules read it and perform
                   the real ``Agent`` spawn.
 - ``cli``       : Claude Code / Codex headless terminals spawn an isolated
-                  process. Implemented in phase two; a placeholder lives here.
+                  process. Builds a concrete argv from a built-in dialect
+                  (``claude -p`` / ``codex exec``, with read-only flags for a
+                  reviewer) and either emits it into ``spawn_request.json`` for a
+                  capable environment to run, or (``execute=True``) runs it via
+                  ``subprocess`` when the binary is present.
 
 Design invariants (kept terminal-agnostic so the framework stays portable):
 
@@ -31,6 +35,8 @@ read today.
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -135,20 +141,203 @@ class WorkBuddySpawnAdapter(SpawnAdapter):
         )
 
 
+# Built-in dialects for the two headless terminals we target. Each entry is a
+# command *template*: tokens are substituted per-spawn. ``{prompt}`` becomes a
+# self-contained instruction that tells the headless agent which files to read
+# and where to write its handoff output; the read-only flags below are what give
+# a reviewer its physical maker-checker isolation (it cannot mutate artifacts).
+CLI_DIALECTS: dict[str, dict[str, list[str]]] = {
+    # Claude Code headless: `claude -p "<prompt>"`. A reviewer is constrained to
+    # read-only by disallowing every write/exec tool.
+    "claude": {
+        "worker": ["claude", "-p", "{prompt}"],
+        "reviewer": [
+            "claude",
+            "-p",
+            "{prompt}",
+            "--disallowedTools",
+            "Write,Edit,Bash,NotebookEdit",
+        ],
+    },
+    # Codex headless: `codex exec "<prompt>"`. A reviewer runs in a read-only
+    # sandbox so it physically cannot write the artifact back.
+    "codex": {
+        "worker": ["codex", "exec", "{prompt}"],
+        "reviewer": ["codex", "exec", "--sandbox", "read-only", "{prompt}"],
+    },
+}
+
+
+def _detect_dialect(command: list[str]) -> str | None:
+    """Infer the dialect (claude/codex) from the configured command's binary."""
+
+    if not command:
+        return None
+    binary = Path(command[0]).name.lower()
+    for name in CLI_DIALECTS:
+        if name in binary:
+            return name
+    return None
+
+
+def _build_cli_prompt(request: SpawnRequest) -> str:
+    """A self-contained prompt for a headless CLI sub-agent.
+
+    The headless agent has no host conversation history, so the prompt must point
+    it at the instruction package (which embeds the full SKILL.md), the task
+    input, and the exact handoff file it must write back.
+    """
+
+    if request.role == "reviewer":
+        return (
+            "You are an isolated read-only reviewer sub-agent (the checker in a "
+            "maker-checker loop). Read the review instruction package at "
+            f"{request.instruction_path} (it embeds the rubrics and the artifact "
+            "under review) and the task input at "
+            f"{request.input_path}. Audit the artifact strictly against the P0/P1 "
+            "rubrics and write ONLY a JSON object of the exact form "
+            '{"objections": [{"rubric_id","severity","dimension","message",'
+            '"evidence","suggestion"}]} (empty list if it passes) to '
+            f"{request.output_path}. Do not modify any other file."
+        )
+    return (
+        "You are an isolated worker sub-agent with no host conversation history. "
+        f"Read your self-contained instruction package at {request.instruction_path} "
+        f"(it embeds the full SKILL.md role, workflow and output contract) and the "
+        f"task input at {request.input_path}. Produce the contract-compliant JSON "
+        f"and write it (a single valid JSON object, no markdown fences) to "
+        f"{request.output_path}. Confine all writes to {request.task_dir}."
+    )
+
+
 class CLISpawnAdapter(SpawnAdapter):
     """Claude Code / Codex headless terminals: spawn an isolated process.
 
-    Phase-two implementation. The command template (e.g. ``["claude", "-p"]`` or
-    ``["codex", "exec"]``) is supplied from configs.
+    Two execution modes, matching the WorkBuddy adapter's philosophy of emitting
+    a portable spawn intent that the capable environment fulfils:
+
+    - ``execute=False`` (default): build the concrete argv and persist a
+      ``spawn_request.json`` (cli variant) recording the full command. The host
+      orchestration script (or CI) runs it. This keeps the Python side free of a
+      hard dependency on the CLI binary being installed.
+    - ``execute=True``: actually ``subprocess.run`` the headless agent. Used when
+      the binary is present (verified via ``shutil.which``); otherwise it raises.
+
+    The command can be a built-in dialect (inferred from the binary name, e.g.
+    ``["claude"]`` / ``["codex"]``) or a fully custom template containing the
+    placeholders ``{prompt} {instruction_path} {input_path} {output_path}
+    {task_dir}``.
     """
 
     kind = "cli"
 
-    def __init__(self, command: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        command: list[str] | None = None,
+        *,
+        execute: bool = False,
+        dialect: str | None = None,
+        timeout: int | None = None,
+    ) -> None:
         self.command = command or []
+        self.execute = execute
+        self.dialect = dialect or _detect_dialect(self.command)
+        self.timeout = timeout
+
+    def _resolve_template(self, role: SpawnRole) -> list[str]:
+        """Return the argv template for this role.
+
+        A custom command (containing placeholders) wins; otherwise fall back to
+        the built-in dialect's worker/reviewer template.
+        """
+
+        if self.command and any("{" in tok for tok in self.command):
+            return list(self.command)
+        if self.dialect and self.dialect in CLI_DIALECTS:
+            return list(CLI_DIALECTS[self.dialect][role])
+        if self.command:
+            # Bare binary like ["claude"] with no recognised dialect: append the
+            # prompt so the command is still runnable.
+            return list(self.command) + ["{prompt}"]
+        raise StepError("CLISpawnAdapter 需要 command 或可识别的 dialect")
+
+    def _render_argv(self, request: SpawnRequest) -> list[str]:
+        template = self._resolve_template(request.role)
+        prompt = _build_cli_prompt(request)
+        subs = {
+            "prompt": prompt,
+            "instruction_path": str(request.instruction_path),
+            "input_path": str(request.input_path),
+            "output_path": str(request.output_path),
+            "task_dir": str(request.task_dir),
+        }
+        return [tok.format(**subs) for tok in template]
 
     def spawn(self, request: SpawnRequest) -> SpawnResult:
-        raise NotImplementedError("CLISpawnAdapter is implemented in phase two")
+        argv = self._render_argv(request)
+        spec = {
+            "host": "cli",
+            "dialect": self.dialect,
+            "agent_id": request.agent_id,
+            "role": request.role,
+            "mode": request.mode,
+            "argv": argv,
+            "instruction_path": str(request.instruction_path),
+            "input_path": str(request.input_path),
+            "output_path": str(request.output_path),
+            "invariants": {
+                "max_depth": 1,
+                "write_scope": str(request.task_dir),
+                "read_only": request.role == "reviewer",
+            },
+        }
+        spawn_file = request.task_dir / "spawn_request.json"
+        write_json(spawn_file, spec)
+
+        if not self.execute:
+            # Emit-only: a capable environment runs argv later.
+            return SpawnResult(
+                status="dispatched",
+                artifact_path=None,
+                detail={
+                    "spawn_request": str(spawn_file),
+                    "executor": "cli_command_emitted",
+                    "dialect": self.dialect,
+                    "argv": argv,
+                },
+            )
+
+        binary = argv[0]
+        if shutil.which(binary) is None:
+            raise StepError(f"CLI 二进制不存在，无法 execute: {binary}")
+        proc = subprocess.run(  # noqa: S603 - argv is built from a controlled template
+            argv,
+            cwd=str(request.task_dir),
+            capture_output=True,
+            text=True,
+            timeout=self.timeout,
+        )
+        if proc.returncode != 0:
+            return SpawnResult(
+                status="failed",
+                artifact_path=None,
+                detail={
+                    "spawn_request": str(spawn_file),
+                    "executor": "cli_subprocess",
+                    "returncode": proc.returncode,
+                    "stderr": proc.stderr[-2000:],
+                },
+            )
+        return SpawnResult(
+            status="completed",
+            artifact_path=request.output_path,
+            detail={
+                "spawn_request": str(spawn_file),
+                "executor": "cli_subprocess",
+                "returncode": 0,
+                "stdout": proc.stdout[-2000:],
+            },
+        )
 
 
 def build_spawn_adapter(root: Path) -> SpawnAdapter:
@@ -165,5 +354,10 @@ def build_spawn_adapter(root: Path) -> SpawnAdapter:
     if kind == "workbuddy":
         return WorkBuddySpawnAdapter()
     if kind == "cli":
-        return CLISpawnAdapter(spawn_cfg.get("command", []))
+        return CLISpawnAdapter(
+            spawn_cfg.get("command", []),
+            execute=bool(spawn_cfg.get("execute", False)),
+            dialect=spawn_cfg.get("dialect"),
+            timeout=spawn_cfg.get("timeout"),
+        )
     raise StepError(f"未知 spawn adapter: {kind}")
