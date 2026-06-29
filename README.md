@@ -1,5 +1,6 @@
 # 汇报助手系统框架介绍
 
+> 当前版本：`v0.1`
 
 ## 一、系统总框架
 
@@ -13,21 +14,16 @@
 
 这个系统的核心不是「一个模型一次性写完整汇报」，也不是固定地依次跑完所有阶段，而是由 Manager 围绕汇报目标动态拆解任务，为 Worker 声明明确输入、产物和验收标准，并把过程反馈沉淀为后续可复用的 memory。
 
-## 二、进展更新与 TODOs
+## 二、版本进展与 TODOs
 
-### 2.1 本轮进展
+### 2.1 版本进展
 
-1. **从 7-Agent 串行流水线升级为 Manager + Worker 模式**
-   - 原 `task_positioning` 的任务定义能力已并入 Manager，由 Manager 直接产出 `report_charter` 和 `execution_plan`。
-   - 论点提炼、Storyline、单页内容、Format、Q&A 和逐字稿调整为 6 个专业 Worker，由 Manager 通过 `task_packet` 动态派发。
-   - Worker 完成专业自审后返回 Manager，由 Manager 结合项目目标、任务验收标准和跨阶段一致性决定通过、返工、重新派发或向用户升级。
-   - 新增 Manager 专属 Skill、rubrics、schemas、memory 和 plan/final human gate，形成“用户验收 Manager、Manager 验收 Worker”的双层 loop。
+`0.x` 用于框架快速迭代阶段，每个次版本对应一次明确的能力升级。后续版本按倒序追加，保留历史记录。
 
-2. **建立面向 WorkBuddy、Codex、Claude Code 等终端的 Agent Team 调度逻辑**
-   - `report_builder` Host Skill 根据 CLI 返回的 `actor + instruction` 调用 Manager 或专业 Worker，不再由宿主写死阶段顺序。
-   - 每个 Worker 使用独立 task directory、独立 instruction 和裁剪后的任务上下文；支持 sub-agent 的宿主可将可并行工作交给 Agent Team 并发执行，再统一回传 Manager。
-   - Worker artifact、专业 review 和风险信息统一返回 Manager，由 Manager 汇总结果并完成整体验收。
-   - 当前版本已完成跨终端调度协议、上下文隔离和汇总验收；Python runtime 默认仍按单个 task 逐次提交，原生多任务并发汇合可继续增强。
+#### v0.1（2026-06-29）
+
+- **Manager + Worker 架构**：将原 7-Agent 串行流水线升级为 Manager + 6 Worker 模式，由 Manager 负责任务定义、动态派发、返工和整体验收。
+- **Agent Team 调度**：新增面向 WorkBuddy、Codex、Claude Code 等终端的调度协议，支持 sub-agent 隔离与并发执行，并由 Manager 汇总结果、统一验收。
 
 ### 2.2 后续 TODO
 
