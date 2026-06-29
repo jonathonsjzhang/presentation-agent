@@ -108,13 +108,35 @@ python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces
 
 然后启动：
 
+先按当前宿主终端选择本次 run 的 sub-agent adapter：
+
+| 当前宿主 | `--spawn-adapter` |
+|---|---|
+| WorkBuddy | `workbuddy` |
+| Codex | `codex` |
+| Claude Code | `claude` |
+| 不支持 sub-agent 的其他终端 | `inline` |
+
 ```bash
 cd "$HOME/PresentationAgent/repo"
 python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
   report start \
-  --brief-file "<brief_file>"
+  --brief-file "<brief_file>" \
+  --spawn-adapter "<workbuddy|codex|claude|inline>"
 ```
+
+adapter 会写入本次 run 的 `manager_state.json`，后续 `report next/submit/approve` 无需重复传入。也可以通过环境变量 `PRESENTATION_AGENT_SPAWN_ADAPTER` 设置默认值。
+
+若要修复一个已经以 `inline` 启动的旧 run，在下一次命令中显式传入一次即可更新并持久化：
+
+```bash
+python -m presentation_agent.cli \
+  --workspace "$HOME/PresentationAgent/workspaces/default" \
+  report next --run "<run_id>" --spawn-adapter "workbuddy"
+```
+
+如果旧 run 正停在 plan gate，则对 `report approve` 使用同样参数。
 
 CLI 会返回 JSON，记录：
 
@@ -143,7 +165,7 @@ CLI 会返回 JSON，记录：
 
 ## Sub-agent 派生（隔离上下文执行）
 
-每个 Worker / Reviewer 步骤都必须在与主对话隔离的独立 sub-agent 上下文中执行，避免上下文积累导致的漂移；Manager 决策步骤也应与 Worker 生成上下文隔离。是否真派 sub-agent 由 `report next` 返回的 `instruction.spawn` 字段决定，宿主不自行判断。
+每个 Worker / Reviewer 步骤都必须在与主对话隔离的独立 sub-agent 上下文中执行，避免上下文积累导致的漂移。Manager planning / acceptance 由主对话 Agent 执行，因此 `actor=manager` 时没有 `spawn` 是正常行为；只有 `actor=worker` 才检查并执行 `instruction.spawn`。
 
 ### 如何识别"该派 sub-agent"
 
@@ -170,19 +192,21 @@ CLI 会返回 JSON，记录：
 }
 ```
 
-- 有 `instruction.spawn` 且 `status=dispatched` → 按 `spawn.role` 派一个真 sub-agent 去执行本步骤。
-- 没有 `instruction.spawn`（inline，默认）→ 退化为本对话直接读 `instruction_path`、写 `output_path`（与今天行为一致）。
+- `actor=worker` 且有 `instruction.spawn`、`status=dispatched` → 按 `spawn.role` 派一个真 sub-agent 去执行本步骤。
+- `actor=worker` 且本次 run 的 adapter 为 `inline` → 本对话直接读 `instruction_path`、写 `output_path`。
+- `actor=worker`、run adapter 非 `inline`，但 instruction 没有 `spawn` → 这是后端协议错误；先用 `report status` 检查 `manager.state.spawn_adapter`，不得静默降级为 inline。
+- `actor=manager` → 由主对话 Manager 执行 planning / acceptance，不派生 sub-agent。
 
 ### 角色 → sub-agent 类型映射（终端无关契约）
 
-| `spawn.role` | 能力 | WorkBuddy 类型 | 写回文件 |
+| `spawn.role` | 能力 | WorkBuddy 类型 | 结果交付 |
 |---|---|---|---|
-| `worker` | 可写（产内容、写产物） | `general-purpose` | `output_gen.json` / `output_revise.json` |
-| `reviewer` | 只读（仅出审查结论） | `Explore` | `output_review.json` |
+| `worker` | 可写（产内容、写产物） | `general-purpose` | 直接写 `output_gen.json` / `output_revise.json` |
+| `reviewer` | 只读（仅出审查结论） | `Explore` | 返回 JSON，由宿主转写 `output_review.json` |
 
-`subagent_type` 已由后端在 `spawn.detail.subagent_type` 给出，直接采用，不要自己换算。Reviewer 必须用只读类型，从机制上保证 maker-checker 隔离——它物理上不能改产物。
+`subagent_type` 和 `result_delivery` 已由后端在 `spawn.detail` 给出，直接采用，不要自己换算。Reviewer 必须用只读类型，从机制上保证 maker-checker 隔离；它不直接写文件，宿主只负责把其返回的 JSON 原样写入 `instruction.output_path`。
 
-> 其他宿主方言：Claude Code 用 `Task` 工具（worker=general-purpose，reviewer=只读 Explore / `disallowedTools` 去写）；Codex 用 `spawn_agent`+`wait_agent`（worker=worker，reviewer=explorer / `sandbox_mode=read-only`）。映射关系等价，仅调用动词不同。
+> 其他宿主方言：Claude Code adapter 输出 `Task` 工具参数（worker=general-purpose，reviewer=只读 Explore / `disallowedTools` 去写）；Codex adapter 输出 `spawn_agent` + `wait_agent` 参数（worker=worker，reviewer=explorer / `sandbox_mode=read-only`）。宿主直接读取 `spawn.detail`，不要自行猜测映射。
 
 ### 派生 sub-agent 的 prompt 必须自包含
 
@@ -192,7 +216,7 @@ CLI 会返回 JSON，记录：
 - 任务输入：`<task_dir>/input.json`
 - 写回路径：`instruction.output_path`（worker 写 gen/revise，reviewer 写 review）
 
-并向它强调：worker 只写 `output_path` 一个合法 JSON 对象（不裹 markdown）；reviewer 只读不改产物，按 `{"objections": [...]}` 写 `output_path`，无命中则 `{"objections": []}`。
+并向它强调：worker 只写 `output_path` 一个合法 JSON 对象（不裹 markdown）；reviewer 只读不改产物，只返回 `{"objections": [...]}`，无命中则返回 `{"objections": []}`，随后由宿主写入 `output_path`。
 
 ### 单环节闭环（实跑验证的状态机推进）
 
@@ -201,7 +225,7 @@ CLI 会返回 JSON，记录：
 ```text
 1. report next → instruction.spawn.role=worker → 派 worker(general-purpose) 写 output_gen.json
 2. report submit → 状态机推进到 review 步骤
-3. report next → instruction.spawn.role=reviewer → 派 reviewer(Explore) 写 output_review.json
+3. report next → instruction.spawn.role=reviewer → 派 reviewer(Explore) 返回审查 JSON，宿主写入 output_review.json
 4. report submit → 若 review 通过则 finalize artifact、record_worker_completed；
                    若有 P0 objections 则进入 revise，回到步骤 1 的 worker 修订
 5. actor 切回 manager → 进入 Manager 验收阶段

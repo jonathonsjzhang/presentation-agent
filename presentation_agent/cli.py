@@ -15,6 +15,17 @@ from presentation_agent.step import PipelineStepper, StepError, StepRunner
 from presentation_agent.workspace import init_workspace, resolve_workspace, workspace_status
 
 
+def _add_spawn_adapter_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--spawn-adapter",
+        choices=["inline", "workbuddy", "claude", "codex", "cli"],
+        help=(
+            "Sub-agent host for this run. The override is persisted in manager_state; "
+            "defaults to PRESENTATION_AGENT_SPAWN_ADAPTER, then repo config."
+        ),
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="presentation-agent")
     parser.add_argument("--root", default=".", help="Project root. Defaults to current directory.")
@@ -43,29 +54,37 @@ def build_parser() -> argparse.ArgumentParser:
 
     report_start = report_subs.add_parser("start", help="Start a report run and return first instruction.")
     report_start.add_argument("--brief-file", required=True, help="raw_brief JSON file path.")
+    _add_spawn_adapter_option(report_start)
 
     report_next = report_subs.add_parser("next", help="Return the current report instruction.")
     report_next.add_argument("--run", required=True, help="Run id or run directory.")
+    _add_spawn_adapter_option(report_next)
 
     report_submit = report_subs.add_parser("submit", help="Submit host output for the current instruction.")
     report_submit.add_argument("--run", required=True, help="Run id or run directory.")
     report_submit.add_argument("--output-file", help="JSON output file produced by the host model.")
+    _add_spawn_adapter_option(report_submit)
 
     report_approve = report_subs.add_parser("approve", help="Approve the current Manager human gate.")
     report_approve.add_argument("--run", required=True, help="Run id or run directory.")
+    _add_spawn_adapter_option(report_approve)
 
     report_feedback = report_subs.add_parser("feedback", help="Return human feedback to Manager.")
     report_feedback.add_argument("--run", required=True, help="Run id or run directory.")
     report_feedback.add_argument("--text", required=True, help="Human feedback for the current Manager gate.")
+    _add_spawn_adapter_option(report_feedback)
 
     report_status = report_subs.add_parser("status", help="Show report run status.")
     report_status.add_argument("--run", required=True, help="Run id or run directory.")
+    _add_spawn_adapter_option(report_status)
 
     report_manager_status = report_subs.add_parser("manager-status", help="Show manager state for a report run.")
     report_manager_status.add_argument("--run", required=True, help="Run id or run directory.")
+    _add_spawn_adapter_option(report_manager_status)
 
     report_manager_plan = report_subs.add_parser("manager-plan", help="Show manager plan for a report run.")
     report_manager_plan.add_argument("--run", required=True, help="Run id or run directory.")
+    _add_spawn_adapter_option(report_manager_plan)
 
     run = sub.add_parser("run", help="Run one agent loop.")
     run.add_argument("agent_id")
@@ -593,7 +612,12 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
         normalized = normalize_brief(str(Path(args.brief_file).expanduser().resolve()), root)
         brief_path = run_dir / "raw_brief.json"
         write_json(brief_path, normalized)
-        manager = ManagerOrchestrator(root, run_dir, data_root=workspace.data_dir)
+        manager = ManagerOrchestrator(
+            root,
+            run_dir,
+            data_root=workspace.data_dir,
+            spawn_adapter=args.spawn_adapter,
+        )
         prepared = manager.initialize_run(brief_path)
         _print_json({
             "ok": True,
@@ -607,7 +631,12 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
         return
 
     run_dir = workspace.run_dir(args.run)
-    manager = ManagerOrchestrator(root, run_dir, data_root=workspace.data_dir)
+    manager = ManagerOrchestrator(
+        root,
+        run_dir,
+        data_root=workspace.data_dir,
+        spawn_adapter=getattr(args, "spawn_adapter", None),
+    )
 
     if args.report_command == "status":
         _print_json({

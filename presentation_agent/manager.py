@@ -156,11 +156,17 @@ class ManagerAgentRuntime:
 class WorkerExecutor:
     """Create isolated specialist task runs under Manager control."""
 
-    def __init__(self, root: Path, run_dir: Path, data_root: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        run_dir: Path,
+        data_root: Path,
+        spawn_adapter: Optional[str] = None,
+    ) -> None:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root
-        self.spawn_adapter = build_spawn_adapter(root)  # default: inline (no-op)
+        self.spawn_adapter = build_spawn_adapter(root, override=spawn_adapter)
         config = read_json(root / "configs" / "agents.json", default={})
         active = set(config.get("pipeline", {}).get("stages", []))
         self.specs = {
@@ -318,7 +324,13 @@ class WorkerExecutor:
 class ManagerOrchestrator:
     """Control-plane state machine around Manager Agent and specialist Workers."""
 
-    def __init__(self, root: Path, run_dir: Path, data_root: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        run_dir: Path,
+        data_root: Optional[Path] = None,
+        spawn_adapter: Optional[str] = None,
+    ) -> None:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root or (root / "data")
@@ -328,7 +340,20 @@ class ManagerOrchestrator:
         self.decisions_path = run_dir / "manager_decisions.jsonl"
         self.raw_brief_path = run_dir / "raw_brief.json"
         self.agent = ManagerAgentRuntime(root, run_dir, self.data_root)
-        self.workers = WorkerExecutor(root, run_dir, self.data_root)
+        persisted_adapter = None
+        if self.state_path.exists():
+            persisted_adapter = read_json(self.state_path, default={}).get("spawn_adapter")
+        self.workers = WorkerExecutor(
+            root,
+            run_dir,
+            self.data_root,
+            spawn_adapter=spawn_adapter or persisted_adapter,
+        )
+        if self.state_path.exists() and spawn_adapter:
+            state = read_json(self.state_path, default={})
+            state["spawn_adapter"] = self.workers.spawn_adapter.kind
+            state["updated_at"] = now_iso()
+            write_json(self.state_path, state)
         self.cross_reviewer = CrossStageReviewer(root, run_dir)
 
     def initialize_run(self, brief_path: Path) -> dict[str, Any]:
@@ -344,6 +369,7 @@ class ManagerOrchestrator:
             "manager_phase": "planning",
             "manager_step": "init",
             "last_event": "start",
+            "spawn_adapter": self.workers.spawn_adapter.kind,
             "human_gate": None,
             "current_task": None,
             "tasks": [],
@@ -382,6 +408,8 @@ class ManagerOrchestrator:
                 # read-only reviewer / revise worker is physically dispatched with the
                 # correct capability contract instead of leaving a stale request.
                 self._annotate_spawn(task_dir, instruction)
+                state["last_instruction"] = instruction
+                self._save_state(state)
                 return instruction
             return self.workers.prepare(task_dir)
         if actor != "manager":

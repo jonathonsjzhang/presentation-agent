@@ -186,6 +186,8 @@ next -> execute instruction -> submit
 
 只有 `actor=human` 时需要用户参与。计划和最终交付调用 `approve`；修改意见或问题回答调用 `feedback`。
 
+`report start` 通过 `--spawn-adapter workbuddy|claude|codex|inline` 选择本次 run 的宿主执行方式。该值写入 `manager_state.json`，后续命令自动复用；旧 run 也可以在任一后续命令中显式覆盖并持久化。
+
 ## 10. 当前边界
 
 当前版本已完成：
@@ -196,11 +198,12 @@ next -> execute instruction -> submit
 - Worker 动态派发和任务目录隔离；
 - Manager plan/final human gate；
 - run 内反馈回流；
-- 多目标 memory 路由。
+- 多目标 memory 路由；
+- WorkBuddy `Agent`、Claude Code `Task`、Codex `spawn_agent/wait_agent` 原生 sub-agent 派生协议；
+- Worker 可写、Reviewer 只读并由宿主 relay 审查 JSON 的 maker-checker 隔离。
 
 后续增强项：
 
-- 宿主原生 sub-agent adapter，实现模型会话级物理隔离；
 - 多 task 并行派发与汇合；
 - 更强的跨 artifact 确定性验收工具；
 - Manager 决策评测集与回放。

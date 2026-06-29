@@ -14,6 +14,10 @@ self-contained instruction package:
                   so this adapter writes a ``spawn_request.json`` into the task
                   directory; the host SKILL.md dispatch rules read it and perform
                   the real ``Agent`` spawn.
+- ``claude``    : emits native Claude Code ``Task`` parameters, including
+                  write-tool restrictions for the reviewer.
+- ``codex``     : emits native Codex ``spawn_agent`` / ``wait_agent`` parameters,
+                  with a read-only reviewer sandbox.
 - ``cli``       : Claude Code / Codex headless terminals spawn an isolated
                   process. Builds a concrete argv from a built-in dialect
                   (``claude -p`` / ``codex exec``, with read-only flags for a
@@ -27,6 +31,8 @@ Design invariants (kept terminal-agnostic so the framework stays portable):
                       must NOT spawn further sub-agents; the L3 reviewer is
                       spawned by the Manager layer, never by the worker itself.
 - write scope       : a worker's write operations are confined to its task_dir.
+- reviewer delivery : a read-only reviewer returns JSON to the host; the host
+                      relays it into the designated review output file.
 
 The Manager state machine (``record_worker_completed`` etc.) is untouched: every
 adapter ultimately yields the same handoff/artifact contract the host commits
@@ -35,6 +41,7 @@ read today.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
@@ -43,6 +50,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from presentation_agent.io import read_json, write_json
+from presentation_agent.llm.schema import extract_json
 from presentation_agent.step import StepError
 
 
@@ -114,6 +122,7 @@ class WorkBuddySpawnAdapter(SpawnAdapter):
 
     def spawn(self, request: SpawnRequest) -> SpawnResult:
         subagent_type = "general-purpose" if request.role == "worker" else "Explore"
+        result_delivery = "direct_file" if request.role == "worker" else "host_relay"
         spec = {
             "host": "workbuddy",
             "subagent_type": subagent_type,
@@ -123,6 +132,7 @@ class WorkBuddySpawnAdapter(SpawnAdapter):
             "instruction_path": str(request.instruction_path),
             "input_path": str(request.input_path),
             "output_path": str(request.output_path),
+            "result_delivery": result_delivery,
             "invariants": {
                 "max_depth": 1,
                 "write_scope": str(request.task_dir),
@@ -136,7 +146,104 @@ class WorkBuddySpawnAdapter(SpawnAdapter):
             detail={
                 "spawn_request": str(spawn_file),
                 "executor": "host_agent_tool",
+                "host": "workbuddy",
+                "tool": "Agent",
                 "subagent_type": subagent_type,
+                "result_delivery": result_delivery,
+                "invariants": spec["invariants"],
+            },
+        )
+
+
+class ClaudeCodeSpawnAdapter(SpawnAdapter):
+    """Emit a request for Claude Code's native Task sub-agent tool."""
+
+    kind = "claude"
+
+    def spawn(self, request: SpawnRequest) -> SpawnResult:
+        subagent_type = "general-purpose" if request.role == "worker" else "Explore"
+        result_delivery = "direct_file" if request.role == "worker" else "host_relay"
+        spec = {
+            "host": "claude_code",
+            "tool": "Task",
+            "subagent_type": subagent_type,
+            "agent_id": request.agent_id,
+            "role": request.role,
+            "mode": request.mode,
+            "instruction_path": str(request.instruction_path),
+            "input_path": str(request.input_path),
+            "output_path": str(request.output_path),
+            "result_delivery": result_delivery,
+            "disallowed_tools": (
+                [] if request.role == "worker" else ["Write", "Edit", "Bash", "NotebookEdit"]
+            ),
+            "invariants": {
+                "max_depth": 1,
+                "write_scope": str(request.task_dir),
+                "read_only": request.role == "reviewer",
+            },
+        }
+        spawn_file = request.task_dir / "spawn_request.json"
+        write_json(spawn_file, spec)
+        return SpawnResult(
+            status="dispatched",
+            artifact_path=None,
+            detail={
+                "spawn_request": str(spawn_file),
+                "executor": "host_agent_tool",
+                "host": "claude_code",
+                "tool": "Task",
+                "subagent_type": subagent_type,
+                "disallowed_tools": spec["disallowed_tools"],
+                "result_delivery": result_delivery,
+                "invariants": spec["invariants"],
+            },
+        )
+
+
+class CodexSpawnAdapter(SpawnAdapter):
+    """Emit a request for Codex's native spawn_agent/wait_agent tools."""
+
+    kind = "codex"
+
+    def spawn(self, request: SpawnRequest) -> SpawnResult:
+        native_role = "worker" if request.role == "worker" else "explorer"
+        sandbox_mode = "workspace-write" if request.role == "worker" else "read-only"
+        result_delivery = "direct_file" if request.role == "worker" else "host_relay"
+        spec = {
+            "host": "codex",
+            "tool": "spawn_agent",
+            "wait_tool": "wait_agent",
+            "native_role": native_role,
+            "sandbox_mode": sandbox_mode,
+            "agent_id": request.agent_id,
+            "role": request.role,
+            "mode": request.mode,
+            "instruction_path": str(request.instruction_path),
+            "input_path": str(request.input_path),
+            "output_path": str(request.output_path),
+            "result_delivery": result_delivery,
+            "invariants": {
+                "max_depth": 1,
+                "write_scope": str(request.task_dir),
+                "read_only": request.role == "reviewer",
+            },
+        }
+        spawn_file = request.task_dir / "spawn_request.json"
+        write_json(spawn_file, spec)
+        return SpawnResult(
+            status="dispatched",
+            artifact_path=None,
+            detail={
+                "spawn_request": str(spawn_file),
+                "executor": "host_agent_tool",
+                "host": "codex",
+                "tool": "spawn_agent",
+                "wait_tool": "wait_agent",
+                "native_role": native_role,
+                "sandbox_mode": sandbox_mode,
+                "result_delivery": result_delivery,
+                "invariants": spec["invariants"],
             },
         )
 
@@ -195,10 +302,10 @@ def _build_cli_prompt(request: SpawnRequest) -> str:
             f"{request.instruction_path} (it embeds the rubrics and the artifact "
             "under review) and the task input at "
             f"{request.input_path}. Audit the artifact strictly against the P0/P1 "
-            "rubrics and write ONLY a JSON object of the exact form "
+            "rubrics and return ONLY a JSON object on stdout of the exact form "
             '{"objections": [{"rubric_id","severity","dimension","message",'
-            '"evidence","suggestion"}]} (empty list if it passes) to '
-            f"{request.output_path}. Do not modify any other file."
+            '"evidence","suggestion"}]} (empty list if it passes). '
+            "Do not modify any file."
         )
     return (
         "You are an isolated worker sub-agent with no host conversation history. "
@@ -275,6 +382,7 @@ class CLISpawnAdapter(SpawnAdapter):
 
     def spawn(self, request: SpawnRequest) -> SpawnResult:
         argv = self._render_argv(request)
+        result_delivery = "direct_file" if request.role == "worker" else "host_relay"
         spec = {
             "host": "cli",
             "dialect": self.dialect,
@@ -285,6 +393,7 @@ class CLISpawnAdapter(SpawnAdapter):
             "instruction_path": str(request.instruction_path),
             "input_path": str(request.input_path),
             "output_path": str(request.output_path),
+            "result_delivery": result_delivery,
             "invariants": {
                 "max_depth": 1,
                 "write_scope": str(request.task_dir),
@@ -304,6 +413,7 @@ class CLISpawnAdapter(SpawnAdapter):
                     "executor": "cli_command_emitted",
                     "dialect": self.dialect,
                     "argv": argv,
+                    "result_delivery": result_delivery,
                 },
             )
 
@@ -328,6 +438,22 @@ class CLISpawnAdapter(SpawnAdapter):
                     "stderr": proc.stderr[-2000:],
                 },
             )
+        if request.role == "reviewer":
+            try:
+                write_json(request.output_path, extract_json(proc.stdout))
+            except ValueError as exc:
+                return SpawnResult(
+                    status="failed",
+                    artifact_path=None,
+                    detail={
+                        "spawn_request": str(spawn_file),
+                        "executor": "cli_subprocess",
+                        "returncode": 0,
+                        "error": f"reviewer stdout is not valid JSON: {exc}",
+                        "stdout": proc.stdout[-2000:],
+                        "result_delivery": result_delivery,
+                    },
+                )
         return SpawnResult(
             status="completed",
             artifact_path=request.output_path,
@@ -336,23 +462,45 @@ class CLISpawnAdapter(SpawnAdapter):
                 "executor": "cli_subprocess",
                 "returncode": 0,
                 "stdout": proc.stdout[-2000:],
+                "result_delivery": result_delivery,
             },
         )
 
 
-def build_spawn_adapter(root: Path) -> SpawnAdapter:
+def build_spawn_adapter(root: Path, override: str | None = None) -> SpawnAdapter:
     """Select an adapter from ``configs/agents.json`` orchestration.spawn.
 
-    Defaults to ``inline`` (zero-regression) when the key is absent.
+    Selection precedence:
+    1. Per-run/CLI override.
+    2. ``PRESENTATION_AGENT_SPAWN_ADAPTER``.
+    3. Repository config.
+    4. ``inline`` compatibility fallback.
     """
 
     config = read_json(root / "configs" / "agents.json", default={})
     spawn_cfg = config.get("orchestration", {}).get("spawn", {})
-    kind = spawn_cfg.get("adapter", "inline")
+    kind = (
+        override
+        or os.environ.get("PRESENTATION_AGENT_SPAWN_ADAPTER")
+        or spawn_cfg.get("adapter")
+        or "inline"
+    )
+    aliases = {
+        "wb": "workbuddy",
+        "work-buddy": "workbuddy",
+        "claude-code": "claude",
+        "claude_code": "claude",
+        "cc": "claude",
+    }
+    kind = aliases.get(str(kind).lower(), str(kind).lower())
     if kind == "inline":
         return InlineSpawnAdapter()
     if kind == "workbuddy":
         return WorkBuddySpawnAdapter()
+    if kind == "claude":
+        return ClaudeCodeSpawnAdapter()
+    if kind == "codex":
+        return CodexSpawnAdapter()
     if kind == "cli":
         return CLISpawnAdapter(
             spawn_cfg.get("command", []),
