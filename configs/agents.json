@@ -26,6 +26,15 @@
     "automation_policy": "no_self_triggered_automation; memory update may be assisted after human feedback",
     "default_max_revision_rounds": 2
   },
+  "orchestration": {
+    "spawn": {
+      "adapter": "inline",
+      "command": [],
+      "invariants": {
+        "max_depth": 1
+      }
+    }
+  },
   "state_policy": {
     "global_state_path": "data/global/state.json",
     "learning_event_log_path": "data/learning/events.jsonl",

@@ -49,3 +49,8 @@ docs/references/
 
 # ===== Real business analysis data (excluded per maintainer decision) =====
 examples/
+
+# ===== 单 Agent 实验产物（仅本地保留，不入库） =====
+# 合并大 skill 与业务汇报需求文档为本地实验材料，不同步到官方仓库。
+skills/presentation_all_in_one/
+docs/业务汇报需求文档.docx

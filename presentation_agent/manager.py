@@ -11,6 +11,7 @@ from presentation_agent.llm.schema import validate
 from presentation_agent.memory import MemoryStore
 from presentation_agent.models import AgentSpec, now_iso
 from presentation_agent.skill_package import load_skill_package
+from presentation_agent.spawn import SpawnRequest, build_spawn_adapter
 from presentation_agent.step import StepError, StepRunner
 
 
@@ -159,6 +160,7 @@ class WorkerExecutor:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root
+        self.spawn_adapter = build_spawn_adapter(root)  # default: inline (no-op)
         config = read_json(root / "configs" / "agents.json", default={})
         active = set(config.get("pipeline", {}).get("stages", []))
         self.specs = {
@@ -255,7 +257,37 @@ class WorkerExecutor:
             self.root, task_dir, data_root=self.data_root
         ).prepare()
         instruction["actor"] = "worker"
+
+        # Spawn split: inline behaves exactly like today; native adapters emit a
+        # self-contained spawn request and annotate the instruction. The Manager
+        # state machine is unaffected — it still accepts work via artifact_path.
+        if self.spawn_adapter.kind != "inline":
+            request = self._build_spawn_request(task_dir, instruction)
+            result = self.spawn_adapter.spawn(request)
+            instruction["spawn"] = {
+                "adapter": self.spawn_adapter.kind,
+                "role": request.role,
+                "status": result.status,
+                "detail": result.detail,
+            }
         return instruction
+
+    def _build_spawn_request(
+        self, task_dir: Path, instruction: dict[str, Any]
+    ) -> SpawnRequest:
+        run_state = read_json(task_dir / "run_state.json", default={})
+        agent_id = str(run_state.get("agent_id") or "")
+        step = str(instruction.get("step") or "")
+        role = "reviewer" if step.startswith("review") else "worker"
+        return SpawnRequest(
+            task_dir=task_dir,
+            agent_id=agent_id,
+            role=role,
+            instruction_path=Path(instruction.get("instruction_path", "")),
+            output_path=Path(instruction.get("output_path", "")),
+            input_path=task_dir / "input.json",
+            mode="foreground",
+        )
 
     def _resolve_artifact(self, reference: str) -> Optional[Path]:
         candidate = Path(reference).expanduser()
