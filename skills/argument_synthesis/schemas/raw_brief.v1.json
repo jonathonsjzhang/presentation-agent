@@ -1,0 +1,20 @@
+{
+  "schema": "raw_brief.v1",
+  "type": "object",
+  "required": ["topic", "audience", "decision_goal", "report_type", "output_format"],
+  "properties": {
+    "schema": { "type": "string", "const": "raw_brief.v1" },
+    "topic": { "type": "string" },
+    "audience": { "type": "string", "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"] },
+    "decision_goal": { "type": "string" },
+    "report_type": { "type": "string", "enum": ["deep_dive", "quick_sync"] },
+    "output_format": { "type": "string", "enum": ["document", "ppt", "html"] },
+    "context": { "type": "string" },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "user_intent": { "type": "string" },
+    "template": { "type": "array" },
+    "historical_reference_materials": { "type": "array" },
+    "brief": { "type": "string" },
+    "materials": { "type": "array" }
+  }
+}

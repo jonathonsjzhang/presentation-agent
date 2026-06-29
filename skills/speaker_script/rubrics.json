@@ -288,7 +288,7 @@
     "conditional_p0": [
       {
         "dimension": "time_control",
-        "condition": "当 task_positioning 未授权更长时长，完整稿默认不得超过 30 分钟；若授权更长，必须遵循用户指定时长并提供压缩版。"
+        "condition": "当 report_charter 未授权更长时长，完整稿默认不得超过 30 分钟；若授权更长，必须遵循用户指定时长并提供压缩版。"
       },
       {
         "dimension": "qa_risk_absorption",

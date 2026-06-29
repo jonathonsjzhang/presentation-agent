@@ -92,7 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--out", help="Optional output directory.")
     run.add_argument("--provider", help="Override LLM provider (mock/cli/codex/inline).")
 
-    pipe = sub.add_parser("pipeline", help="Run the 7-agent report pipeline.")
+    pipe = sub.add_parser("pipeline", help="Run the legacy direct six-Worker pipeline.")
     pipe.add_argument("--input", required=True, help="Initial raw brief JSON path.")
     pipe.add_argument("--out", help="Optional output directory.")
     pipe.add_argument("--auto", action="store_true", help="Run all stages back to back.")

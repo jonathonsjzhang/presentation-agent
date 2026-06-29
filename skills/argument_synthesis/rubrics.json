@@ -22,7 +22,7 @@
       "severity": "P0",
       "dimension": "executive_summary",
       "criterion": "必须产出 Executive Summary，并包含核心结论、预期推动的 action、面向听众的 decision_request、why_now 和 2-4 个支撑论点。",
-      "check": "executive_summary.core_conclusion / expected_action / decision_request / why_now / supporting_arguments 均非空；expected_action 对应 task_positioning.decision_goal 和 desired_direction。",
+      "check": "executive_summary.core_conclusion / expected_action / decision_request / why_now / supporting_arguments 均非空；expected_action 对应 report_charter.decision_goal 和 desired_direction。",
       "fail_examples": [
         "只写“结论：用户时长增长”，没有预期推动 action。",
         "expected_action 写成“持续关注”，没有说明由谁判断、需要什么动作。",
@@ -47,7 +47,7 @@
       "id": "AS-P0-003",
       "severity": "P0",
       "dimension": "core_question_and_thesis",
-      "criterion": "主问题必须可决策：必须产出 core_question，且它必须服务 task_positioning.decision_goal，而不是复述主题。",
+      "criterion": "主问题必须可决策：必须产出 core_question，且它必须服务 report_charter.decision_goal，而不是复述主题。",
       "check": "core_question 能被回答为判断、选择、优先级、资源配置、授权、风险处置或下一步行动；能对应上游 decision_goal。",
       "fail_examples": [
         "主问题只是“现状如何”，但上游目标是判断是否投入某个场景。",

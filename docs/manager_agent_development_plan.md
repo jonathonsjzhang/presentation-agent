@@ -21,7 +21,7 @@ Manager 验收 Worker
 Worker checker 验收专业 schema / rubrics
 ```
 
-原 `task_positioning` 能力已并入 Manager planning。旧 Agent 定义仅用于兼容历史 run 和低层调试，不属于新的高层 report 流程。
+原 `task_positioning` 能力已并入 Manager planning，旧 Agent 定义和 Skill 已删除。`argument_synthesis` 仅保留对历史 `task_positioning.v1` artifact 的输入兼容。
 
 ## 2. 双层 Loop
 

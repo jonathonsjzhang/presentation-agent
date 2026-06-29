@@ -4,10 +4,10 @@ from __future__ import annotations
 
 Three hosts — Claude Code (subagent), WorkBuddy (skill), Codex (prompt) — all
 need to do the same thing: take a user's spoken request, turn it into a
-`raw_brief.v1`, and kick off the 7-agent Pipeline. Rather than re-implement that
-plumbing in each host wrapper (which would drift), every wrapper calls this one
-entry point. The wrappers stay thin: their only job is to coax a clean brief out
-of the conversation and shell out to `launch_report`.
+`raw_brief.v1`, and kick off the legacy direct six-Worker Pipeline. Rather than
+re-implement that plumbing in each host wrapper (which would drift), every
+wrapper calls this one entry point. New interactive report runs use
+`ManagerOrchestrator`; this wrapper remains for direct pipeline compatibility.
 
 Design choices baked in here:
   - default provider is "cli" (decision 1A): the harness borrows whichever
