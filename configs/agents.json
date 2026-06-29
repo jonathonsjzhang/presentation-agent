@@ -6,10 +6,26 @@
     "skill": "manager",
     "input_schema": "manager_context.v1",
     "output_schema": "manager_decision.v1",
-    "memory_dimensions": ["任务定义", "任务拆解", "调度", "验收", "返工", "人审偏好", "跨阶段一致性"],
-    "human_gates": ["plan", "final"],
+    "memory_dimensions": [
+      "任务定义",
+      "任务拆解",
+      "调度",
+      "验收",
+      "返工",
+      "人审偏好",
+      "跨阶段一致性"
+    ],
+    "human_gates": [
+      "plan",
+      "final"
+    ],
     "worker_execution": "isolated_task_directory",
-    "decision_actions": ["dispatch", "revise", "ask_human", "complete"]
+    "decision_actions": [
+      "dispatch",
+      "revise",
+      "ask_human",
+      "complete"
+    ]
   },
   "pipeline": {
     "mode": "manager_controlled",
@@ -40,7 +56,11 @@
     "learning_event_log_path": "data/learning/events.jsonl",
     "agent_memory_pattern": "data/agents/{agent_id}/memory.json",
     "agent_learning_log_pattern": "data/agents/{agent_id}/learning_log.jsonl",
-    "learning_sources": ["feedback", "success", "comparison"],
+    "learning_sources": [
+      "feedback",
+      "success",
+      "comparison"
+    ],
     "memory_injection": {
       "generation": "retrieve and judge selected memory; inject only the shortest relevant lessons",
       "self_check": "scan all triggers; follow links only after a trigger hit"
@@ -51,70 +71,33 @@
     "rubric_promotion_threshold": 3
   },
   "loop_steps": [
-    {"id": "start", "owner": "human/script", "description": "由人发起，或人选择上游 artifact 后接续"},
-    {"id": "workflow", "owner": "skill", "description": "读取输入契约、global state、环节 memory，并按 skill SOP 生成 artifact"},
-    {"id": "review", "owner": "review_sub_agent", "description": "干净上下文审查 artifact，输出 P0/P1 异议"},
-    {"id": "stop_check", "owner": "stop_checker", "description": "L1 确定性硬门(P0/schema) + L2 独立 LLM 轻量 sanity check"},
-    {"id": "human_review", "owner": "human", "description": "人决定 approve、revise、stop 或手动回到上游重跑"}
+    {
+      "id": "start",
+      "owner": "human/script",
+      "description": "由人发起，或人选择上游 artifact 后接续"
+    },
+    {
+      "id": "workflow",
+      "owner": "skill",
+      "description": "读取输入契约、global state、环节 memory，并按 skill SOP 生成 artifact"
+    },
+    {
+      "id": "review",
+      "owner": "review_sub_agent",
+      "description": "干净上下文审查 artifact，输出 P0/P1 异议"
+    },
+    {
+      "id": "stop_check",
+      "owner": "stop_checker",
+      "description": "L1 确定性硬门(P0/schema) + L2 独立 LLM 轻量 sanity check"
+    },
+    {
+      "id": "human_review",
+      "owner": "human",
+      "description": "人决定 approve、revise、stop 或手动回到上游重跑"
+    }
   ],
   "agents": [
-    {
-      "id": "task_positioning",
-      "name": "任务定位",
-      "stage": 1,
-      "skill": "task_positioning",
-      "description": "兼容旧运行记录的任务定位 Agent；新 report 流程已由 Manager 的 report_charter 取代。",
-      "previous_agent_id": null,
-      "next_agent_id": "argument_synthesis",
-      "input_schema": "raw_brief.v1",
-      "output_schema": "task_positioning.v1",
-      "input_contract": {
-        "required_inputs": ["汇报对象", "汇报性质", "材料格式"],
-        "optional_inputs": ["模板", "历史参考材料", "业务背景", "已知限制", "期望推动方向"],
-        "accepted_material_formats": ["text", "docx", "pptx", "html", "json"],
-        "input_preparation_focus": "识别受众层级、汇报类型、交付格式、模板约束、历史风格和材料边界"
-      },
-      "output_contract": {
-        "primary_artifact": "汇报 brief",
-        "required_handoff_fields": ["audience", "report_type", "material_format", "objective", "decision_or_action_needed", "scope", "constraints", "reference_patterns"],
-        "updates_global_state": ["audience_profile", "presentation_preferences", "target_action", "page_limit"]
-      },
-      "memory_dimensions": ["受众适配", "目标动作", "边界", "模板偏好", "历史参考"],
-      "rubrics": [
-        "必须明确受众、汇报性质、材料格式、目标 action 和材料边界",
-        "必须把模板与历史参考材料转成可执行约束，而不是只罗列来源",
-        "不得替后续分析提前编造核心结论"
-      ],
-      "max_revision_rounds": 2,
-      "loop": {
-        "trigger": "human",
-        "workflow_owner": "skill",
-        "reviewer": "clean_context_review_sub_agent",
-        "stop_checker": "schema_and_p0_gate",
-        "human_review_required": true,
-        "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
-      },
-      "state": {
-        "global_reads": [],
-        "global_writes": ["audience_profile", "presentation_preferences", "target_action", "page_limit"],
-        "agent_memory_scope": "task_positioning_only",
-        "generation_memory_dimensions": ["受众适配", "目标动作", "边界", "模板偏好"]
-      },
-      "harness": {
-        "skill_package": "skills/task_positioning",
-        "runtime_adapter": "generic_llm_skill_runtime",
-        "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": ["docx_reader", "pptx_reader", "html_reader"],
-        "implementation_status": "implemented"
-      },
-      "optional_features": {
-        "multi_candidate": {
-          "enabled_by_default": true,
-          "max_candidates": 3,
-          "selection_owner": "review_sub_agent_then_human"
-        }
-      }
-    },
     {
       "id": "argument_synthesis",
       "name": "核心论点提炼",
@@ -126,17 +109,45 @@
       "input_schema": "manager_task.v1",
       "output_schema": "argument_synthesis.v1",
       "input_contract": {
-        "required_inputs": ["汇报 brief", "研究结论与完整论据", "希望推动的方向"],
-        "optional_inputs": ["补充数据", "竞品材料", "管理层已知观点", "不确定问题"],
-        "accepted_material_formats": ["json", "text", "docx", "xlsx", "csv"],
+        "required_inputs": [
+          "汇报 brief",
+          "研究结论与完整论据",
+          "希望推动的方向"
+        ],
+        "optional_inputs": [
+          "补充数据",
+          "竞品材料",
+          "管理层已知观点",
+          "不确定问题"
+        ],
+        "accepted_material_formats": [
+          "json",
+          "text",
+          "docx",
+          "xlsx",
+          "csv"
+        ],
         "input_preparation_focus": "区分事实、判断、推论和建议，并标记每个核心论点的证据强度"
       },
       "output_contract": {
         "primary_artifact": "Executive Summary",
-        "required_handoff_fields": ["core_conclusion", "expected_action", "key_arguments", "evidence_map", "assumptions", "open_questions"],
+        "required_handoff_fields": [
+          "core_conclusion",
+          "expected_action",
+          "key_arguments",
+          "evidence_map",
+          "assumptions",
+          "open_questions"
+        ],
         "downstream_use": "storyline_design 以 Executive Summary 作为塔尖，用完整论据展开每页/模块"
       },
-      "memory_dimensions": ["结论", "证据", "反直觉", "Action", "风险边界"],
+      "memory_dimensions": [
+        "结论",
+        "证据",
+        "反直觉",
+        "Action",
+        "风险边界"
+      ],
       "rubrics": [
         "必须区分事实、判断、建议和待验证假设",
         "必须形成一个可被 storyline 承接的塔尖结论",
@@ -152,16 +163,30 @@
         "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
       },
       "state": {
-        "global_reads": ["audience_profile", "presentation_preferences", "target_action"],
-        "global_writes": ["executive_summary"],
+        "global_reads": [
+          "audience_profile",
+          "presentation_preferences",
+          "target_action"
+        ],
+        "global_writes": [
+          "executive_summary"
+        ],
         "agent_memory_scope": "argument_synthesis_only",
-        "generation_memory_dimensions": ["结论", "证据", "Action"]
+        "generation_memory_dimensions": [
+          "结论",
+          "证据",
+          "Action"
+        ]
       },
       "harness": {
         "skill_package": "skills/argument_synthesis",
         "runtime_adapter": "generic_llm_skill_runtime",
         "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": ["docx_reader", "xlsx_reader", "csv_reader"],
+        "connectors": [
+          "docx_reader",
+          "xlsx_reader",
+          "csv_reader"
+        ],
         "implementation_status": "implemented"
       },
       "optional_features": {
@@ -183,17 +208,41 @@
       "input_schema": "argument_synthesis.v1",
       "output_schema": "storyline.v1",
       "input_contract": {
-        "required_inputs": ["Executive Summary", "完整论据"],
-        "optional_inputs": ["模板页数限制", "历史故事线", "附录素材", "备选切入角度"],
-        "accepted_material_formats": ["json", "docx"],
+        "required_inputs": [
+          "Executive Summary",
+          "完整论据"
+        ],
+        "optional_inputs": [
+          "模板页数限制",
+          "历史故事线",
+          "附录素材",
+          "备选切入角度"
+        ],
+        "accepted_material_formats": [
+          "json",
+          "docx"
+        ],
         "input_preparation_focus": "围绕塔尖结论组织 2-4 个 MECE 论点，并判断每页/模块应放置哪些证据"
       },
       "output_contract": {
         "primary_artifact": "storyline",
-        "required_handoff_fields": ["story_arc", "title_read_test", "pages", "appendix_plan", "open_questions"],
+        "required_handoff_fields": [
+          "story_arc",
+          "title_read_test",
+          "pages",
+          "appendix_plan",
+          "open_questions"
+        ],
         "downstream_use": "page_filling 按每页/模块的 title、key_question、evidence 和 expected_evidence_materials 生成 dummy page"
       },
-      "memory_dimensions": ["Wording", "Leadline", "结构", "证据", "受众适配", "篇幅控制"],
+      "memory_dimensions": [
+        "Wording",
+        "Leadline",
+        "结构",
+        "证据",
+        "受众适配",
+        "篇幅控制"
+      ],
       "rubrics": [
         "标题必须是完整结论，不能只是主题词",
         "必须一页一问一结论，并明确 so what",
@@ -210,16 +259,31 @@
         "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
       },
       "state": {
-        "global_reads": ["audience_profile", "presentation_preferences", "executive_summary", "target_action", "page_limit"],
-        "global_writes": ["state_revisions"],
+        "global_reads": [
+          "audience_profile",
+          "presentation_preferences",
+          "executive_summary",
+          "target_action",
+          "page_limit"
+        ],
+        "global_writes": [
+          "state_revisions"
+        ],
         "agent_memory_scope": "storyline_design_only",
-        "generation_memory_dimensions": ["Leadline", "Wording", "结构", "证据"]
+        "generation_memory_dimensions": [
+          "Leadline",
+          "Wording",
+          "结构",
+          "证据"
+        ]
       },
       "harness": {
         "skill_package": "skills/storyline_design",
         "runtime_adapter": "storyline_design_python_adapter",
         "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": ["docx_to_storyline_input"],
+        "connectors": [
+          "docx_to_storyline_input"
+        ],
         "implementation_status": "implemented"
       },
       "optional_features": {
@@ -241,17 +305,42 @@
       "input_schema": "storyline.v1",
       "output_schema": "page_content.v1",
       "input_contract": {
-        "required_inputs": ["storyline.pages", "每页预期论据素材"],
-        "optional_inputs": ["原始数据表", "图表偏好", "模板组件", "可复用图形"],
-        "accepted_material_formats": ["json", "xlsx", "csv", "image"],
+        "required_inputs": [
+          "storyline.pages",
+          "每页预期论据素材"
+        ],
+        "optional_inputs": [
+          "原始数据表",
+          "图表偏好",
+          "模板组件",
+          "可复用图形"
+        ],
+        "accepted_material_formats": [
+          "json",
+          "xlsx",
+          "csv",
+          "image"
+        ],
         "input_preparation_focus": "把每页结论拆成页面叙事、图表 brief、证据引用和待补素材"
       },
       "output_contract": {
         "primary_artifact": "dummy page content",
-        "required_handoff_fields": ["pages", "chart_briefs", "source_notes", "visual_requirements", "open_questions"],
+        "required_handoff_fields": [
+          "pages",
+          "chart_briefs",
+          "source_notes",
+          "visual_requirements",
+          "open_questions"
+        ],
         "downstream_use": "format 按 dummy page 内容制作正式 PPT/HTML/文档"
       },
-      "memory_dimensions": ["证据", "图表", "页内叙事", "信息密度", "来源标注"],
+      "memory_dimensions": [
+        "证据",
+        "图表",
+        "页内叙事",
+        "信息密度",
+        "来源标注"
+      ],
       "rubrics": [
         "每页必须保留原 storyline 的核心结论和 so what",
         "图表 brief 必须说明指标、维度、口径、来源和想证明的判断",
@@ -267,16 +356,29 @@
         "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
       },
       "state": {
-        "global_reads": ["audience_profile", "presentation_preferences", "target_action", "page_limit"],
+        "global_reads": [
+          "audience_profile",
+          "presentation_preferences",
+          "target_action",
+          "page_limit"
+        ],
         "global_writes": [],
         "agent_memory_scope": "page_filling_only",
-        "generation_memory_dimensions": ["证据", "图表", "页内叙事", "来源标注"]
+        "generation_memory_dimensions": [
+          "证据",
+          "图表",
+          "页内叙事",
+          "来源标注"
+        ]
       },
       "harness": {
         "skill_package": "skills/page_filling",
         "runtime_adapter": "generic_llm_skill_runtime",
         "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": ["xlsx_reader", "csv_reader"],
+        "connectors": [
+          "xlsx_reader",
+          "csv_reader"
+        ],
         "implementation_status": "implemented"
       },
       "optional_features": {
@@ -298,17 +400,45 @@
       "input_schema": "page_content.v1",
       "output_schema": "formatted_material.v1",
       "input_contract": {
-        "required_inputs": ["page_content.pages", "目标材料格式"],
-        "optional_inputs": ["模板文件", "品牌规范", "图表数据", "导出偏好"],
-        "accepted_material_formats": ["json", "pptx", "html", "docx", "xlsx", "csv"],
+        "required_inputs": [
+          "page_content.pages",
+          "目标材料格式"
+        ],
+        "optional_inputs": [
+          "模板文件",
+          "品牌规范",
+          "图表数据",
+          "导出偏好"
+        ],
+        "accepted_material_formats": [
+          "json",
+          "pptx",
+          "html",
+          "docx",
+          "xlsx",
+          "csv"
+        ],
         "input_preparation_focus": "识别目标载体的表达方式，保留结论、证据、来源和页间叙事"
       },
       "output_contract": {
         "primary_artifact": "formatted material",
-        "required_handoff_fields": ["material_format", "pages_or_sections", "asset_manifest", "source_notes", "export_path", "open_questions"],
+        "required_handoff_fields": [
+          "material_format",
+          "pages_or_sections",
+          "asset_manifest",
+          "source_notes",
+          "export_path",
+          "open_questions"
+        ],
         "downstream_use": "qa_preparation 基于正式材料逐页压力测试可能追问"
       },
-      "memory_dimensions": ["版式", "视觉层级", "一致性", "载体适配", "可读性"],
+      "memory_dimensions": [
+        "版式",
+        "视觉层级",
+        "一致性",
+        "载体适配",
+        "可读性"
+      ],
       "rubrics": [
         "不得改变原始结论含义或证据口径",
         "必须按材料格式采用不同表达方式，不能把文档/PPT/HTML 简单互相复制",
@@ -324,16 +454,30 @@
         "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
       },
       "state": {
-        "global_reads": ["audience_profile", "presentation_preferences", "target_action", "page_limit"],
+        "global_reads": [
+          "audience_profile",
+          "presentation_preferences",
+          "target_action",
+          "page_limit"
+        ],
         "global_writes": [],
         "agent_memory_scope": "format_only",
-        "generation_memory_dimensions": ["版式", "视觉层级", "载体适配", "可读性"]
+        "generation_memory_dimensions": [
+          "版式",
+          "视觉层级",
+          "载体适配",
+          "可读性"
+        ]
       },
       "harness": {
         "skill_package": "skills/format",
         "runtime_adapter": "generic_llm_skill_runtime",
         "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": ["pptx_writer", "html_writer", "docx_writer"],
+        "connectors": [
+          "pptx_writer",
+          "html_writer",
+          "docx_writer"
+        ],
         "implementation_status": "implemented"
       },
       "optional_features": {
@@ -355,17 +499,43 @@
       "input_schema": "formatted_material.v1",
       "output_schema": "qa_pack.v1",
       "input_contract": {
-        "required_inputs": ["formatted material", "audience_profile"],
-        "optional_inputs": ["历史 Q&A", "敏感问题列表", "已知管理层关注点", "补充数据"],
-        "accepted_material_formats": ["json", "pptx", "html", "docx"],
+        "required_inputs": [
+          "formatted material",
+          "audience_profile"
+        ],
+        "optional_inputs": [
+          "历史 Q&A",
+          "敏感问题列表",
+          "已知管理层关注点",
+          "补充数据"
+        ],
+        "accepted_material_formats": [
+          "json",
+          "pptx",
+          "html",
+          "docx"
+        ],
         "input_preparation_focus": "逐页识别最可能被追问的证据、口径、假设、资源诉求和决策风险"
       },
       "output_contract": {
         "primary_artifact": "Q&A pack",
-        "required_handoff_fields": ["questions", "answerability", "risk_level", "answer_strategy", "required_presenter_input", "speaker_script_handoff"],
+        "required_handoff_fields": [
+          "questions",
+          "answerability",
+          "risk_level",
+          "answer_strategy",
+          "required_presenter_input",
+          "speaker_script_handoff"
+        ],
         "downstream_use": "speaker_script 吸收高风险点、预埋过渡话术，但不强答需补充的问题"
       },
-      "memory_dimensions": ["挑战问题", "回答策略", "风险", "数据口径", "受众关注"],
+      "memory_dimensions": [
+        "挑战问题",
+        "回答策略",
+        "风险",
+        "数据口径",
+        "受众关注"
+      ],
       "rubrics": [
         "必须覆盖关键追问并区分可答、需汇报人补充、需补数据和应延后处理",
         "必须标记高风险问题和建议前置化解的话术",
@@ -381,16 +551,27 @@
         "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
       },
       "state": {
-        "global_reads": ["audience_profile", "presentation_preferences", "target_action"],
+        "global_reads": [
+          "audience_profile",
+          "presentation_preferences",
+          "target_action"
+        ],
         "global_writes": [],
         "agent_memory_scope": "qa_preparation_only",
-        "generation_memory_dimensions": ["挑战问题", "回答策略", "风险", "受众关注"]
+        "generation_memory_dimensions": [
+          "挑战问题",
+          "回答策略",
+          "风险",
+          "受众关注"
+        ]
       },
       "harness": {
         "skill_package": "skills/qa_preparation",
         "runtime_adapter": "generic_llm_skill_runtime",
         "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": ["formatted_material_reader"],
+        "connectors": [
+          "formatted_material_reader"
+        ],
         "implementation_status": "implemented"
       },
       "optional_features": {
@@ -412,17 +593,45 @@
       "input_schema": "qa_pack.v1",
       "output_schema": "speaker_script.v1",
       "input_contract": {
-        "required_inputs": ["Q&A pack", "formatted material"],
-        "optional_inputs": ["汇报人语气偏好", "目标时长", "必须强调/回避内容", "现场流程"],
-        "accepted_material_formats": ["json", "pptx", "html", "docx"],
+        "required_inputs": [
+          "Q&A pack",
+          "formatted material"
+        ],
+        "optional_inputs": [
+          "汇报人语气偏好",
+          "目标时长",
+          "必须强调/回避内容",
+          "现场流程"
+        ],
+        "accepted_material_formats": [
+          "json",
+          "pptx",
+          "html",
+          "docx"
+        ],
         "input_preparation_focus": "把每页材料转成可说出口的讲稿，并吸收 Q&A 高风险点和未决问题边界"
       },
       "output_contract": {
         "primary_artifact": "speaker script",
-        "required_handoff_fields": ["opening", "time_plan", "page_scripts", "risk_lines", "qa_bridge_lines", "compressed_version", "rehearsal_notes", "closing"],
+        "required_handoff_fields": [
+          "opening",
+          "time_plan",
+          "page_scripts",
+          "risk_lines",
+          "qa_bridge_lines",
+          "compressed_version",
+          "rehearsal_notes",
+          "closing"
+        ],
         "downstream_use": "交给汇报人排练、压缩、调整语气和补齐需要本人确认的信息"
       },
-      "memory_dimensions": ["表达", "节奏", "高层沟通", "风险话术", "时间控制"],
+      "memory_dimensions": [
+        "表达",
+        "节奏",
+        "高层沟通",
+        "风险话术",
+        "时间控制"
+      ],
       "rubrics": [
         "必须逐页/逐模块对应正式材料，不能脱离材料自由发挥",
         "默认完整讲稿控制在 30 分钟以内，除非 brief 明确要求其他时长",
@@ -438,16 +647,30 @@
         "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
       },
       "state": {
-        "global_reads": ["audience_profile", "presentation_preferences", "target_action", "page_limit"],
+        "global_reads": [
+          "audience_profile",
+          "presentation_preferences",
+          "target_action",
+          "page_limit"
+        ],
         "global_writes": [],
         "agent_memory_scope": "speaker_script_only",
-        "generation_memory_dimensions": ["表达", "节奏", "高层沟通", "风险话术", "时间控制"]
+        "generation_memory_dimensions": [
+          "表达",
+          "节奏",
+          "高层沟通",
+          "风险话术",
+          "时间控制"
+        ]
       },
       "harness": {
         "skill_package": "skills/speaker_script",
         "runtime_adapter": "generic_llm_skill_runtime",
         "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": ["formatted_material_reader", "qa_pack_reader"],
+        "connectors": [
+          "formatted_material_reader",
+          "qa_pack_reader"
+        ],
         "implementation_status": "implemented"
       },
       "optional_features": {

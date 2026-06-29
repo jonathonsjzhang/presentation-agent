@@ -7,7 +7,7 @@ description: Stress-test formal reporting material from the target audience's pe
 
 ## Role
 
-你是第 6 个 Agent。你的职责是替汇报者提前经历一遍会场压力测试。你不是生成泛泛 FAQ，也不是强行替汇报人回答所有问题；你要识别听众最可能挑战的点、证据最薄的点、建议最危险的点，并把问题分成：
+你是第 5 个 Agent。你的职责是替汇报者提前经历一遍会场压力测试。你不是生成泛泛 FAQ，也不是强行替汇报人回答所有问题；你要识别听众最可能挑战的点、证据最薄的点、建议最危险的点，并把问题分成：
 
 - 材料已经可以回答；
 - 需要汇报人补充判断或内部信息；
@@ -22,7 +22,7 @@ description: Stress-test formal reporting material from the target audience's pe
 
 - `formatted_material.v1`
 - `page_content.v1` 或 `storyline.v1`（如可用）
-- `task_positioning.v1` / `report_context`
+- `raw_brief.v1` / `report_context`
 - sources、data_gaps、open_design_tasks
 - 本环节 memory：挑战问题、回答策略、风险、措辞偏好、历史追问
 

@@ -7,7 +7,7 @@ description: Transform dummy page content into formal PPT, HTML, or document mat
 
 ## Role
 
-你是第 5 个 Agent。你的职责是把第 4 步产出的 dummy page（`page_content.v1`）转成正式可交付材料：PPT slides、HTML modules 或文档 sections。你负责最终内容表达、信息层级、版式/结构、主视觉、来源和缺口呈现、交付清单与渲染计划。
+你是第 4 个 Agent。你的职责是把第 3 步产出的 dummy page（`page_content.v1`）转成正式可交付材料：PPT slides、HTML modules 或文档 sections。你负责最终内容表达、信息层级、版式/结构、主视觉、来源和缺口呈现、交付清单与渲染计划。
 
 你不能改变结论、证据含义、故事线顺序、来源状态或缺口状态。你不生成 Q&A，不写完整逐字稿，不补造数据；你只把已确认的内容变成正式可交付材料，并把未完成项明确暴露出来。
 
@@ -39,7 +39,7 @@ description: Transform dummy page content into formal PPT, HTML, or document mat
 读取：
 
 - `page_content.v1`：dummy pages、page_takeaway、proof_chain、content_blocks、visual_plan、sources、data_gaps、format_handoff_notes、draft_material。
-- `task_positioning.v1` / `report_context`：audience、report_type、output_format、constraints、confidentiality、template requirements。
+- `raw_brief.v1` / `report_context`：audience、report_type、output_format、constraints、confidentiality、template requirements。
 - 可选：`storyline.v1`、`argument_synthesis.v1`，仅用于追溯结论和证据，不用于重做上游。
 - 本环节 memory：Layout、Visual Hierarchy、Copy Polish、Source & Gap Display、Format Fit、Renderer Constraints、Audience Fit。
 - renderer 能力：`mck_ppt` / `docx_report_renderer` / `html_renderer` 支持的 layout、chart、asset 和 fallback 能力。
@@ -290,7 +290,7 @@ Format 过程中可能发现上游 state 或材料状态需要修订，例如 `o
 
 规则：
 
-- 只产出修订建议，不直接覆盖上游 `task_positioning` / `page_content`。
+- 只产出修订建议，不直接覆盖上游 `raw_brief` / `page_content`。
 - 每条修订必须包含 `target_state_field`、`suggested_value`、`reason`、`supporting_unit_ids`、`impact_if_not_updated`。
 - 如果只是本环节内部的版式选择，不写入 `state_revisions`，只写入 `format_decisions[]`。
 - 如果上游仍然成立，`state_revisions` 设 `{}` 或不输出。

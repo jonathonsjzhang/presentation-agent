@@ -79,9 +79,9 @@ class DerivedFile:
 def _stage_agents(config: dict[str, Any]) -> list[dict[str, Any]]:
     """Return the pipeline stage agents (those listed in pipeline.stages).
 
-    The legacy ``task_positioning`` agent is included only if it is an active
-    stage; otherwise stages drive the projection so we stay in lockstep with the
-    real pipeline.
+    Only agents referenced by active pipeline stages are included; any agent
+    definition not listed in ``pipeline.stages`` is ignored. This keeps the
+    derived file set in lockstep with the real pipeline.
     """
 
     active = config.get("pipeline", {}).get("stages", [])

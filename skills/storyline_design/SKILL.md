@@ -7,7 +7,7 @@ description: Transform an Executive Summary and complete evidence into a coheren
 
 ## 0. Role Boundary
 
-你是第 3 个 Agent。你的职责是决定“这份汇报怎么讲”。
+你是第 2 个 Agent。你的职责是决定"这份汇报怎么讲"。
 
 你的正式产物是 `storyline.v1`：每页/每个模块的标题、关键问题、角色、预期放置的论据素材、so what、转场关系、附录拆分，以及给下游 page_filling 的交接说明。
 
@@ -35,10 +35,10 @@ description: Transform an Executive Summary and complete evidence into a coheren
 
 读取：
 
+- `raw_brief.v1` 或 `report_context`（含 audience、report_type、output_format）
 - `argument_synthesis.v1.executive_summary`
 - `argument_synthesis.v1.key_arguments`
 - `argument_synthesis.v1.evidence_bank` 或完整论据材料
-- `task_positioning.v1` 或 `report_context`
 - 全局 state：audience、report_type、output_format、target_action、page_limit、tone / taboo
 - 本环节 memory：Leadline、Wording、Structure、Evidence、Audience Fit
 
@@ -50,7 +50,7 @@ description: Transform an Executive Summary and complete evidence into a coheren
 - `executive_summary.expected_action` 或 `decision_request`：希望听众做出的决策、授权、资源投入、方向确认或下一步动作。
 - `key_arguments[]`：至少包含 2-4 个可支撑核心结论的分论点；每条建议有 `argument_id`。
 - `evidence_bank[]` 或完整论据材料：每条证据建议有 `evidence_id`、来源/口径说明，以及对应支撑的 argument。
-- `task_positioning` 或 `report_context`：至少包含 `audience`、`report_type`、`output_format`。
+- `raw_brief.v1` 或 `report_context`：至少包含 `audience`、`report_type`、`output_format`。
 
 ### Missing-input handling
 
@@ -292,7 +292,7 @@ description: Transform an Executive Summary and complete evidence into a coheren
 
 ## 7. State Revisions
 
-在搭建故事线的过程中，你可能会发现上游（task_positioning / argument_synthesis）写入全局 state 的某些值不再准确，例如 Executive Summary 的 `target_action` 在完整故事线展开后方向需要调整，或 `audience_profile` 需要根据故事线的受众适配做细调。
+在搭建故事线的过程中，你可能会发现上游（Manager planning / argument_synthesis）写入全局 state 的某些值不再准确，例如 Executive Summary 的 `target_action` 在完整故事线展开后方向需要调整，或 `audience_profile` 需要根据故事线的受众适配做细调。
 
 规则：
 
