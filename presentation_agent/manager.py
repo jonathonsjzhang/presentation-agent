@@ -441,9 +441,19 @@ class ManagerOrchestrator:
                 missing.append("audience（汇报对象）")
             if not brief.get("output_format"):
                 missing.append("output_format（交付格式，如 ppt/html/docx）")
+            # Available workers for user to choose from
+            available_workers = [
+                "argument_synthesis", "storyline_design", "page_filling",
+                "format", "qa_preparation", "speaker_script"
+            ]
             state["current_actor"] = "human"
             state["human_gate"] = "brief"
-            state["pending_decision"] = {"brief": brief, "missing_fields": missing}
+            state["pending_decision"] = {
+                "brief": brief,
+                "missing_fields": missing,
+                "available_workers": available_workers,
+                "selected_workers": brief.get("selected_workers") or available_workers,
+            }
             state["status"] = "awaiting_brief_confirmation"
             self._save_state(state)
             return self._human_gate_result(state)
@@ -577,7 +587,15 @@ class ManagerOrchestrator:
         decision = state.get("pending_decision") or {}
         if gate == "brief":
             brief_data = decision.get("brief", {})
-            state["run_mode"] = decision.get("run_mode") or brief_data.get("run_mode") or "step_by_step"
+            # run_mode: "full_auto" | "step_by_step" | ["agent_id", ...]
+            raw_run_mode = decision.get("run_mode") or brief_data.get("run_mode")
+            if isinstance(raw_run_mode, list):
+                state["run_mode"] = raw_run_mode  # custom pause points
+                state["custom_pause_agents"] = raw_run_mode
+            elif raw_run_mode == "full_auto":
+                state["run_mode"] = "full_auto"
+            else:
+                state["run_mode"] = "step_by_step"  # default
             state["human_gate"] = None
             state["pending_decision"] = None
             state["current_actor"] = "manager"
@@ -760,8 +778,10 @@ class ManagerOrchestrator:
                 })
 
         if action in ("dispatch", "revise"):
-            # -- step_by_step: pause for human review before next worker --
-            if action == "dispatch" and state.get("run_mode") == "step_by_step":
+            # -- check if we should pause for human review --
+            if action == "dispatch" and _should_pause(
+                state.get("run_mode"), str(task.get("agent_id") or "")
+            ):
                 state["current_actor"] = "human"
                 state["human_gate"] = "worker_result"
                 state["pending_decision"] = decision
@@ -1017,6 +1037,13 @@ class ManagerOrchestrator:
         if gate == "brief":
             result["brief"] = decision.get("brief", {})
             result["missing_fields"] = decision.get("missing_fields", [])
+            result["available_workers"] = decision.get("available_workers", [])
+            result["selected_workers"] = decision.get("selected_workers", [])
+            result["run_mode_options"] = {
+                "full_auto": "全程自动，不中断",
+                "step_by_step": "每个 Worker 完成后暂停确认",
+                "custom": "指定暂停的 Worker 列表，如 [\"argument_synthesis\", \"format\"]",
+            }
             result["next_action"] = "human_feedback"
 
         elif gate == "plan":
@@ -1105,3 +1132,24 @@ class ManagerOrchestrator:
 
 # Temporary import compatibility for callers of the first Manager MVP.
 ManagerController = ManagerOrchestrator
+
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+
+def _should_pause(run_mode: Any, agent_id: str) -> bool:
+    """Determine whether to pause for human review after a worker completes.
+
+    - ``"full_auto"`` → never pause
+    - ``"step_by_step"`` → pause after every worker
+    - ``list[str]`` → pause only if ``agent_id`` is in the list
+    """
+    if run_mode == "full_auto":
+        return False
+    if run_mode == "step_by_step":
+        return True
+    if isinstance(run_mode, list):
+        return agent_id in run_mode
+    return False

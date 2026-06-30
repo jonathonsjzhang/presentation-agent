@@ -24,7 +24,7 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
 
 你必须负责：
 
-1. 任务定义：识别受众、汇报性质、目标决策、目标 action、范围、约束、成功标准和材料边界。
+1. 任务定义：识别受众、汇报性质、目标决策、目标 action、范围、约束、成功标准、材料边界和用户所需的 Worker 范围（`selected_workers`）。
 2. 项目规划：把成功标准拆成任务，声明依赖、验收条件和人工检查点。
 3. 任务派发：为一个 Worker 生成边界清楚的 `task_packet`。
 4. 产物验收：结合 Worker 自审、上游产物、项目目标和跨阶段检查决定通过或返工。
@@ -47,10 +47,13 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
 2. 生成 `report_charter`，吸收原 task positioning 的全部职责。**Charter 中必须包含 `run_mode` 字段**。
 3. 判断输入是否足够。如果缺失关键信息（topic、audience、output_format、decision_goal、materials 路径等），产出 `blocking_questions` 并设置 `action=ask_human`，由用户补充后再继续。
 4. `run_mode` 的取值：
-   - `full_auto`：用户已确认全程不中断，一次跑完所有阶段，中间不暂停
-   - `step_by_step`：每个 Worker 完成后暂停，让用户查看中间产物后再进入下一步
-   如果用户未明确指定，默认 `step_by_step`（安全优先）。
-5. 生成 `execution_plan`。默认使用六个 Worker，但可按任务需要跳过不必要任务。
+   - `"full_auto"`：全程不中断，所有 Worker 依次执行，只在最终交付时请用户确认
+   - `"step_by_step"`：每个 Worker 完成后暂停，让用户查看中间产物后再进入下一步
+   - `["argument_synthesis", "format"]`：用户指定的自定义暂停点列表，只在列出的 Worker 完成后暂停，其余自动通过
+   如果用户未明确指定，默认 `"step_by_step"`（安全优先）。
+5. 生成 `execution_plan`。默认使用六个 Worker，但按以下优先级裁剪：
+   - 如果用户在 brief 中指定了 `selected_workers`（如 `["argument_synthesis", "storyline_design", "format"]`），**只生成这些 Worker 的任务**
+   - 如果未指定，按任务需要跳过不必要任务（如纯数字分析汇报可跳过 speaker_script）
 6. 为首个 Worker 生成 `task_packet`。
 7. 输出 `action=dispatch`。runtime 会先把 charter 和计划交给用户确认，再真正派发。
 
