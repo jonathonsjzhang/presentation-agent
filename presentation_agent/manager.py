@@ -407,7 +407,7 @@ class ManagerOrchestrator:
             "mode": "manager_controlled",
             "status": "running",
             "current_actor": "manager",
-            "manager_phase": "planning",
+            "manager_phase": "brief_confirmation",
             "manager_step": "init",
             "last_event": "start",
             "spawn_adapter": self.workers.spawn_adapter.kind,
@@ -416,6 +416,7 @@ class ManagerOrchestrator:
             "tasks": [],
             "accepted_artifacts": [],
             "project_state": {},
+            "run_mode": None,  # set during brief confirmation: "full_auto" | "step_by_step"
             "created_at": now_iso(),
             "updated_at": now_iso(),
         }
@@ -428,6 +429,25 @@ class ManagerOrchestrator:
         actor = state.get("current_actor")
         if actor == "human":
             return self._human_gate_result(state)
+        phase = str(state.get("manager_phase") or "planning")
+
+        # --- brief confirmation: show the brief and ask user to confirm ---
+        if phase == "brief_confirmation":
+            brief = read_json(self.raw_brief_path, default={})
+            missing = []
+            if not brief.get("topic"):
+                missing.append("topic（汇报主题）")
+            if not brief.get("audience"):
+                missing.append("audience（汇报对象）")
+            if not brief.get("output_format"):
+                missing.append("output_format（交付格式，如 ppt/html/docx）")
+            state["current_actor"] = "human"
+            state["human_gate"] = "brief"
+            state["pending_decision"] = {"brief": brief, "missing_fields": missing}
+            state["status"] = "awaiting_brief_confirmation"
+            self._save_state(state)
+            return self._human_gate_result(state)
+
         if actor == "worker":
             task_dir = self.current_worker_dir(state)
             if task_dir is None:
@@ -555,6 +575,22 @@ class ManagerOrchestrator:
             raise StepError("当前没有等待人工确认的 Manager gate")
         gate = state.get("human_gate")
         decision = state.get("pending_decision") or {}
+        if gate == "brief":
+            brief_data = decision.get("brief", {})
+            state["run_mode"] = decision.get("run_mode") or brief_data.get("run_mode") or "step_by_step"
+            state["human_gate"] = None
+            state["pending_decision"] = None
+            state["current_actor"] = "manager"
+            state["manager_phase"] = "planning"
+            state["manager_step"] = "init"
+            state["last_event"] = "brief_confirmed"
+            state["status"] = "planning"
+            self._save_state(state)
+            self._append_decision("brief_confirmed",
+                f"用户确认了 brief，run_mode={state['run_mode']}",
+                {"brief": brief_data})
+            return {"actor": "manager", "step": "planning",
+                    "message": "Brief 已确认，开始规划。"}
         if gate == "plan":
             packet = decision.get("task_packet")
             if not isinstance(packet, dict):
@@ -562,6 +598,16 @@ class ManagerOrchestrator:
             state["human_gate"] = None
             state["pending_decision"] = None
             return self._dispatch(state, packet, reason="human approved Manager plan")
+        if gate == "worker_result":
+            # In step_by_step mode: user reviewed intermediate output, proceed to next worker
+            state["human_gate"] = None
+            state["pending_decision"] = None
+            packet = decision.get("task_packet")
+            if not isinstance(packet, dict):
+                raise StepError("已确认中间产物，但 Manager decision 中没有 task_packet")
+            state["current_actor"] = "manager"
+            self._save_state(state)
+            return self._dispatch(state, packet, reason="user reviewed intermediate result")
         if gate == "final":
             state["status"] = "completed"
             state["current_actor"] = "human"
@@ -714,6 +760,14 @@ class ManagerOrchestrator:
                 })
 
         if action in ("dispatch", "revise"):
+            # -- step_by_step: pause for human review before next worker --
+            if action == "dispatch" and state.get("run_mode") == "step_by_step":
+                state["current_actor"] = "human"
+                state["human_gate"] = "worker_result"
+                state["pending_decision"] = decision
+                state["status"] = "awaiting_intermediate_review"
+                self._save_state(state)
+                return self._human_gate_result(state)
             return self._dispatch(
                 state,
                 decision["task_packet"],
@@ -942,22 +996,49 @@ class ManagerOrchestrator:
     def _human_gate_result(self, state: dict[str, Any]) -> dict[str, Any]:
         decision = state.get("pending_decision") or {}
         gate = state.get("human_gate")
-        return {
+
+        present_to_user = decision.get("user_message") or {
+            "brief": "请确认以下 brief 信息是否完整、准确。可补充 topic、audience、output_format，并选择 run_mode（full_auto 一次性跑完 / step_by_step 每步确认）。",
+            "plan": "请确认 Manager 的任务定义和执行计划。",
+            "worker_result": "当前步骤已完成，请查看中间产物。如需继续，确认后进入下一步。",
+            "final": "所有任务已完成，请确认最终交付物。",
+            "decision": "请确认 Manager 的决策。",
+        }.get(gate, "请确认。")
+
+        result: dict[str, Any] = {
             "actor": "human",
             "step": "manager_gate",
             "gate": gate,
             "status": state.get("status"),
-            "report_charter": state.get("report_charter") if gate == "plan" else None,
-            "execution_plan": state.get("execution_plan") if gate == "plan" else None,
-            "acceptance_report": decision.get("acceptance_report"),
-            "questions_for_human": decision.get("questions_for_human", []),
-            "present_to_user": decision.get("user_message") or (
-                "请确认 Manager 的任务定义和执行计划。"
-                if gate == "plan"
-                else "请确认 Manager 的决策。"
-            ),
-            "next_action": "report_approve" if gate in ("plan", "final") else "human_feedback",
+            "present_to_user": present_to_user,
+            "run_mode": state.get("run_mode"),
         }
+
+        if gate == "brief":
+            result["brief"] = decision.get("brief", {})
+            result["missing_fields"] = decision.get("missing_fields", [])
+            result["next_action"] = "human_feedback"
+
+        elif gate == "plan":
+            result["report_charter"] = state.get("report_charter")
+            result["execution_plan"] = state.get("execution_plan")
+            result["next_action"] = "report_approve"
+
+        elif gate == "worker_result":
+            result["acceptance_report"] = decision.get("acceptance_report")
+            result["next_task"] = decision.get("task_packet", {}).get("agent_id")
+            result["accepted_artifacts"] = state.get("accepted_artifacts", [])
+            result["next_action"] = "report_approve"
+
+        elif gate in ("final", "decision"):
+            result["acceptance_report"] = decision.get("acceptance_report")
+            result["questions_for_human"] = decision.get("questions_for_human", [])
+            result["next_action"] = "report_approve" if gate == "final" else "human_feedback"
+
+        else:
+            result["next_action"] = "human_feedback"
+
+        return result
 
     def _replace_task(self, state: dict[str, Any], current: dict[str, Any]) -> None:
         tasks = state.get("tasks", [])

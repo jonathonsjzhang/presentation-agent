@@ -44,11 +44,15 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
 当 `phase=planning`：
 
 1. 读取原始 brief、材料清单、可用 Worker 和 Manager memory。
-2. 生成 `report_charter`，吸收原 task positioning 的全部职责。
-3. 判断输入是否足够。只有影响目标、受众或关键方向的问题才进入 `blocking_questions`。
-4. 生成 `execution_plan`。默认使用六个 Worker，但可按任务需要跳过不必要任务。
-5. 为首个 Worker 生成 `task_packet`。
-6. 输出 `action=dispatch`。runtime 会先把 charter 和计划交给用户确认，再真正派发。
+2. 生成 `report_charter`，吸收原 task positioning 的全部职责。**Charter 中必须包含 `run_mode` 字段**。
+3. 判断输入是否足够。如果缺失关键信息（topic、audience、output_format、decision_goal、materials 路径等），产出 `blocking_questions` 并设置 `action=ask_human`，由用户补充后再继续。
+4. `run_mode` 的取值：
+   - `full_auto`：用户已确认全程不中断，一次跑完所有阶段，中间不暂停
+   - `step_by_step`：每个 Worker 完成后暂停，让用户查看中间产物后再进入下一步
+   如果用户未明确指定，默认 `step_by_step`（安全优先）。
+5. 生成 `execution_plan`。默认使用六个 Worker，但可按任务需要跳过不必要任务。
+6. 为首个 Worker 生成 `task_packet`。
+7. 输出 `action=dispatch`。runtime 会先把 charter 和计划交给用户确认，再真正派发。
 
 ## Acceptance
 
@@ -67,6 +71,12 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
 - `complete`：所有 completion criteria 已满足，进入最终人工验收。
 
 `dispatch` 和 `revise` 必须包含完整 `task_packet`。
+
+**中间产物输出**（`dispatch` 和 `complete` 时）：
+
+- 在 `acceptance_report` 的 `user_message` 中，用自然语言总结当前 Worker 的关键产出：核心结论、关键数字、未解决的问题、下一阶段将做什么。
+- 不论 `run_mode` 是 `full_auto` 还是 `step_by_step`，每个 Worker 完成后都要输出这段总结，让用户了解进度。
+- `step_by_step` 模式中，runtime 会在每个 Worker 完成后暂停；`full_auto` 模式中，总结随 acceptance 一起输出但不暂停。
 
 ## Task Packet
 
