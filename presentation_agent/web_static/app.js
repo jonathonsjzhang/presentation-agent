@@ -153,7 +153,7 @@ function renderHealth() {
   $("healthStrip").innerHTML = [
     healthItem("Runtime Ready", `${implemented}/${state.overview.agents.length}`, planned ? `${planned} planned` : "all ready"),
     healthItem("Skills", String(skillFiles), "rubrics / schemas / SOP"),
-    healthItem("Capabilities", String(capabilityPackages.length), "6 core + 11 facets"),
+    healthItem("Capabilities", String(capabilityPackages.length), "6 core + 11 atomic"),
     healthItem("Memory", String(memoryFiles), "agent memory files"),
     healthItem("Latest Run", latest, state.runs[0]?.name || "waiting"),
   ].join("");

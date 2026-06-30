@@ -1,0 +1,52 @@
+{
+  "rules": [
+    {
+      "id": "AUD-EXEC-SL-G01",
+      "applies_to": ["storyline_design"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "coordination_lens",
+      "instruction": "突出待拍板事项、跨部门卡点、责任关系和不协调的后果；结尾明确需要总办确认什么。"
+    },
+    {
+      "id": "AUD-EXEC-AS-G01",
+      "applies_to": ["argument_synthesis"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "coordination_lens",
+      "instruction": "论点必须说明需要拍板或协调什么、卡点在哪里、延迟决策会造成什么后果。"
+    },
+    {
+      "id": "AUD-EXEC-PF-G01",
+      "applies_to": ["page_filling"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "coordination_lens",
+      "instruction": "分析深度不减：deep_dive 场景下还原分析过程（数值+基线+口径+对比），不因受众级别而砍证据。协调相关的内容（待拍板项/owner/时间窗）填入每页 so_what 或行动建议页，不替代分析内容。没有来源的 owner/timeline 不编造。"
+    },
+    {
+      "id": "AUD-EXEC-QA-G01",
+      "applies_to": ["qa_preparation"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "question_lens",
+      "instruction": "优先准备责任归属、资源冲突、协调失败后果和决策时点等总办问题。"
+    },
+    {
+      "id": "AUD-EXEC-FM-G01",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "audience_fit",
+      "instruction": "正式材料优先呈现拍板请求、责任边界、资源冲突和决策时点，背景压缩到理解结论所需最少。"
+    },
+    {
+      "id": "AUD-EXEC-SS-G01",
+      "applies_to": ["speaker_script"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "delivery_tone",
+      "instruction": "讲法直接呈现结论、卡点和拍板请求，不用长篇铺设分析背景。"
+    }
+  ]
+}

@@ -16,7 +16,7 @@
 - [x] P4：其余 4 个内容 Worker 已迁移，generation instruction 缩短约 42%-78%，review rubric 缩短约 69%-84%；
 - [x] P5 核心链路：namespaced context、字段投影、大字段预览/引用、context manifest 与 reviewer 上游信号；
 - [x] P6：Format 拆为 PPT / document / HTML 三种执行能力，renderer 与 capability 交叉校验；
-- [x] P7：memory owner/scope 过滤、反馈路由与 facet promotion；
+- [x] P7：memory owner/scope 过滤、反馈路由与 atomic rubric promotion；
 - [x] P8：Manager/Web/Host Skill、可观测性与默认切换；
 - [x] 270 种 Worker/profile bundle 组合编译通过；
 - [x] PPT、DOCX、HTML renderer smoke tests 通过；
@@ -85,9 +85,9 @@ skills/speaker_script/
 将它们逐步收缩为 core skill；新增：
 
 ```text
-skills/facets/audience/*
-skills/facets/report_type/*
-skills/facets/format/*
+skills/atomic/audience/*
+skills/atomic/report_type/*
+skills/atomic/format/*
 ```
 
 这样 `configs/agents.json`、schema 路径、旧 run 和 Web 文件浏览都不会立即失效。是否最终整理为 `skills/core/*`，放到全部迁移稳定后再决定。
@@ -141,7 +141,7 @@ data/agents/<agent_id>/learning_log.jsonl
 
 | 模块 | 主要文件 | 修改性质 |
 |---|---|---|
-| 配置与枚举 | `configs/agents.json`、新增 `configs/capabilities.json` | 定义合法 profile、facet 注册表、feature flag |
+| 配置与枚举 | `configs/agents.json`、新增 `configs/capabilities.json` | 定义合法 profile、atomic capability 注册表、feature flag |
 | Manager 契约 | `skills/manager/SKILL.md`、`skills/manager/schemas/report_charter.v1.json`、`task_packet.v1.json` | 增加业务进展汇报和 profile 归一规则 |
 | Capability runtime | `presentation_agent/skill_package.py`、新增 `presentation_agent/capabilities/*` | 解析、组合、冲突检查、fingerprint |
 | Worker runtime | `presentation_agent/loop.py`、`presentation_agent/step.py`、`presentation_agent/skills/generic.py` | 按本轮 profile 编译 Skill，并确保 revise/review 使用同一版本 |
@@ -310,7 +310,7 @@ presentation_agent/capabilities/
 | 文件 | 职责 |
 |---|---|
 | `models.py` | `CapabilitySpec`、`CapabilitySelection`、`CompiledSkillPackage` |
-| `registry.py` | 加载 `configs/capabilities.json` 和 facet manifest |
+| `registry.py` | 加载 `configs/capabilities.json` 和 atomic capability manifest |
 | `resolver.py` | 根据 Worker + report profile 选择 core/audience/report/format |
 | `compiler.py` | 过滤规则、合并 instructions/rubrics/schema/tools、检查冲突 |
 | `budget.py` | 计算各区块预算并产生告警 |
@@ -363,12 +363,12 @@ compile_skill_package(
 4. 将 selection/fingerprint 写入 `run_state.json`；
 5. review/revise 时按 fingerprint 重新加载或读取缓存，禁止中途漂移。
 
-Manager Skill 继续使用 legacy `load_skill_package(root, "manager")`，不参与 facet 编译。
+Manager Skill 继续使用 legacy `load_skill_package(root, "manager")`，不参与 atomic capability 编译。
 
 ### 组合与冲突规则
 
 - 每个 Worker 必须恰好有 1 个 core；
-- 每个维度必须恰好选中 1 个 facet；
+- 每个维度必须恰好选中 1 个 atomic capability；
 - 只合并 `applies_to` 包含当前 Worker 的规则；
 - rubric ID 必须唯一；
 - 同一 `property` 出现相互冲突的 P0 时编译失败；
@@ -394,7 +394,7 @@ tests/test_skill_compiler.py
 
 ### 完成标准
 
-- 空 facet 或等价 facet 下，compiled package 与 legacy 行为一致；
+- 空 atomic capability 或等价 atomic capability 下，compiled package 与 legacy 行为一致；
 - runtime 可记录 compiled manifest；
 - 所有现有测试保持通过；
 - 仍未修改实际 Skill 内容。
@@ -413,10 +413,10 @@ tests/test_skill_compiler.py
 profile → resolve → compile → generation → review → revise → manifest → budget
 ```
 
-### 新增 11 个 facet 包
+### 新增 11 个 atomic capability 包
 
 ```text
-skills/facets/
+skills/atomic/
 ├── audience/
 │   ├── board/
 │   ├── exec_office/
@@ -460,7 +460,7 @@ rubrics.json
 - 通用 hard constraints；
 - `storyline.v1` output contract。
 
-从 `rubrics.json` 中把 audience/report/format 专属 rubric 移入 facet，保留 storyline 通用 rubric。
+从 `rubrics.json` 中把 audience/report/format 专属 rubric 移入 atomic capability 包，保留 storyline 通用 rubric。
 
 长 `fail_examples / weak_examples` 移到：
 
@@ -512,7 +512,7 @@ skills/storyline_design/references/rubric_examples.md
 
 如果未满足，优先调整：
 
-1. core 与 facet 的边界；
+1. core 与 atomic capability 的边界；
 2. rules 粒度；
 3. compact rubric 字段；
 4. profile 归一逻辑。
@@ -544,7 +544,7 @@ argument_synthesis
    - report-type 规则；
    - format 规则；
    - 重复或冲突规则。
-2. 把 facet 规则追加到现有 11 个 facet 包，并设置准确 `applies_to`。
+2. 把 atomic capability 规则追加到现有 11 个 atomic capability 包，并设置准确 `applies_to`。
 3. 从原 Worker Skill 删除已迁移内容。
 4. 保持 output schema 不变。
 5. 增加 prompt isolation 测试。
@@ -554,7 +554,7 @@ argument_synthesis
 ### 推荐迁移顺序原因
 
 - `argument_synthesis`：最接近任务目标，受众/汇报性质差异最明显；
-- `page_filling`：能验证 facet 如何落到信息密度与图表 brief；
+- `page_filling`：能验证 atomic capability 如何落到信息密度与图表 brief；
 - `qa_preparation`：能验证 audience lens 和 report scope；
 - `speaker_script`：最后迁移，依赖前面正式材料与 Q&A 已稳定。
 
@@ -569,8 +569,8 @@ skills/qa_preparation/SKILL.md
 skills/qa_preparation/rubrics.json
 skills/speaker_script/SKILL.md
 skills/speaker_script/rubrics.json
-skills/facets/*/rules.json
-skills/facets/*/rubrics.json
+skills/atomic/*/rules.json
+skills/atomic/*/rubrics.json
 ```
 
 ### 完成标准
@@ -578,7 +578,7 @@ skills/facets/*/rubrics.json
 - 5 个内容 Worker 全部使用 compiled bundle；
 - schema 无变化；
 - 每个 Worker 都有 legacy/compiled 对比；
-- 单个 facet 规则只有一个事实源；
+- 单个 atomic capability 规则只有一个事实源；
 - 旧 Worker SKILL 不再包含完整 5×3×3 适配表。
 
 ### 回滚
@@ -714,20 +714,20 @@ tests/test_context_projection.py
 把当前三套内容迁移到：
 
 ```text
-skills/facets/format/ppt/
+skills/atomic/format/ppt/
 ├── SKILL.md
 ├── rules.json
 ├── rubrics.json
 ├── tools.json
 └── references/mck_ppt.md
 
-skills/facets/format/document/
+skills/atomic/format/document/
 ├── SKILL.md
 ├── rules.json
 ├── rubrics.json
 └── tools.json
 
-skills/facets/format/html/
+skills/atomic/format/html/
 ├── SKILL.md
 ├── rules.json
 ├── rubrics.json
@@ -788,7 +788,7 @@ format Worker 单独保留 legacy flag；内容 Worker 不受影响。
 
 ## 11. P7：Memory Scope、反馈路由与 Promotion
 
-> 实施状态：已完成。旧 memory 自动补 core owner 与 wildcard scope；检索和 review scan 先做 capability scope 过滤；promotion 根据 owner 写入 core 或 facet rubric，交叉窄 scope 默认拦截。
+> 实施状态：已完成。旧 memory 自动补 core owner 与 wildcard scope；检索和 review scan 先做 capability scope 过滤；promotion 根据 owner 写入 core 或 atomic rubric，交叉窄 scope 默认拦截。
 
 ### 目标
 
@@ -867,9 +867,9 @@ skills/<agent_id>/rubrics.json
 
 ```text
 core.*       → skills/<agent_id>/rubrics.json
-audience.*   → skills/facets/audience/<id>/rubrics.json
-report.*     → skills/facets/report_type/<id>/rubrics.json
-format.*     → skills/facets/format/<id>/rubrics.json
+audience.*   → skills/atomic/audience/<id>/rubrics.json
+report.*     → skills/atomic/report_type/<id>/rubrics.json
+format.*     → skills/atomic/format/<id>/rubrics.json
 ```
 
 交叉 scope 条目默认不允许自动 promotion，必须先人工泛化。
@@ -881,7 +881,7 @@ format.*     → skills/facets/format/<id>/rubrics.json
   - apply 前展示落点。
 - `presentation_agent/web.py`、`web_static/app.js`
   - Learning Loop 展示 capability owner 和 scope；
-  - facet promotion 可从界面确认。
+  - atomic rubric promotion 可从界面确认。
 
 ### 测试
 
@@ -898,7 +898,7 @@ tests/test_web_learning.py
 - board memory 不进入 external run；
 - PPT memory 不进入 document run；
 - core memory 仍正常生效；
-- promotion 写到正确 facet；
+- promotion 写到正确 atomic capability；
 - 交叉 scope promotion 被拦截。
 
 ### 完成标准
@@ -968,7 +968,7 @@ runtime 必须重新解析并校验，不直接信任 Manager 写入的能力路
 - profile-scoped memory；
 - legacy/compiled/context mode。
 
-Web 的 Agent Detail 仍以 6 个 Worker 为主，不把 facet 展示成 17 个新 Agent。
+Web 的 Agent Detail 仍以 6 个 Worker 为主，不把 atomic capability 展示成 17 个新 Agent。
 
 ### Host Adapter
 
@@ -984,7 +984,7 @@ Host 只需要知道：
 
 - 继续执行 `report next / submit / approve / feedback`；
 - 读取 runtime 生成的 compiled instruction；
-- 不自行重新组合 facet。
+- 不自行重新组合 atomic capability。
 
 不要把 capability 选择规则复制进 Host Skill，单一事实源仍在 runtime。
 

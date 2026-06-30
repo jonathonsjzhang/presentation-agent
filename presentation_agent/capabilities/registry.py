@@ -38,7 +38,7 @@ class CapabilityRegistry:
         for dimension, values in self.config.get("dimensions", {}).items():
             package_kind = kind_paths[dimension]
             for value in values:
-                spec, _ = self.facet(package_kind, str(value))
+                spec, _ = self.atomic_capability(package_kind, str(value))
                 rows.append(
                     {
                         "id": spec.id,
@@ -50,8 +50,8 @@ class CapabilityRegistry:
                 )
         return rows
 
-    def facet(self, kind: str, value: str) -> tuple[CapabilitySpec, dict[str, Any]]:
-        package_dir = self.root / "skills" / "facets" / kind / value
+    def atomic_capability(self, kind: str, value: str) -> tuple[CapabilitySpec, dict[str, Any]]:
+        package_dir = self.root / "skills" / "atomic" / kind / value
         manifest_path = package_dir / "manifest.json"
         if not manifest_path.exists():
             raise CapabilityError(f"Capability manifest not found: {manifest_path}")

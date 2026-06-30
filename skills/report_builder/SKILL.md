@@ -165,7 +165,7 @@ CLI 会返回 JSON，记录：
 
 Worker 指令已经包含 runtime 编译后的 core + audience + report type + format
 能力，以及投影后的命名空间化 context。宿主只执行该指令，不自行选择、拼接
-或复制 facet 规则，也不要为了“补上下文”把历史 artifact 全量塞回 prompt。
+或复制 atomic capability 规则，也不要为了“补上下文”把历史 artifact 全量塞回 prompt。
 
 ## Sub-agent 派生（隔离上下文执行）
 

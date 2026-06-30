@@ -1,10 +1,17 @@
 {
-  "version": "v2",
+  "version": "v3",
   "agent_id": "page_filling",
   "rubrics": [
     {"id": "PAGE-CORE-001", "severity": "P0", "dimension": "storyline_fidelity", "criterion": "内容不得改变 storyline takeaway、顺序或证据边界。", "check": "按 source unit 核对。", "fix": "恢复 storyline 映射。"},
     {"id": "PAGE-CORE-002", "severity": "P0", "dimension": "source_integrity", "criterion": "事实、数字和图表要求必须可追溯。", "check": "核对 sources、evidence refs 和 gaps。", "fix": "补来源、降强度或标记缺口。"},
     {"id": "PAGE-CORE-003", "severity": "P1", "dimension": "proof_chain", "criterion": "每个单元包含足以证明 takeaway 的证据链。", "check": "检查 proof chain 是否完整且不重复。", "fix": "补推理桥或删弱内容。"},
-    {"id": "PAGE-CORE-004", "severity": "P1", "dimension": "visual_brief", "criterion": "visual plan 描述关系、数据和 reader takeaway。", "check": "检查是否只是泛泛说做图。", "fix": "结构化图表 brief 或显式阻断。"}
+    {"id": "PAGE-CORE-004", "severity": "P1", "dimension": "visual_brief", "criterion": "visual plan 描述关系、数据和 reader takeaway，不只写图表类型。", "check": "检查是否只泛泛说做图。", "fix": "结构化图表 brief 或显式阻断。"},
+
+    {"id": "PAGE-INFO-001", "severity": "warning", "dimension": "information_sufficiency", "criterion": "数据型 deep-dive 页期望含主证据+辅助证据+边界信息；全是概括表述时提示。非数据页豁免。", "check": "对照 page_archetypes 该页型期望。", "fix": "建议补具体数值/对比/边界，但**不判不通过**。"},
+    {"id": "PAGE-LOGIC-001", "severity": "P1", "dimension": "argument_chain", "criterion": "每条证据需说明 supports 什么，evidence_steps 间非纯并列。", "check": "检查 evidence_steps[].supports 和 relation 是否有意义。", "fix": "补 relation 或 inference。"},
+    {"id": "PAGE-INFER-001", "severity": "P1", "dimension": "claim_calibration", "criterion": "page_takeaway 不强于 claim_strength 与证据能支持的强度。", "check": "比对 takeaway 措辞 vs claim_strength（fact/finding/implication/recommendation/hypothesis）。", "fix": "降结论强度或补证据。"},
+    {"id": "PAGE-CAVEAT-001", "severity": "P0", "dimension": "caveat_protection", "criterion": "影响结论强度的 caveat 必须页面可见，不得被反向改写成行动建议。", "check": "核对 data_gaps/caveat 是否被吞或反转。", "fix": "恢复 caveat。"},
+    {"id": "PAGE-COMPARE-001", "severity": "warning", "dimension": "comparison_quality", "criterion": "对比型页期望使用 entities×dimensions 矩阵对比，而非多段并列描述。", "check": "检查 comparison_matrix 是否存在或退化。", "fix": "建议结构化为矩阵，但**不判不通过**。"},
+    {"id": "PAGE-HANDOFF-001", "severity": "P1", "dimension": "format_handoff", "criterion": "必须说明主视觉表达什么、哪些数字上屏、哪些 caveat 保留。", "check": "检查 format_handoff_notes 完整度（primary_focus / on_screen_numbers / must_keep_caveats）。", "fix": "补 handoff 意图。"}
   ]
 }

@@ -665,11 +665,11 @@ class MemoryStore:
         if owner.startswith("core."):
             return self.root / "skills" / owner.removeprefix("core.") / "rubrics.json"
         if owner.startswith("audience."):
-            return self.root / "skills" / "facets" / "audience" / owner.removeprefix("audience.") / "rubrics.json"
+            return self.root / "skills" / "atomic" / "audience" / owner.removeprefix("audience.") / "rubrics.json"
         if owner.startswith("report."):
-            return self.root / "skills" / "facets" / "report_type" / owner.removeprefix("report.") / "rubrics.json"
+            return self.root / "skills" / "atomic" / "report_type" / owner.removeprefix("report.") / "rubrics.json"
         if owner.startswith("format."):
-            return self.root / "skills" / "facets" / "format" / owner.removeprefix("format.") / "rubrics.json"
+            return self.root / "skills" / "atomic" / "format" / owner.removeprefix("format.") / "rubrics.json"
         raise ValueError(f"unsupported memory owner: {owner}")
 
     def _is_cross_scoped(self, item: MemoryItem) -> bool:

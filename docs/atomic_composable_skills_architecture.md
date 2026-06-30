@@ -40,9 +40,9 @@ flowchart LR
     U["用户需求"] --> M["Manager<br/>Report Charter + Execution Plan"]
     M --> R["Capability Resolver"]
     R --> C["Skill Compiler"]
-    A["1 个 Audience Facet"] --> C
-    T["1 个 Report-Type Facet"] --> C
-    F["1 个 Format Facet"] --> C
+    A["1 个 Audience Atomic Capability"] --> C
+    T["1 个 Report-Type Atomic Capability"] --> C
+    F["1 个 Format Atomic Capability"] --> C
     K["当前 Worker Core"] --> C
     X["Scoped Memory"] --> C
     C --> B["Compiled Skill Bundle"]
@@ -266,7 +266,7 @@ skills/
 │   ├── format/
 │   ├── qa_preparation/
 │   └── speaker_script/
-└── facets/
+└── atomic/
     ├── audience/
     │   ├── board/
     │   ├── exec_office/
@@ -625,7 +625,7 @@ core rubrics
 
 - memory 增加 owner 和 scope；
 - 更新反馈路由；
-- promotion 能写入 core/facet 对应 rubric；
+- promotion 能写入 core/atomic 对应 rubric；
 - 对旧 memory 默认映射到原 Worker core，避免丢失历史。
 
 ### Phase 6：评测后切换默认

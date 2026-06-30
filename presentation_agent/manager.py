@@ -877,7 +877,7 @@ class ManagerOrchestrator:
             "capability_registry": {
                 "runtime": registry.runtime,
                 "dimensions": registry.config.get("dimensions", {}),
-                "facet_count": len(registry.inventory()),
+                "atomic_capability_count": len(registry.inventory()),
             },
             "recommended_routes": self._recommended_routes(
                 profile.get("report_type", "deep_dive")

@@ -29,7 +29,7 @@ def compile_skill_package(
     try:
         profile = normalize_report_profile(input_data, root=root)
         selection = resolve_capabilities(spec.id, profile)
-        facet_keys = (
+        atomic_keys = (
             ("audience", profile.audience),
             ("report_type", profile.report_type),
             ("format", profile.output_format),
@@ -38,16 +38,16 @@ def compile_skill_package(
         rubrics = list(legacy.rubrics)
         tools: list[str] = []
         context_requirements: list[str] = []
-        facet_specs = []
+        atomic_specs = []
         seen_rubric_ids = {
             row.get("id") for row in rubrics if isinstance(row, dict) and row.get("id")
         }
         property_owners: dict[str, tuple[str, str]] = {}
 
-        for kind, value in facet_keys:
-            facet_spec, package = registry.facet(kind, value)
-            facet_specs.append(facet_spec)
-            if facet_spec.applies_to and spec.id not in facet_spec.applies_to:
+        for kind, value in atomic_keys:
+            atomic_spec, package = registry.atomic_capability(kind, value)
+            atomic_specs.append(atomic_spec)
+            if atomic_spec.applies_to and spec.id not in atomic_spec.applies_to:
                 continue
             matching_rules = [
                 rule for rule in package["rules"] if _applies(rule, spec.id)
@@ -56,11 +56,11 @@ def compile_skill_package(
             lines = [line for line in lines if line]
             if lines:
                 instruction_sections.append(
-                    f"## Active capability: {facet_spec.id}\n"
+                    f"## Active capability: {atomic_spec.id}\n"
                     + "\n".join(f"- {line}" for line in lines)
                 )
             for rule in matching_rules:
-                _check_property_conflict(rule, facet_spec.id, property_owners)
+                _check_property_conflict(rule, atomic_spec.id, property_owners)
                 context_requirements.extend(
                     str(item) for item in rule.get("context_requirements", [])
                 )
@@ -69,7 +69,7 @@ def compile_skill_package(
             ]
             if not applicable_rubrics:
                 applicable_rubrics = [
-                    _rubric_from_rule(rule, facet_spec.id)
+                    _rubric_from_rule(rule, atomic_spec.id)
                     for rule in matching_rules
                     if "review" in rule.get("phase", [])
                 ]
@@ -83,11 +83,11 @@ def compile_skill_package(
             tools.extend(str(tool) for tool in package["tools"])
 
         selected_ids = set(selection.capability_ids)
-        for facet_spec in facet_specs:
-            conflicts = selected_ids.intersection(facet_spec.incompatible_with)
+        for atomic_spec in atomic_specs:
+            conflicts = selected_ids.intersection(atomic_spec.incompatible_with)
             if conflicts:
                 raise CapabilityError(
-                    f"Capability {facet_spec.id} conflicts with {sorted(conflicts)}"
+                    f"Capability {atomic_spec.id} conflicts with {sorted(conflicts)}"
                 )
 
         instructions = "\n\n".join(section for section in instruction_sections if section)

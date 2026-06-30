@@ -1,0 +1,457 @@
+{
+  "schema": "page_content.v2",
+  "description": "v1 超集：所有 v1 字段保留，新增 quant / comparison_matrix / qualitative_evidence / claim_strength 四个可选增量。format 侧当前以宽松镜像消费 v1 字段，v2 新增字段不阻塞。",
+  "type": "object",
+  "required": [
+    "agent_id",
+    "schema",
+    "topic",
+    "audience",
+    "report_type",
+    "output_format",
+    "pages",
+    "global_sources",
+    "global_data_gaps",
+    "format_handoff_summary"
+  ],
+  "properties": {
+    "agent_id": { "const": "page_filling" },
+    "schema": { "const": "page_content.v2" },
+    "topic": { "type": "string" },
+    "audience": { "type": "string", "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"] },
+    "report_type": { "type": "string", "enum": ["deep_dive", "business_progress", "quick_sync"] },
+    "output_format": { "type": "string", "enum": ["document", "ppt", "html"] },
+    "storyline_trace": {
+      "type": "object",
+      "properties": {
+        "storyline_schema": { "type": "string" },
+        "selected_story_angle": { "type": "string" },
+        "title_read_test": { "type": "string" },
+        "source_artifact": { "type": "string" }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "page_no",
+          "unit_type",
+          "title",
+          "source_storyline_title",
+          "page_type",
+          "page_brief",
+          "page_takeaway",
+          "proof_chain",
+          "content_blocks",
+          "visual_plan",
+          "sources",
+          "data_gaps",
+          "appendix_candidates",
+          "format_handoff_notes"
+        ],
+        "properties": {
+          "page_no": { "type": "integer" },
+          "unit_type": { "type": "string", "enum": ["page", "section", "module"] },
+          "title": { "type": "string" },
+          "source_storyline_title": { "type": "string" },
+          "reason_for_title_change": { "type": "string" },
+          "key_question": { "type": "string" },
+          "role_in_story": { "type": "string" },
+          "tag": { "type": "string" },
+          "page_type": { "type": "string" },
+          "claim_strength": {
+            "type": "string",
+            "enum": ["fact", "finding", "implication", "recommendation", "hypothesis"],
+            "description": "【v2 增量】page_takeaway 的结论强度。fact=事实陈述 / finding=分析发现 / implication=衍生推演 / recommendation=行动建议 / hypothesis=待验证假设。用于 review 判断 takeaway 是否超出证据能支持的强度。"
+          },
+          "page_brief": {
+            "type": "object",
+            "required": ["purpose", "audience_question", "story_role", "content_strategy"],
+            "properties": {
+              "purpose": { "type": "string" },
+              "audience_question": { "type": "string" },
+              "story_role": { "type": "string" },
+              "content_strategy": { "type": "string" }
+            }
+          },
+          "page_takeaway": { "type": "string" },
+          "title_support_risk": { "type": "string" },
+          "proof_chain": {
+            "type": "object",
+            "required": ["claim", "evidence_steps", "logic_bridge", "so_what", "confidence"],
+            "properties": {
+              "claim": { "type": "string" },
+              "evidence_steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["evidence_ref_or_material", "supports"],
+                  "properties": {
+                    "evidence_ref_or_material": { "type": "string" },
+                    "supports": { "type": "string" },
+                    "source_status": { "type": "string" },
+                    "relation": {
+                      "type": "string",
+                      "enum": ["direct_support", "comparison", "decomposition", "mechanism", "caveat"],
+                      "description": "【v2 增量】证据与 claim 的关系类型。"
+                    },
+                    "quant": {
+                      "type": "object",
+                      "description": "【v2 增量】量化证据的结构化承载位（可选，数据型页面期望填充）。",
+                      "properties": {
+                        "value": { "type": "string", "description": "主数值，如 '27%'" },
+                        "baseline": { "type": "string", "description": "对比基线，如 '非纯白用户 12%'" },
+                        "delta": { "type": "string", "description": "差值或相对变化，如 '+14pp'" },
+                        "metric": { "type": "string", "description": "口径/指标名，如 '30日强留存率'" },
+                        "unit_scope": { "type": "string", "description": "实体·时间窗·样本，如 '元宝 / 2025Q2 / n=1,243'" }
+                      }
+                    }
+                  }
+                }
+              },
+              "logic_bridge": { "type": "string" },
+              "so_what": { "type": "string" },
+              "confidence": { "type": "string" }
+            }
+          },
+          "comparison_matrix": {
+            "type": "object",
+            "description": "【v2 增量】多实体对比的结构化矩阵（可选，对比型页面期望填充）。",
+            "properties": {
+              "entities": {
+                "type": "array",
+                "description": "被对比的实体列表",
+                "items": { "type": "string" }
+              },
+              "dimensions": {
+                "type": "array",
+                "description": "对比维度列表",
+                "items": { "type": "string" }
+              },
+              "cells": {
+                "type": "array",
+                "description": "entities × dimensions 的矩阵值，cells[i][j] = entities[i] 在 dimensions[j] 上的值",
+                "items": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "reader_takeaway": {
+                "type": "string",
+                "description": "读者应从矩阵中读出的核心判断"
+              },
+              "source_refs": {
+                "type": "array",
+                "description": "矩阵数据的来源引用",
+                "items": { "type": "string" }
+              }
+            }
+          },
+          "qualitative_evidence": {
+            "type": "array",
+            "description": "【v2 增量】定性证据/用户原声（可选，有访谈/用户研究则期望填充）。只能用于机制说明或例证，不能单独支撑量化结论。",
+            "items": {
+              "type": "object",
+              "required": ["quote", "attribution", "supports"],
+              "properties": {
+                "quote": { "type": "string", "description": "用户原声或定性观察原文" },
+                "attribution": { "type": "string", "description": "来源署名，如 '非纯白用户 / 访谈 U-12'" },
+                "supports": { "type": "string", "description": "该引用支撑论证的哪一部分" },
+                "role": {
+                  "type": "string",
+                  "enum": ["mechanism", "illustration", "counterpoint"],
+                  "description": "mechanism=解释机制 / illustration=例证 / counterpoint=反例"
+                },
+                "source_ref": { "type": "string", "description": "上游 artifact 来源引用" }
+              }
+            }
+          },
+          "content_blocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["block_type", "draft_content", "evidence_refs", "display_priority", "source_status"],
+              "properties": {
+                "block_type": { "type": "string" },
+                "draft_content": { "type": "string" },
+                "evidence_refs": { "type": "array", "items": { "type": "string" } },
+                "display_priority": { "type": "string" },
+                "source_status": { "type": "string" },
+                "format_hint": { "type": "string" },
+                "paragraph_role": {
+                  "type": "string",
+                  "description": "文档输出时的段落角色，例如 insight_bullet、evidence_bullet、mechanism_quote、caveat、source_note。"
+                },
+                "heading_level": {
+                  "type": "integer",
+                  "description": "文档输出时建议标题层级，1=章，2=节，3=小节。"
+                },
+                "bullet_level": {
+                  "type": "integer",
+                  "description": "文档输出时建议 bullet 层级。"
+                },
+                "quote_attribution": {
+                  "type": "string",
+                  "description": "文档引用块的访谈对象或来源署名；访谈只能用于机制说明或例证。"
+                }
+              }
+            }
+          },
+          "visual_plan": {
+            "type": "object",
+            "required": ["visual_type", "reader_takeaway", "required_data", "data_status"],
+            "properties": {
+              "visual_type": { "type": "string" },
+              "visual_question": { "type": "string" },
+              "reader_takeaway": { "type": "string" },
+              "required_data": { "type": "array" },
+              "data_status": { "type": "string" },
+              "chart_data_shape": {
+                "type": "object",
+                "description": "图表数据形状说明，例如 categories/series/values matrix、items、periods、panels 等。用于让 format Agent 判断能否转成 mck_ppt 图表。"
+              },
+              "chart_spec_draft": {
+                "type": "object",
+                "description": "低保真图表参数草稿，只描述数据结构和字段，不做正式样式。format Agent 可据此转成 visual_object.chart_spec。"
+              },
+              "mck_layout_candidates": {
+                "type": "array",
+                "description": "PPT 下给 format Agent 的 mck_ppt layout/chart API 候选。",
+                "items": { "type": "string" }
+              },
+              "document_figure_role": {
+                "type": "string",
+                "description": "文档输出时该图表在报告中的角色，例如 trend_evidence、composition_evidence、comparison_evidence、mechanism_support、appendix_detail。"
+              },
+              "figure_caption_draft": {
+                "type": "string",
+                "description": "文档图表 caption 草稿，应说明读者需要从图中读出的结论。"
+              },
+              "figure_source_note": {
+                "type": "string",
+                "description": "文档图表的来源、口径、时间窗或样本说明。"
+              },
+              "figure_placement": {
+                "type": "string",
+                "description": "文档图表建议放置位置，例如 after_lead_bullets、before_mechanism_quotes、appendix。"
+              },
+              "evidence_refs": { "type": "array", "items": { "type": "string" } },
+              "risk_or_limitation": { "type": "string" },
+              "none_reason": { "type": "string" },
+              "alternative_display": { "type": "string" }
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": { "type": "string" },
+                "evidence_ref": { "type": "string" },
+                "timeframe": { "type": "string" },
+                "metric_definition": { "type": "string" },
+                "confidence": { "type": "string" }
+              }
+            }
+          },
+          "data_gaps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["gap", "impact", "needed_input", "blocking_level"],
+              "properties": {
+                "gap": { "type": "string" },
+                "impact": { "type": "string" },
+                "needed_input": { "type": "string" },
+                "owner_or_question": { "type": "string" },
+                "blocking_level": { "type": "string" }
+              }
+            }
+          },
+          "speaker_notes_seed": { "type": "string" },
+          "appendix_candidates": { "type": "array" },
+          "format_handoff_notes": {
+            "type": "object",
+            "required": ["primary_focus", "secondary_details", "must_keep_caveats", "layout_risks"],
+            "properties": {
+              "primary_focus": {
+                "type": "string",
+                "description": "主视觉要表达什么判断。v2 要求：关键数据不可只停留于 JSON 深层字段，必须在此表达上屏意图。"
+              },
+              "secondary_details": { "type": "array", "items": { "type": "string" } },
+              "must_keep_caveats": { "type": "array", "items": { "type": "string" } },
+              "layout_risks": { "type": "array", "items": { "type": "string" } },
+              "open_design_tasks": { "type": "array", "items": { "type": "string" } },
+              "on_screen_numbers": {
+                "type": "array",
+                "description": "【v2 增量】必须上屏的具体数值及其口径。源自 loop memory M-001：不得让关键数据只停留在 JSON 深层字段。",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": { "type": "string" },
+                    "label": { "type": "string" },
+                    "metric": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "draft_material": {
+      "type": "object",
+      "description": "可直接渲染的草稿版（wireframe）材料：与 formatted_material.v1 同构但低保真。供渲染后端以 fidelity=draft 导出简版 PPT/HTML/文档，让用户尽早看到结构骨架。draft 不追求美观，只求结构正确、要点到位。",
+      "required": ["format", "material_units"],
+      "properties": {
+        "format": { "type": "string", "enum": ["document", "ppt", "html"] },
+        "topic": { "type": "string" },
+        "material_units": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["unit_id", "source_page_no", "headline", "layout_or_structure", "finalized_content"],
+            "properties": {
+              "unit_id": { "type": "string" },
+              "source_page_no": { "type": "integer" },
+              "unit_type": {
+                "type": "string",
+                "enum": ["slide", "html_module", "document_section"],
+                "description": "草稿载体单元类型；当 draft_material.format=document 时必须为 document_section。"
+              },
+              "headline": { "type": "string", "description": "草稿标题，尽量已是完整洞见句，便于 agent5 直接精修。" },
+              "layout_or_structure": {
+                "type": "object",
+                "properties": {
+                  "layout_type": {
+                    "type": "string",
+                    "description": "草稿版式 hint，取自渲染枚举；draft 渲染会把图表版式收敛为文本骨架，此处只需给出意向。",
+                    "enum": [
+                      "cover",
+                      "section_divider",
+                      "executive_summary",
+                      "key_takeaway",
+                      "four_column",
+                      "scorecard",
+                      "donut",
+                      "pie",
+                      "grouped_bar",
+                      "stacked_bar",
+                      "horizontal_bar",
+                      "waterfall",
+                      "line_chart",
+                      "pareto",
+                      "multi_bar_panel",
+                      "dashboard_kpi_chart",
+                      "dashboard_table_chart",
+                      "matrix_2x2",
+                      "process_chevron",
+                      "timeline",
+                      "data_table",
+                      "table_insight",
+                      "value_chain",
+                      "closing",
+                      "text"
+                    ]
+                  },
+                  "heading_level": {
+                    "type": "integer",
+                    "description": "文档草稿标题层级，1=章，2=节，3=小节。"
+                  },
+                  "document_role": {
+                    "type": "string",
+                    "description": "文档草稿章节角色，例如 executive_summary、executive_takeaway、analysis_section、evidence_section、mechanism_section、appendix_section。document 草稿必须以 executive_summary 开头。"
+                  },
+                  "paragraph_roles": {
+                    "type": "array",
+                    "description": "文档草稿中各段或 bullet 的角色顺序。",
+                    "items": { "type": "string" }
+                  },
+                  "figure_slots": {
+                    "type": "array",
+                    "description": "文档草稿中待 format 精修的图表槽位，包含 figure_role、caption、source、placement 等。",
+                    "items": { "type": "object" }
+                  }
+                }
+              },
+              "finalized_content": {
+                "type": "object",
+                "properties": {
+                  "primary_text": { "type": "string" },
+                  "body": { "type": "string" },
+                  "supporting_points": { "type": "array", "items": { "type": "string" } },
+                  "bullet_groups": {
+                    "type": "array",
+                    "description": "文档草稿的多级 bullet 组，例如每组含 group_title、level、bullets。",
+                    "items": { "type": "object" }
+                  },
+                  "quote_blocks": {
+                    "type": "array",
+                    "description": "文档草稿的引用块，包含 quote、attribution、supports_mechanism。",
+                    "items": { "type": "object" }
+                  },
+                  "figure_caption": { "type": "string" },
+                  "source_note": { "type": "string" },
+                  "section_label": { "type": "string" },
+                  "tables": { "type": "array" }
+                }
+              },
+              "visual_object": {
+                "type": "object",
+                "properties": {
+                  "visual_type": { "type": "string" },
+                  "title": { "type": "string" },
+                  "reader_takeaway": { "type": "string" },
+                  "data_fields": { "type": "array" },
+                  "chart_spec": {
+                    "type": "object",
+                    "description": "从 visual_plan.chart_spec_draft 复制来的草稿图表参数；供 format Agent 精修为正式 chart_spec。"
+                  },
+                  "document_asset_mode": {
+                    "type": "string",
+                    "description": "文档图表资产建议，例如 chart_image、editable_table、quote_callout、appendix_table。"
+                  },
+                  "mck_api": {
+                    "type": "object",
+                    "description": "可选的 mck_ppt 方法提示，例如 method=grouped_bar、args=chart_spec。"
+                  }
+                }
+              },
+              "source_display": {
+                "type": "object",
+                "properties": { "footer": { "type": "string" } }
+              },
+              "gap_display": {
+                "type": "object",
+                "properties": { "visible_note": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "render_result": {
+          "type": "object",
+          "description": "草稿渲染后端回填的实际产物（fidelity=draft）。",
+          "properties": {
+            "status": { "type": "string" },
+            "output_path": { "type": "string" },
+            "file_bytes": { "type": "integer" },
+            "unit_count": { "type": "integer" },
+            "warnings": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "global_sources": { "type": "array" },
+    "global_data_gaps": { "type": "array" },
+    "format_handoff_summary": {
+      "type": "object",
+      "properties": {
+        "overall_density": { "type": "string" },
+        "source_policy": { "type": "string" },
+        "open_design_tasks": { "type": "array", "items": { "type": "string" } },
+        "pages_requiring_human_input": { "type": "array", "items": { "type": "integer" } }
+      }
+    }
+  }
+}
