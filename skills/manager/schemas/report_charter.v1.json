@@ -18,8 +18,8 @@
   "properties": {
     "topic": {"type": "string"},
     "audience": {"type": "string"},
-    "report_type": {"type": "string"},
-    "output_format": {"type": "string"},
+    "report_type": {"type": "string", "enum": ["deep_dive", "business_progress", "quick_sync"]},
+    "output_format": {"type": "string", "enum": ["document", "ppt", "html"]},
     "decision_goal": {"type": "string"},
     "expected_action": {"type": "string"},
     "scope": {"type": "array", "items": {"type": "string"}},

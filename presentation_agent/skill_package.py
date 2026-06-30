@@ -14,6 +14,12 @@ class SkillPackage:
     instructions: str = ""
     rubrics: list[str] = field(default_factory=list)
     schemas: dict[str, Any] = field(default_factory=dict)
+    selected_capabilities: list[str] = field(default_factory=list)
+    tools: list[str] = field(default_factory=list)
+    context_requirements: list[str] = field(default_factory=list)
+    fingerprint: str = ""
+    budget: dict[str, Any] = field(default_factory=dict)
+    legacy: bool = True
 
     @property
     def exists(self) -> bool:
@@ -27,7 +33,29 @@ class SkillPackage:
             "instructions": self.instructions,
             "rubrics": self.rubrics,
             "schemas": self.schemas,
+            "selected_capabilities": self.selected_capabilities,
+            "tools": self.tools,
+            "context_requirements": self.context_requirements,
+            "fingerprint": self.fingerprint,
+            "budget": self.budget,
+            "legacy": self.legacy,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SkillPackage":
+        return cls(
+            agent_id=str(data["agent_id"]),
+            path=Path(str(data["path"])),
+            instructions=str(data.get("instructions", "")),
+            rubrics=list(data.get("rubrics", [])),
+            schemas=dict(data.get("schemas", {})),
+            selected_capabilities=list(data.get("selected_capabilities", [])),
+            tools=list(data.get("tools", [])),
+            context_requirements=list(data.get("context_requirements", [])),
+            fingerprint=str(data.get("fingerprint", "")),
+            budget=dict(data.get("budget", {})),
+            legacy=bool(data.get("legacy", True)),
+        )
 
 
 def load_skill_package(root: Path, agent_id: str) -> SkillPackage:
@@ -50,4 +78,3 @@ def load_skill_package(root: Path, agent_id: str) -> SkillPackage:
         rubrics=list(rubrics_data.get("rubrics", [])),
         schemas=schemas,
     )
-

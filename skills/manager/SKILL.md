@@ -45,6 +45,9 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
 
 1. 读取原始 brief、材料清单、可用 Worker 和 Manager memory。
 2. 生成 `report_charter`，吸收原 task positioning 的全部职责。**Charter 中必须包含 `run_mode` 字段**。
+   - 汇报对象归一为 `board / exec_office / strategy_lead / business_team / external`。
+   - 汇报性质归一为 `deep_dive / business_progress / quick_sync`。
+   - 材料格式归一为 `document / ppt / html`。
 3. 判断输入是否足够。如果缺失关键信息（topic、audience、output_format、decision_goal、materials 路径等），产出 `blocking_questions` 并设置 `action=ask_human`，由用户补充后再继续。
 4. `run_mode` 的取值：
    - `"full_auto"`：全程不中断，所有 Worker 依次执行，只在最终交付时请用户确认
@@ -54,6 +57,7 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
 5. 生成 `execution_plan`。默认使用六个 Worker，但按以下优先级裁剪：
    - 如果用户在 brief 中指定了 `selected_workers`（如 `["argument_synthesis", "storyline_design", "format"]`），**只生成这些 Worker 的任务**
    - 如果未指定，按任务需要跳过不必要任务（如纯数字分析汇报可跳过 speaker_script）
+   - `deep_dive` 默认保留完整链路；`business_progress` 强调目标/实际、偏差、风险和支持请求；`quick_sync` 默认跳过 Q&A 与逐字稿，除非用户明确需要
 6. 为首个 Worker 生成 `task_packet`。
 7. 输出 `action=dispatch`。runtime 会先把 charter 和计划交给用户确认，再真正派发。
 
@@ -95,6 +99,7 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
 - 3-8 条具体 `acceptance_criteria`；
 - `dependencies`；
 - `memory_dimensions`；
+- 可选只读 `report_profile` 与 `capability_expectations`；runtime 会重新解析并校验，不直接信任能力路径；
 - 返工时填写 `revision_of` 和 `revision_feedback`。
 
 ## Acceptance Standard

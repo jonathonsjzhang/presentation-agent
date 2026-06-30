@@ -24,7 +24,7 @@ def build_routing_policy(
         for v in [
             input_data.get("audience"),
             input_data.get("report_type"),
-            input_data.get("material_format"),
+            input_data.get("output_format", input_data.get("material_format")),
             global_state.get("audience_profile"),
             global_state.get("target_action"),
             spec.name,

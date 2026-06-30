@@ -25,6 +25,8 @@ class RetrievedMemory:
             "suggestion": self.item.suggestion,
             "trigger": self.item.trigger,
             "hit_count": self.item.hit_count,
+            "owner": self.item.owner,
+            "applies_to": self.item.applies_to,
             "score": round(self.score, 3),
             "reason": self.reason,
         }
@@ -44,6 +46,7 @@ class MemoryRetriever:
         global_state: dict[str, Any],
         dimensions: list[str],
         limit: int = 6,
+        active_capabilities: list[str] | None = None,
     ) -> list[RetrievedMemory]:
         text = "\n".join(
             [
@@ -59,6 +62,8 @@ class MemoryRetriever:
 
         scored: list[RetrievedMemory] = []
         for item in self.store.load_items():
+            if not item.compatible_with(active_capabilities):
+                continue
             score = 0.0
             reasons: list[str] = []
             if item.dimension in preferred:

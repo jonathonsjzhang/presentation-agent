@@ -16,6 +16,9 @@ from typing import Any
 
 from presentation_agent.renderers.base import RenderResult
 
+CAPABILITY_ID = "format.html"
+REQUIRED_TOOLS: tuple[str, ...] = ()
+
 # McKinsey-ish palette mirrored from the vendored engine constants.
 _NAVY = "#051C2C"
 _BLUE = "#006BA6"

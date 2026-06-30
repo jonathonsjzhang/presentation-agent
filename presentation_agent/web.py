@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
+from presentation_agent.capabilities.registry import CapabilityRegistry
 from presentation_agent.io import read_json, write_json
 from presentation_agent.learning import LearningEventStore, compare_material_versions
 from presentation_agent.loop import LoopRunner
@@ -143,11 +144,21 @@ class WebApp:
                 "rubric_count": len(skill_package.rubrics),
                 "schema_count": len(skill_package.schemas),
             }
-            agent["implemented"] = spec.skill == "storyline_design"
+            agent["implemented"] = True
             agents.append(agent)
+        core_agents = [
+            spec.id for spec in runner.list_agents() if spec.id in active_workers
+        ]
+        registry = CapabilityRegistry(self.root)
         return {
             "agents": agents,
             "pipeline": runner.config.get("pipeline", {}),
+            "capabilities": {
+                **read_json(
+                    self.root / "configs" / "capabilities.json", default={}
+                ),
+                "packages": registry.inventory(core_agents),
+            },
             "state_policy": runner.config.get("state_policy", {}),
             "loop_steps": runner.config.get("loop_steps", []),
             "latest_runs": self.list_runs(limit=6),
@@ -188,7 +199,11 @@ class WebApp:
             store = MemoryStore(self.root, agent_id)
             items = [item.to_dict() for item in store.load_items()]
             logs = self._read_learning_log(store.log_path)
-            candidates = [item.to_dict() for item in store.promotion_candidates()]
+            candidates = []
+            for item in store.promotion_candidates():
+                candidate = item.to_dict()
+                candidate["promotion_target"] = store.promotion_target(item)
+                candidates.append(candidate)
             lint = store.lint()
             total_memory += len(items)
             total_candidates += len(candidates)
@@ -293,6 +308,10 @@ class WebApp:
             reason=str(body.get("reason") or ""),
             change=str(body["change"]),
             source="human-ui",
+            owner=str(body.get("capability_owner") or "").strip() or None,
+            applies_to=body.get("applies_to")
+            if isinstance(body.get("applies_to"), dict)
+            else None,
         )
         return {"ok": True, "log_id": log_id, "memory": [item.to_dict() for item in store.load_items()]}
 
@@ -722,6 +741,7 @@ class WebApp:
             result_path = path / "loop_result.json"
             if result_path.exists():
                 result = read_json(result_path)
+                run_state = read_json(path / "run_state.json", default={})
                 runs.append(
                     {
                         "name": path.name,
@@ -732,6 +752,11 @@ class WebApp:
                         "review": self.to_rel(path / "review.json"),
                         "run_state": self.to_rel(path / "run_state.json"),
                         "human_review": self.to_rel(path / "human_review.md"),
+                        "selected_capabilities": run_state.get("selected_capabilities", []),
+                        "prompt_budget": run_state.get("prompt_budget", {}),
+                        "skill_budget": run_state.get("skill_budget", {}),
+                        "context_mode": run_state.get("context_mode", "legacy_flat"),
+                        "legacy_skill": not bool(run_state.get("selected_capabilities")),
                         "mtime": path.stat().st_mtime,
                     }
                 )

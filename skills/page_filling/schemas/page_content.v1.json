@@ -18,7 +18,7 @@
     "schema": { "const": "page_content.v1" },
     "topic": { "type": "string" },
     "audience": { "type": "string", "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"] },
-    "report_type": { "type": "string", "enum": ["deep_dive", "quick_sync"] },
+    "report_type": { "type": "string", "enum": ["deep_dive", "business_progress", "quick_sync"] },
     "output_format": { "type": "string", "enum": ["document", "ppt", "html"] },
     "storyline_trace": {
       "type": "object",

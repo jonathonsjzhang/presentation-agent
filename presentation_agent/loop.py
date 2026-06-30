@@ -5,6 +5,7 @@ from typing import Any, Optional
 from uuid import uuid4
 
 from presentation_agent.input_loader import load_agent_input
+from presentation_agent.capabilities.compiler import compile_skill_package
 from presentation_agent.io import read_json, write_json
 from presentation_agent.learning import LearningEventStore
 from presentation_agent.llm.factory import build_llm_client
@@ -13,7 +14,6 @@ from presentation_agent.memory_retrieval import MemoryRetriever
 from presentation_agent.models import AgentSpec, StopDecision, now_iso
 from presentation_agent.review import ArtifactReviewer, StopChecker
 from presentation_agent.routing import build_routing_policy
-from presentation_agent.skill_package import load_skill_package
 from presentation_agent.skills.base import SkillContext
 from presentation_agent.skills.registry import get_skill
 
@@ -54,7 +54,7 @@ class LoopRunner:
             write_json(global_state_path, full_global_state)
 
         memory = MemoryStore(self.root, spec.id)
-        skill_package = load_skill_package(self.root, spec.id)
+        skill_package = compile_skill_package(self.root, spec, input_data)
 
         # Generation sees only the global keys this agent declares it reads, and
         # is guided by its (more focused) generation_memory_dimensions, falling
@@ -68,6 +68,7 @@ class LoopRunner:
             global_state=scoped_global_state,
             dimensions=gen_dimensions,
             limit=int(self.config.get("state_policy", {}).get("memory_retrieval_limit", 6)),
+            active_capabilities=skill_package.selected_capabilities,
         )
         routing_policy = build_routing_policy(
             spec=spec,
@@ -99,6 +100,9 @@ class LoopRunner:
         run_state = self._initial_run_state(run_id, spec, input_path, output_dir)
         run_state["retrieved_memory"] = [row.to_dict() for row in retrieved_memory]
         run_state["routing_policy"] = routing_policy
+        run_state["selected_capabilities"] = skill_package.selected_capabilities
+        run_state["skill_fingerprint"] = skill_package.fingerprint
+        run_state["skill_budget"] = skill_package.budget
         self._write_run_state(run_state_path, run_state, "start", "Loop started")
 
         artifact: dict[str, Any] = {}
@@ -121,6 +125,11 @@ class LoopRunner:
                 artifact = seed_artifact if seed_artifact is not None else skill.run(spec, input_data, context)
             else:
                 artifact = skill.revise(spec, input_data, artifact, p0_objections, context)
+            generation_budget = getattr(skill, "last_prompt_budget", {})
+            if generation_budget:
+                run_state.setdefault("prompt_budget", {})[
+                    f"generation_round_{round_index}"
+                ] = dict(generation_budget)
 
             draft_path = output_dir / f"draft_round_{round_index}.json"
             write_json(draft_path, artifact)
@@ -130,6 +139,10 @@ class LoopRunner:
             run_state["current_step"] = "review"
             review = self.reviewer.review(spec, artifact, memory, skill_package.to_dict(),
                                            upstream_artifact=input_data)
+            if self.reviewer.last_prompt_budget:
+                run_state.setdefault("prompt_budget", {})[
+                    f"review_round_{round_index}"
+                ] = dict(self.reviewer.last_prompt_budget)
             review_path = output_dir / f"review_round_{round_index}.json"
             write_json(review_path, review.to_dict())
             run_state["produced_artifacts"].append(str(review_path))

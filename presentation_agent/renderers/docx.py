@@ -37,6 +37,8 @@ from typing import Any, Optional
 
 from presentation_agent.renderers.base import RenderResult
 
+CAPABILITY_ID = "format.document"
+REQUIRED_TOOLS = ("python-docx",)
 
 # McKinsey palette (RGB tuples; python-docx wants hex strings / RGBColor)
 _NAVY = (0x05, 0x1C, 0x2C)

@@ -10,6 +10,6 @@ return a structured "skipped" result instead of crashing, so the harness still
 runs end-to-end in environments without python-pptx / python-docx installed.
 """
 
-from presentation_agent.renderers.base import RenderResult, render_material
+from presentation_agent.renderers.base import RenderResult, render_material, resolve_output_format
 
-__all__ = ["RenderResult", "render_material"]
+__all__ = ["RenderResult", "render_material", "resolve_output_format"]

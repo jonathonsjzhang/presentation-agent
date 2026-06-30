@@ -7,7 +7,7 @@
     "topic": { "type": "string" },
     "audience": { "type": "string", "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"] },
     "decision_goal": { "type": "string" },
-    "report_type": { "type": "string", "enum": ["deep_dive", "quick_sync"] },
+    "report_type": { "type": "string", "enum": ["deep_dive", "business_progress", "quick_sync"] },
     "output_format": { "type": "string", "enum": ["document", "ppt", "html"] },
     "context": { "type": "string" },
     "constraints": { "type": "array", "items": { "type": "string" } },

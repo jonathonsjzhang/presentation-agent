@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional, Union
 
+from presentation_agent.capabilities.profile import normalize_report_profile
 from presentation_agent.io import write_json
 from presentation_agent.models import now_iso
 from presentation_agent.pipeline import Pipeline
@@ -99,6 +100,15 @@ def normalize_brief(brief: BriefInput, root: Path) -> dict[str, Any]:
 
     normalized["materials"] = _normalize_materials(normalized.get("materials"))
     normalized["constraints"] = _as_str_list(normalized.get("constraints"))
+    profile = normalize_report_profile(
+        normalized,
+        root=root,
+        allow_freeform_audience=True,
+    )
+    normalized["audience"] = profile.audience
+    normalized["report_type"] = profile.report_type
+    normalized["output_format"] = profile.output_format
+    normalized["report_profile_version"] = profile.version
     return normalized
 
 

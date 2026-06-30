@@ -148,10 +148,12 @@ function renderHealth() {
   const planned = state.overview.agents.length - implemented;
   const memoryFiles = state.files.filter((file) => file.path.startsWith("data/agents/")).length;
   const skillFiles = state.files.filter((file) => file.path.startsWith("skills/")).length;
+  const capabilityPackages = state.overview.capabilities?.packages || [];
   const latest = state.runs[0]?.status || "no run";
   $("healthStrip").innerHTML = [
     healthItem("Runtime Ready", `${implemented}/${state.overview.agents.length}`, planned ? `${planned} planned` : "all ready"),
     healthItem("Skills", String(skillFiles), "rubrics / schemas / SOP"),
+    healthItem("Capabilities", String(capabilityPackages.length), "6 core + 11 facets"),
     healthItem("Memory", String(memoryFiles), "agent memory files"),
     healthItem("Latest Run", latest, state.runs[0]?.name || "waiting"),
   ].join("");
@@ -301,10 +303,12 @@ function renderLearning() {
           </div>
         </div>
         <div class="memory-dimensions">${(agent.memory_dimensions || []).map((dim) => `<span>${dim}</span>`).join("")}</div>
+        <div class="memory-dimensions">${(agent.recent_memory || []).map((memory) => `<span>${memory.owner || `core.${agent.id}`} · ${Object.entries(memory.applies_to || {}).map(([key, values]) => `${key}:${(values || []).join("|")}`).join(" ")}</span>`).join("")}</div>
         <div class="promotion-list">
           ${candidates.slice(0, 3).map((candidate) => `
             <button class="promotion-item" data-agent="${agent.id}" data-memory-id="${candidate.id}" type="button">
               <span>${candidate.id} · hits=${candidate.hit_count}</span>
+              <span>${candidate.owner || "core"} · ${candidate.promotion_target || ""}</span>
               <strong>${candidate.suggestion}</strong>
             </button>
           `).join("") || "<p>暂无可升级 memory</p>"}
@@ -410,12 +414,16 @@ function renderAgentState(agent) {
 }
 
 function renderAgentHarness(agent) {
+  const capabilityPackages = (state.overview.capabilities?.packages || [])
+    .filter((item) => (item.applies_to || []).includes(agent.id))
+    .map((item) => item.id);
   return `
     <div class="detail-grid two-col">
       ${detailCard("Skill Package", [agent.harness?.skill_package || "-"])}
       ${detailCard("Runtime Adapter", [agent.harness?.runtime_adapter || "-"])}
       ${detailCard("Review Policy", [agent.harness?.review_policy || "-"])}
       ${detailCard("Connectors", agent.harness?.connectors || [])}
+      ${detailCard("Composable Capabilities", capabilityPackages)}
     </div>
   `;
 }
@@ -460,6 +468,7 @@ function renderRuns() {
       <div>
         <strong>${run.name}</strong>
         <span>${run.agent_id || "pipeline"} · ${run.status || "unknown"}</span>
+        <span>${run.context_mode || "legacy_flat"} · ${run.legacy_skill ? "legacy" : "compiled"} · ${(run.selected_capabilities || []).join(" + ")}</span>
       </div>
       <div class="run-actions">
         ${run.artifact ? `<button data-path="${run.artifact}" type="button">artifact</button>` : ""}

@@ -24,6 +24,8 @@ from typing import Any, Optional
 
 from presentation_agent.renderers.base import RenderResult
 
+CAPABILITY_ID = "format.ppt"
+REQUIRED_TOOLS = ("presentation_agent.vendor.mck_ppt.DeckBuilder",)
 
 # ---- color mapping -----------------------------------------------------------
 

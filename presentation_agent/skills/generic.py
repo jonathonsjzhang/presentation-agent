@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
+from presentation_agent.capabilities.budget import estimate_tokens
 from presentation_agent.llm.client import LLMClient
 from presentation_agent.llm.types import LLMRequest
 from presentation_agent.models import AgentSpec, Objection
@@ -27,6 +28,7 @@ class GenericSkill:
     def __init__(self, skill_id: str, llm: Optional[LLMClient] = None) -> None:
         self.id = skill_id
         self.llm = llm
+        self.last_prompt_budget: dict[str, int] = {}
 
     def generation_dimensions(self) -> list[str]:
         # Dimensions now come from the agent spec / memory, not a hard-coded list.
@@ -95,7 +97,7 @@ class GenericSkill:
             previous_artifact,
             candidate_hint,
         )
-        return LLMRequest(
+        request = LLMRequest(
             system=system,
             user=user,
             purpose="generate",
@@ -104,6 +106,15 @@ class GenericSkill:
             agent_id=spec.id,
             round_index=round_index,
         )
+        self.last_prompt_budget = {
+            "system_chars": len(system),
+            "system_tokens_estimate": estimate_tokens(system),
+            "user_chars": len(user),
+            "user_tokens_estimate": estimate_tokens(user),
+            "total_chars": len(system) + len(user),
+            "total_tokens_estimate": estimate_tokens(system + user),
+        }
+        return request
 
     def _compose_system(self, spec: AgentSpec, instructions: str) -> str:
         header = (
@@ -126,8 +137,11 @@ class GenericSkill:
         candidate_hint: Optional[str] = None,
     ) -> str:
         blocks: list[str] = []
-        blocks.append("## 本环节输入(上游 artifact 或原始 brief)")
-        blocks.append(self._json_block(input_data))
+        if input_data.get("schema") == "worker_context.v1":
+            blocks.extend(self._projected_context_blocks(input_data))
+        else:
+            blocks.append("## 本环节输入(上游 artifact 或原始 brief)")
+            blocks.append(self._json_block(input_data))
 
         if candidate_hint:
             blocks.append("## 本候选的差异化要求(多候选并行，本次只走这一种角度)")
@@ -170,6 +184,43 @@ class GenericSkill:
             "- 信息缺失时，按 SKILL.md 的规则写入 open_questions 等字段，不要编造，也不要留 TODO 占位。"
         )
         return "\n\n".join(blocks)
+
+    def _projected_context_blocks(
+        self, input_data: dict[str, Any]
+    ) -> list[str]:
+        blocks = [
+            "## 项目约束（report charter，优先级最高）",
+            self._json_block(input_data.get("report_charter", {})),
+            "## Manager 任务单",
+            self._json_block(input_data.get("manager_task", {})),
+        ]
+        raw_brief = input_data.get("raw_brief", {})
+        if raw_brief:
+            blocks.extend([
+                "## 原始 brief（已按本 Worker 投影）",
+                self._json_block(raw_brief),
+            ])
+        inputs = input_data.get("inputs", {})
+        if inputs:
+            blocks.extend([
+                "## 命名空间化上游输入（保留来源，不得跨来源臆测）",
+                self._json_block(inputs),
+            ])
+        signal = input_data.get("upstream_signal", {})
+        if signal:
+            blocks.extend([
+                "## 必须继承或显式解释偏离的上游信号",
+                self._json_block(signal),
+            ])
+        refs = input_data.get("material_refs", [])
+        if refs:
+            blocks.extend([
+                "## 按需读取的材料引用",
+                "若完成任务需要 omitted_fields 或 projected_fields 的完整内容，"
+                "请读取对应 artifact_path；不要根据 preview 补写事实。",
+                self._json_block(refs),
+            ])
+        return blocks
 
     # -- invocation ------------------------------------------------------
 

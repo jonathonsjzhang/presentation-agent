@@ -93,7 +93,7 @@ python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces
 | `topic` | 是 | 汇报主题 |
 | `audience` | 否 | 汇报对象，缺失时由 Manager 识别或追问 |
 | `decision_goal` | 否 | 希望支撑的决策，由 Manager 正式定义 |
-| `report_type` | 否 | `deep_dive` 或 `quick_sync`，默认 `deep_dive` |
+| `report_type` | 否 | `deep_dive` / `business_progress` / `quick_sync`，默认 `deep_dive` |
 | `output_format` | 否 | `ppt` / `document` / `html`，默认 `ppt` |
 | `context` | 否 | 背景 |
 | `materials` | 否 | 素材、结论、证据、文件路径 |
@@ -162,6 +162,10 @@ CLI 会返回 JSON，记录：
 7. 用户确认：report approve
 8. 用户要求调整或回答 Manager 问题：report feedback
 ```
+
+Worker 指令已经包含 runtime 编译后的 core + audience + report type + format
+能力，以及投影后的命名空间化 context。宿主只执行该指令，不自行选择、拼接
+或复制 facet 规则，也不要为了“补上下文”把历史 artifact 全量塞回 prompt。
 
 ## Sub-agent 派生（隔离上下文执行）
 

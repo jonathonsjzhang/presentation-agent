@@ -42,6 +42,8 @@ class MemoryItem:
     links: list[str] = field(default_factory=list)
     hit_count: int = 0
     last_triggered: Optional[str] = None
+    owner: str = ""
+    applies_to: dict[str, list[str]] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "MemoryItem":
@@ -55,6 +57,11 @@ class MemoryItem:
             links=list(data.get("links", [])),
             hit_count=int(data.get("hit_count", 0)),
             last_triggered=data.get("last_triggered"),
+            owner=str(data.get("owner", "")),
+            applies_to={
+                str(key): [str(value) for value in values]
+                for key, values in data.get("applies_to", {}).items()
+            },
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -68,6 +75,8 @@ class MemoryItem:
             "links": self.links,
             "hit_count": self.hit_count,
             "last_triggered": self.last_triggered,
+            "owner": self.owner,
+            "applies_to": self.applies_to,
         }
 
     def matches(self, text: str) -> bool:
@@ -75,6 +84,42 @@ class MemoryItem:
             keywords = [part.strip() for part in self.trigger.replace("|", ",").split(",")]
             return any(keyword and keyword in text for keyword in keywords)
         return self.trigger in text
+
+    def compatible_with(self, active_capabilities: Optional[list[str]]) -> bool:
+        if not active_capabilities:
+            return True
+        active = set(active_capabilities)
+        if self.owner and self.owner not in active:
+            return False
+        values = {
+            "worker": {
+                item.removeprefix("core.")
+                for item in active
+                if item.startswith("core.")
+            },
+            "audience": {
+                item.removeprefix("audience.")
+                for item in active
+                if item.startswith("audience.")
+            },
+            "report_type": {
+                item.removeprefix("report.")
+                for item in active
+                if item.startswith("report.")
+            },
+            "format": {
+                item.removeprefix("format.")
+                for item in active
+                if item.startswith("format.")
+            },
+        }
+        for dimension, allowed in self.applies_to.items():
+            allowed_set = set(allowed)
+            if "*" in allowed_set:
+                continue
+            if not values.get(dimension, set()).intersection(allowed_set):
+                return False
+        return True
 
 
 class MemoryStore:
@@ -105,29 +150,51 @@ class MemoryStore:
 
     def load_items(self) -> list[MemoryItem]:
         data = read_json(self.memory_path, default={"items": []})
-        return [MemoryItem.from_dict(item) for item in data.get("items", [])]
+        items: list[MemoryItem] = []
+        for raw in data.get("items", []):
+            normalized = dict(raw)
+            if not normalized.get("owner"):
+                normalized["owner"] = f"core.{self.agent_id}"
+            if not normalized.get("applies_to"):
+                normalized["applies_to"] = self._default_scope()
+            items.append(MemoryItem.from_dict(normalized))
+        return items
 
     def save_items(self, items: list[MemoryItem]) -> None:
         write_json(self.memory_path, {"items": [item.to_dict() for item in items]})
 
-    def generation_guidance(self, dimensions: list[str], limit: int = 8) -> list[str]:
+    def generation_guidance(
+        self,
+        dimensions: list[str],
+        limit: int = 8,
+        active_capabilities: Optional[list[str]] = None,
+    ) -> list[str]:
         suggestions: list[str] = []
         for item in self.load_items():
+            if not item.compatible_with(active_capabilities):
+                continue
             if item.dimension in dimensions and item.suggestion not in suggestions:
                 suggestions.append(item.suggestion)
             if len(suggestions) >= limit:
                 break
         return suggestions
 
-    def scan(self, text: str) -> list[MemoryItem]:
+    def scan(
+        self, text: str, active_capabilities: Optional[list[str]] = None
+    ) -> list[MemoryItem]:
         items = self.load_items()
         by_id = {item.id: item for item in items}
         matched: dict[str, MemoryItem] = {}
         for item in items:
+            if not item.compatible_with(active_capabilities):
+                continue
             if item.matches(text):
                 matched[item.id] = item
                 for linked_id in item.links:
-                    if linked_id in by_id:
+                    if (
+                        linked_id in by_id
+                        and by_id[linked_id].compatible_with(active_capabilities)
+                    ):
                         matched[linked_id] = by_id[linked_id]
         return list(matched.values())
 
@@ -157,6 +224,8 @@ class MemoryStore:
         reason: str,
         change: str,
         source: str = "human",
+        owner: Optional[str] = None,
+        applies_to: Optional[dict[str, list[str]]] = None,
     ) -> str:
         log_id = self._next_log_id()
         # Guard against empty / placeholder feedback writing dead entries
@@ -175,6 +244,8 @@ class MemoryStore:
             "source": source,
             "links": [],
             "substantive": substantive,
+            "owner": owner or f"core.{self.agent_id}",
+            "applies_to": applies_to or self._default_scope(),
         }
         append_jsonl(self.log_path, entry)
         LearningEventStore(self.root, data_root=self.data_root).append(
@@ -190,10 +261,19 @@ class MemoryStore:
                 "reason": reason,
                 "change": change,
                 "substantive": substantive,
+                "owner": entry["owner"],
+                "applies_to": entry["applies_to"],
             },
         )
         if substantive:
-            self._upsert_memory(log_id, dimension, problem, change)
+            self._upsert_memory(
+                log_id,
+                dimension,
+                problem,
+                change,
+                owner=entry["owner"],
+                applies_to=entry["applies_to"],
+            )
         self._maybe_auto_dream()
         return log_id
 
@@ -205,6 +285,8 @@ class MemoryStore:
         source: str = "human-chat",
         dimension: Optional[str] = None,
         scope: str = "agent",
+        owner: Optional[str] = None,
+        applies_to: Optional[dict[str, list[str]]] = None,
     ) -> dict[str, Any]:
         parsed = self._parse_feedback_text(text, dimension=dimension)
         log_id = self.record_feedback(
@@ -215,6 +297,8 @@ class MemoryStore:
             reason=parsed["reason"],
             change=parsed["change"],
             source=source,
+            owner=owner,
+            applies_to=applies_to,
         )
         parsed["log_id"] = log_id
         return parsed
@@ -281,14 +365,24 @@ class MemoryStore:
                 continue
         return f"M-{max_seq + 1:03d}"
 
-    def _upsert_memory(self, log_id: str, dimension: str, trigger: str, suggestion: str) -> None:
+    def _upsert_memory(
+        self,
+        log_id: str,
+        dimension: str,
+        trigger: str,
+        suggestion: str,
+        *,
+        owner: str,
+        applies_to: dict[str, list[str]],
+    ) -> None:
         if not suggestion.strip():
             return
         items = self.load_items()
         for item in items:
             same_dimension = item.dimension == dimension
             same_suggestion = item.suggestion.strip() == suggestion.strip()
-            if same_dimension and same_suggestion:
+            same_scope = item.owner == owner and item.applies_to == applies_to
+            if same_dimension and same_suggestion and same_scope:
                 item.case_anchors.append(log_id)
                 item.hit_count += 1
                 item.last_triggered = now_iso()
@@ -306,12 +400,22 @@ class MemoryStore:
             links=related,
             hit_count=1,
             last_triggered=now_iso(),
+            owner=owner,
+            applies_to=applies_to,
         )
         for item in items:
             if item.id in related and new_item.id not in item.links:
                 item.links.append(new_item.id)
         items.append(new_item)
         self.save_items(items)
+
+    def _default_scope(self) -> dict[str, list[str]]:
+        return {
+            "worker": [self.agent_id],
+            "audience": ["*"],
+            "report_type": ["*"],
+            "format": ["*"],
+        }
 
     def _maybe_auto_dream(self) -> None:
         interval = self.dream_interval()
@@ -489,51 +593,109 @@ class MemoryStore:
         return [item for item in self.load_items() if item.hit_count >= limit]
 
     def apply_promotion(self, item_ids: list[str]) -> dict[str, Any]:
-        """Promote the named memory items into skills/<agent>/rubrics.json.
+        """Promote named memory items into their capability owner's rubrics.
 
         Human-in-the-loop by design: the caller decides which candidate ids to
         confirm. Each promoted item is appended as a new P1 rubric and removed
         from hot memory. Returns a report of what happened.
         """
-        rubrics_path = self.root / "skills" / self.agent_id / "rubrics.json"
-        rubrics_doc = read_json(rubrics_path, default={"agent_id": self.agent_id, "rubrics": []})
-        rubrics = list(rubrics_doc.get("rubrics", []))
-        existing_ids = {r.get("id") for r in rubrics if isinstance(r, dict)}
-
         items = self.load_items()
         by_id = {item.id: item for item in items}
         promoted: list[str] = []
         skipped: list[str] = []
-        seq = self._next_promoted_rubric_seq(existing_ids)
+        skipped_scoped: list[str] = []
+        paths: dict[str, str] = {}
 
         for item_id in item_ids:
             item = by_id.get(item_id)
             if item is None:
                 skipped.append(item_id)
                 continue
+            if self._is_cross_scoped(item):
+                skipped_scoped.append(item_id)
+                continue
+            rubrics_path = self._rubrics_path_for_owner(item.owner)
+            rubrics_doc = read_json(rubrics_path, default={"rubrics": []})
+            rubrics = list(rubrics_doc.get("rubrics", []))
+            existing_ids = {
+                row.get("id") for row in rubrics if isinstance(row, dict)
+            }
+            seq = self._next_promoted_rubric_seq(existing_ids)
             rubric_id = f"MEM-P1-{seq:03d}"
-            seq += 1
-            rubrics.append(
-                {
-                    "id": rubric_id,
-                    "severity": "P1",
-                    "dimension": item.dimension,
-                    "criterion": item.suggestion,
-                    "check": f"产物不应再触发历史问题：{item.trigger}",
-                    "fail_examples": [],
-                    "fix": item.suggestion,
-                    "source": {"promoted_from_memory": item.id, "hit_count": item.hit_count},
-                }
-            )
+            rubric = {
+                "id": rubric_id,
+                "severity": "P1",
+                "dimension": item.dimension,
+                "criterion": item.suggestion,
+                "check": f"产物不应再触发历史问题：{item.trigger}",
+                "fail_examples": [],
+                "fix": item.suggestion,
+                "source": {
+                    "promoted_from_memory": item.id,
+                    "hit_count": item.hit_count,
+                    "owner": item.owner,
+                    "scope": item.applies_to,
+                },
+            }
+            if not item.owner.startswith("core."):
+                rubric["applies_to"] = [self.agent_id]
+            rubrics.append(rubric)
+            rubrics_doc["rubrics"] = rubrics
+            write_json(rubrics_path, rubrics_doc)
+            paths[item.id] = str(rubrics_path)
             promoted.append(item_id)
 
         if promoted:
-            rubrics_doc["rubrics"] = rubrics
-            write_json(rubrics_path, rubrics_doc)
             remaining = [it for it in items if it.id not in set(promoted)]
             self.save_items(remaining)
 
-        return {"promoted": promoted, "skipped": skipped, "rubrics_path": str(rubrics_path)}
+        unique_paths = list(dict.fromkeys(paths.values()))
+        return {
+            "promoted": promoted,
+            "skipped": skipped,
+            "skipped_scoped": skipped_scoped,
+            "rubrics_path": unique_paths[0] if len(unique_paths) == 1 else "",
+            "rubrics_paths": paths,
+        }
+
+    def promotion_target(self, item: MemoryItem) -> str:
+        return str(self._rubrics_path_for_owner(item.owner))
+
+    def _rubrics_path_for_owner(self, owner: str) -> Path:
+        if owner.startswith("core."):
+            return self.root / "skills" / owner.removeprefix("core.") / "rubrics.json"
+        if owner.startswith("audience."):
+            return self.root / "skills" / "facets" / "audience" / owner.removeprefix("audience.") / "rubrics.json"
+        if owner.startswith("report."):
+            return self.root / "skills" / "facets" / "report_type" / owner.removeprefix("report.") / "rubrics.json"
+        if owner.startswith("format."):
+            return self.root / "skills" / "facets" / "format" / owner.removeprefix("format.") / "rubrics.json"
+        raise ValueError(f"unsupported memory owner: {owner}")
+
+    def _is_cross_scoped(self, item: MemoryItem) -> bool:
+        owner_dimension = ""
+        owner_value = ""
+        if "." in item.owner:
+            owner_dimension, owner_value = item.owner.split(".", 1)
+        dimension_map = {
+            "audience": "audience",
+            "report": "report_type",
+            "format": "format",
+        }
+        allowed_specific = {"worker"}
+        if owner_dimension in dimension_map:
+            allowed_specific.add(dimension_map[owner_dimension])
+        for dimension, values in item.applies_to.items():
+            specific = {value for value in values if value != "*"}
+            if not specific:
+                continue
+            if dimension not in allowed_specific:
+                return True
+            if dimension == "worker" and specific != {self.agent_id}:
+                return True
+            if dimension != "worker" and owner_value and specific != {owner_value}:
+                return True
+        return False
 
     def _next_promoted_rubric_seq(self, existing_ids: set) -> int:
         seq = 1

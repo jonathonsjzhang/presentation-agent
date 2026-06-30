@@ -556,13 +556,18 @@ def main() -> None:
                     return
                 result = store.apply_promotion(ids)
                 print(f"promoted: {result['promoted']}; skipped: {result['skipped']}")
-                print(f"rubrics: {result['rubrics_path']}")
+                print(f"scoped/manual: {result.get('skipped_scoped', [])}")
+                print(f"rubrics: {result.get('rubrics_paths', {})}")
             else:
                 candidates = store.promotion_candidates()
                 if not candidates:
                     print(f"no promotion candidates (threshold={store.promotion_threshold()})")
                 for item in candidates:
-                    print(f"  {item.id} [{item.dimension}] hits={item.hit_count}: {item.suggestion}")
+                    print(
+                        f"  {item.id} [{item.dimension}] hits={item.hit_count} "
+                        f"owner={item.owner} target={store.promotion_target(item)}: "
+                        f"{item.suggestion}"
+                    )
         if args.lint:
             if args.apply:
                 result = store.apply_lint()

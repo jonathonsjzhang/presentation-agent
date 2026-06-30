@@ -74,12 +74,27 @@ _FORMAT_ALIASES = {
     "docx": "document",
 }
 
+_FORMAT_CAPABILITIES = {
+    "ppt": "format.ppt",
+    "html": "format.html",
+    "document": "format.document",
+}
+
+
+def resolve_output_format(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if raw not in _FORMAT_ALIASES:
+        raise ValueError(f"unsupported output format: {raw!r}")
+    return _FORMAT_ALIASES[raw]
+
 
 def render_material(
     material: dict[str, Any],
     out_dir: Path,
     fidelity: str = "final",
     file_stem: str = "deliverable",
+    expected_format: Optional[str] = None,
+    selected_capabilities: Optional[list[str]] = None,
 ) -> RenderResult:
     """Render a formatted_material.v1-shaped dict into a real file.
 
@@ -90,8 +105,38 @@ def render_material(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    raw_fmt = str(material.get("format") or material.get("output_format") or "ppt").lower()
-    backend = _FORMAT_ALIASES.get(raw_fmt, "ppt")
+    raw_fmt = material.get("format") or material.get("output_format")
+    try:
+        backend = resolve_output_format(expected_format or raw_fmt)
+    except ValueError as exc:
+        return RenderResult(
+            status="error",
+            fmt=str(expected_format or raw_fmt or "unknown"),
+            fidelity=fidelity,
+            detail=str(exc),
+        )
+    if expected_format:
+        try:
+            artifact_format = resolve_output_format(raw_fmt)
+        except ValueError as exc:
+            return RenderResult(
+                status="error", fmt=backend, fidelity=fidelity, detail=str(exc)
+            )
+        if artifact_format != backend:
+            return RenderResult(
+                status="error",
+                fmt=backend,
+                fidelity=fidelity,
+                detail=f"format mismatch: compiled={backend}, artifact={artifact_format}",
+            )
+    expected_capability = _FORMAT_CAPABILITIES[backend]
+    if selected_capabilities and expected_capability not in selected_capabilities:
+        return RenderResult(
+            status="error",
+            fmt=backend,
+            fidelity=fidelity,
+            detail=f"renderer requires {expected_capability}; selected={selected_capabilities}",
+        )
 
     units = material.get("material_units") or []
     if not units:
