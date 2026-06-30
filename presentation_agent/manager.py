@@ -449,6 +449,11 @@ class ManagerOrchestrator:
                 # read-only reviewer / revise worker is physically dispatched with the
                 # correct capability contract instead of leaving a stale request.
                 self._annotate_spawn(task_dir, instruction)
+                has_spawn = bool(instruction.get("spawn"))
+                instruction["next_action"] = (
+                    "host_spawn_then_submit" if has_spawn
+                    else "host_write_output_then_report_submit"
+                )
                 state["last_instruction"] = instruction
                 self._save_state(state)
                 return instruction
@@ -763,12 +768,13 @@ class ManagerOrchestrator:
         state["current_task"] = task
         state["last_instruction"] = instruction
         self._save_state(state)
+        has_spawn = bool(instruction.get("spawn"))
         return {
             "actor": "worker",
             "step": "dispatch",
             "task": task,
             "instruction": instruction,
-            "next_action": "host_write_output_then_report_submit",
+            "next_action": "host_spawn_then_submit" if has_spawn else "host_write_output_then_report_submit",
         }
 
     def _manager_context(self, state: dict[str, Any]) -> dict[str, Any]:
