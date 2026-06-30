@@ -5,6 +5,8 @@ from pathlib import Path
 from presentation_agent.connectors.base import Connector, ConnectorContext
 from presentation_agent.connectors.csv import CsvConnector
 from presentation_agent.connectors.docx import DocxConnector
+from presentation_agent.connectors.image import ImageConnector
+from presentation_agent.connectors.pdf import PdfConnector
 from presentation_agent.connectors.xlsx import XlsxConnector
 from presentation_agent.models import AgentSpec
 
@@ -12,6 +14,8 @@ from presentation_agent.models import AgentSpec
 _CONNECTORS: tuple[Connector, ...] = (
     DocxConnector(),
     CsvConnector(),
+    ImageConnector(),
+    PdfConnector(),
     XlsxConnector(),
 )
 
