@@ -5,6 +5,9 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
+from presentation_agent.capabilities.profile import normalize_report_profile
+from presentation_agent.capabilities.registry import CapabilityRegistry
+from presentation_agent.context import ContextAssembler
 from presentation_agent.cross_review import CrossStageReviewer
 from presentation_agent.io import append_jsonl, read_json, write_json
 from presentation_agent.llm.schema import validate
@@ -168,6 +171,12 @@ class WorkerExecutor:
         self.data_root = data_root
         self.spawn_adapter = build_spawn_adapter(root, override=spawn_adapter)
         config = read_json(root / "configs" / "agents.json", default={})
+        capability_config = read_json(
+            root / "configs" / "capabilities.json", default={}
+        )
+        runtime_config = capability_config.get("runtime", {})
+        self.context_mode = str(runtime_config.get("context_mode") or "legacy")
+        self.context_assembler = ContextAssembler(root)
         active = set(config.get("pipeline", {}).get("stages", []))
         self.specs = {
             item["id"]: AgentSpec.from_dict(item)
@@ -206,25 +215,55 @@ class WorkerExecutor:
         task_dir.mkdir(parents=True, exist_ok=False)
         (task_dir / "handoff").mkdir(parents=True, exist_ok=True)
 
-        worker_input: dict[str, Any] = dict(report_charter)
-        resolved_inputs = []
+        resolved_inputs: list[str] = []
+        resolved_artifacts: list[tuple[Path, dict[str, Any]]] = []
         for reference in packet.get("input_artifacts", []):
             path = self._resolve_artifact(str(reference))
             if path is None:
                 continue
             resolved_inputs.append(str(path))
             data = read_json(path, default={})
-            if isinstance(data, dict):
-                worker_input.update(data)
+            if isinstance(data, dict) and path.resolve() != raw_brief_path.resolve():
+                resolved_artifacts.append((path, data))
 
-        # Control-plane contracts are authoritative and cannot be overwritten
-        # by an upstream artifact that happens to carry the same field names.
-        worker_input["report_charter"] = report_charter
-        worker_input["manager_task"] = packet
-        worker_input["raw_brief"] = read_json(raw_brief_path, default={})
+        raw_brief = read_json(raw_brief_path, default={})
+        if self.context_mode == "projected":
+            worker_input = self.context_assembler.assemble(
+                worker_id=agent_id,
+                report_charter=report_charter,
+                manager_task=packet,
+                raw_brief=raw_brief if isinstance(raw_brief, dict) else {},
+                raw_brief_path=raw_brief_path,
+                artifacts=resolved_artifacts,
+            )
+        else:
+            worker_input = dict(report_charter)
+            for _, data in resolved_artifacts:
+                worker_input.update(data)
+            # Control-plane contracts are authoritative and cannot be overwritten
+            # by an upstream artifact that carries the same field names.
+            worker_input["report_charter"] = report_charter
+            worker_input["manager_task"] = packet
+            worker_input["raw_brief"] = raw_brief
 
         input_path = task_dir / "input.json"
         write_json(input_path, worker_input)
+        context_manifest_path = task_dir / "context_manifest.json"
+        write_json(
+            context_manifest_path,
+            {
+                "schema": "context_manifest.v1",
+                "mode": self.context_mode,
+                "worker_id": agent_id,
+                "input_path": str(input_path),
+                "resolved_input_artifacts": resolved_inputs,
+                "inline_sources": {
+                    source_id: sorted(source.get("inline_fields", {}).keys())
+                    for source_id, source in worker_input.get("inputs", {}).items()
+                },
+                "material_refs": worker_input.get("material_refs", []),
+            },
+        )
         run_state = {
             "run_id": f"{task_id}-{now_iso().replace(':', '').replace('+', 'Z')}",
             "task_id": packet.get("task_id"),
@@ -238,6 +277,8 @@ class WorkerExecutor:
             "input_path": str(input_path),
             "manager_task": packet,
             "resolved_input_artifacts": resolved_inputs,
+            "context_mode": self.context_mode,
+            "context_manifest_path": str(context_manifest_path),
             "output_dir": str(task_dir),
             "p0_open": [],
             "p1_open": [],
@@ -440,7 +481,8 @@ class ManagerOrchestrator:
             if report.get("task_id") != current_task.get("task_id"):
                 raise StepError(
                     "acceptance_report.task_id 与当前任务不一致: "
-                    f"{report.get('task_id')!r} != {current_task.get('task_id')!r}"
+                    f"你写的={report.get('task_id')!r}, 系统期望={current_task.get('task_id')!r}。"
+                    " 是否忘记将 acceptance_report.task_id 从上一环节改为当前环节？"
                 )
             verdict = report.get("verdict")
             action = decision.get("action")
@@ -485,6 +527,10 @@ class ManagerOrchestrator:
             "worker_review_summary": result.get("review_summary"),
             "worker_memory_notes": result.get("memory_notes"),
             "cross_stage_review": cross_review,
+            "profile_inheritance": self._profile_inheritance(
+                state.get("report_charter", {}),
+                read_json(Path(str(result.get("artifact_path"))), default={}),
+            ),
         }
         state["current_actor"] = "manager"
         state["manager_phase"] = "acceptance"
@@ -704,6 +750,17 @@ class ManagerOrchestrator:
         )
         instruction = self.workers.prepare(Path(task["task_dir"]))
         state = self._load_state()
+        worker_state = read_json(
+            Path(task["task_dir"]) / "run_state.json", default={}
+        )
+        task.update({
+            "selected_capabilities": worker_state.get("selected_capabilities", []),
+            "capability_fingerprint": worker_state.get("skill_fingerprint", ""),
+            "prompt_budget": worker_state.get("skill_budget", {}),
+            "context_mode": worker_state.get("context_mode", ""),
+        })
+        self._replace_task(state, task)
+        state["current_task"] = task
         state["last_instruction"] = instruction
         self._save_state(state)
         return {
@@ -720,13 +777,43 @@ class ManagerOrchestrator:
         event = state.get("last_event") or (
             "start" if phase == "planning" else "worker_completed"
         )
+        raw_brief = read_json(self.raw_brief_path, default={})
+        charter = state.get("report_charter") or read_json(
+            self.charter_path, default={}
+        )
+        profile_source = charter or raw_brief
+        profile = normalize_report_profile(
+            profile_source, root=self.root, strict=False
+        ).to_dict()
+        registry = CapabilityRegistry(self.root)
         return {
             "schema": "manager_context.v1",
             "phase": phase,
             "event": event,
             "run_id": state.get("run_id"),
-            "raw_brief": read_json(self.raw_brief_path, default={}),
-            "report_charter": state.get("report_charter") or read_json(self.charter_path, default={}),
+            "raw_brief": raw_brief,
+            "report_charter": charter,
+            "report_profile": profile,
+            "capability_registry": {
+                "runtime": registry.runtime,
+                "dimensions": registry.config.get("dimensions", {}),
+                "facet_count": len(registry.inventory()),
+            },
+            "recommended_routes": self._recommended_routes(
+                profile.get("report_type", "deep_dive")
+            ),
+            "compiled_manifests": [
+                {
+                    "task_id": task.get("task_id"),
+                    "agent_id": task.get("agent_id"),
+                    "selected_capabilities": task.get("selected_capabilities", []),
+                    "fingerprint": task.get("capability_fingerprint", ""),
+                    "prompt_budget": task.get("prompt_budget", {}),
+                    "context_mode": task.get("context_mode", ""),
+                }
+                for task in state.get("tasks", [])
+                if task.get("selected_capabilities")
+            ],
             "execution_plan": read_json(
                 self.plan_path, default=state.get("execution_plan") or {}
             ),
@@ -742,19 +829,107 @@ class ManagerOrchestrator:
             "available_workers": self.workers.capabilities(),
         }
 
+    @staticmethod
+    def _recommended_routes(report_type: str) -> dict[str, Any]:
+        routes = {
+            "deep_dive": {
+                "default": [
+                    "argument_synthesis",
+                    "storyline_design",
+                    "page_filling",
+                    "format",
+                    "qa_preparation",
+                    "speaker_script",
+                ],
+                "optional": [],
+            },
+            "business_progress": {
+                "default": [
+                    "argument_synthesis",
+                    "storyline_design",
+                    "page_filling",
+                    "format",
+                ],
+                "optional": ["qa_preparation", "speaker_script"],
+            },
+            "quick_sync": {
+                "default": [
+                    "argument_synthesis",
+                    "storyline_design",
+                    "page_filling",
+                    "format",
+                ],
+                "optional": [],
+                "skip_by_default": ["qa_preparation", "speaker_script"],
+            },
+        }
+        return routes.get(report_type, routes["deep_dive"])
+
+    @staticmethod
+    def _profile_inheritance(
+        charter: dict[str, Any], artifact: dict[str, Any]
+    ) -> dict[str, Any]:
+        aliases = {"format": "output_format"}
+        mismatches = []
+        inherited = []
+        for artifact_key, charter_key in aliases.items():
+            expected = charter.get(charter_key)
+            actual = artifact.get(artifact_key) or artifact.get(charter_key)
+            if actual in (None, ""):
+                continue
+            if actual == expected:
+                inherited.append(charter_key)
+            else:
+                mismatches.append(
+                    {
+                        "field": charter_key,
+                        "expected": expected,
+                        "actual": actual,
+                    }
+                )
+        for key in ("audience", "report_type"):
+            expected = charter.get(key)
+            actual = artifact.get(key)
+            if actual in (None, ""):
+                continue
+            if actual == expected:
+                inherited.append(key)
+            else:
+                mismatches.append(
+                    {"field": key, "expected": expected, "actual": actual}
+                )
+        return {
+            "passed": not mismatches,
+            "inherited_fields": inherited,
+            "mismatches": mismatches,
+        }
+
     def _artifact_catalog(self, state: dict[str, Any]) -> list[dict[str, Any]]:
+        raw_brief = read_json(self.raw_brief_path, default={})
         catalog = [{
             "kind": "raw_brief",
             "path": str(self.raw_brief_path),
+            "schema": raw_brief.get("schema", "") if isinstance(raw_brief, dict) else "",
+            "size_bytes": self.raw_brief_path.stat().st_size
+            if self.raw_brief_path.exists()
+            else 0,
         }]
         for task in state.get("tasks", []):
             if task.get("artifact_path"):
+                artifact_path = Path(str(task["artifact_path"]))
+                artifact = read_json(artifact_path, default={})
                 catalog.append({
                     "kind": "worker_artifact",
                     "task_id": task.get("task_id"),
                     "agent_id": task.get("agent_id"),
                     "status": task.get("status"),
-                    "path": task.get("artifact_path"),
+                    "path": str(artifact_path),
+                    "schema": artifact.get("schema", "")
+                    if isinstance(artifact, dict)
+                    else "",
+                    "size_bytes": artifact_path.stat().st_size
+                    if artifact_path.exists()
+                    else 0,
                 })
         return catalog
 

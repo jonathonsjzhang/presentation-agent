@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
+from presentation_agent.capabilities.budget import estimate_tokens
+from presentation_agent.capabilities.compiler import compile_skill_package
 from presentation_agent.input_loader import load_agent_input
 from presentation_agent.io import read_json, write_json
 from presentation_agent.learning import LearningEventStore
@@ -12,7 +14,7 @@ from presentation_agent.memory_retrieval import MemoryRetriever
 from presentation_agent.models import AgentSpec, Objection, ReviewReport, StopDecision, now_iso
 from presentation_agent.review import ArtifactReviewer, StopChecker
 from presentation_agent.routing import build_routing_policy
-from presentation_agent.skill_package import load_skill_package
+from presentation_agent.skill_package import SkillPackage
 from presentation_agent.skills.base import SkillContext
 from presentation_agent.skills.generic import GenericSkill
 from presentation_agent.skills.registry import get_skill
@@ -80,7 +82,17 @@ class StepRunner:
             raise StepError("run_state.json 缺少 agent_id，该 stage 可能尚未初始化")
         self.spec = self.specs[agent_id]
         self.memory = MemoryStore(root, self.spec.id, data_root=self.data_root)
-        self.skill_package = load_skill_package(root, self.spec.id)
+        compiled_path = self.run_dir / "compiled_skill_package.json"
+        if compiled_path.exists():
+            self.skill_package = SkillPackage.from_dict(read_json(compiled_path))
+        else:
+            input_data = self._load_input(state)
+            self.skill_package = compile_skill_package(root, self.spec, input_data)
+            write_json(compiled_path, self.skill_package.to_dict())
+        state["selected_capabilities"] = self.skill_package.selected_capabilities
+        state["skill_fingerprint"] = self.skill_package.fingerprint
+        state["skill_budget"] = self.skill_package.budget
+        write_json(self.run_state_path, state)
         self.skill = get_skill(self.spec.skill, llm=None)  # no LLM — host model generates
 
         self.full_global_state = _load_run_state(root, run_dir, data_root=self.data_root)
@@ -103,6 +115,9 @@ class StepRunner:
             "handoff_dir": str(self.handoff_dir),
             "instruction_path": self._last_instruction_path(state),
             "output_path": self._last_output_path(state),
+            "selected_capabilities": state.get("selected_capabilities", []),
+            "skill_fingerprint": state.get("skill_fingerprint", ""),
+            "prompt_budget": state.get("prompt_budget", {}),
         }
 
     def prepare(self) -> dict[str, Any]:
@@ -181,6 +196,9 @@ class StepRunner:
             objections=objections,
             previous_artifact=previous_artifact,
         )
+        state.setdefault("prompt_budget", {})[f"generation_round_{round_idx}"] = dict(
+            self.skill.last_prompt_budget
+        )
 
         instruction_path = self.handoff_dir / "instruction_gen.md"
         output_path = self.handoff_dir / "output_gen.json"
@@ -202,6 +220,10 @@ class StepRunner:
         input_data = self._load_input(state)
 
         instruction = self._compose_review_instruction(artifact, input_data)
+        state.setdefault("prompt_budget", {})[f"review_round_{state['round_index']}"] = {
+            "total_chars": len(instruction),
+            "total_tokens_estimate": estimate_tokens(instruction),
+        }
         instruction_path = self.handoff_dir / "instruction_review.md"
         output_path = self.handoff_dir / "output_review.json"
         instruction_path.write_text(instruction, encoding="utf-8")
@@ -463,8 +485,25 @@ class StepRunner:
 
         topic = artifact.get("topic") or material.get("topic") or "deliverable"
         stem = self._safe_stem(topic)
+        package = getattr(self, "skill_package", None)
+        selected_capabilities = (
+            package.selected_capabilities if package is not None else []
+        )
+        selected_formats = [
+            item.removeprefix("format.")
+            for item in selected_capabilities
+            if item.startswith("format.")
+        ]
+        expected_format = selected_formats[0] if len(selected_formats) == 1 else None
         try:
-            return render_material(material, self.run_dir, fidelity=fidelity, file_stem=stem)
+            return render_material(
+                material,
+                self.run_dir,
+                fidelity=fidelity,
+                file_stem=stem,
+                expected_format=expected_format,
+                selected_capabilities=selected_capabilities,
+            )
         except Exception as exc:  # never let rendering break the stage commit
             from presentation_agent.renderers.base import RenderResult
 
@@ -504,6 +543,7 @@ class StepRunner:
             global_state=context.get("global_state", {}),
             dimensions=gen_dimensions,
             limit=limit,
+            active_capabilities=self.skill_package.selected_capabilities,
         )
         routing_policy = build_routing_policy(
             spec=self.spec,
@@ -585,6 +625,7 @@ class StepRunner:
         request: Any,
         kind: str,
     ) -> None:
+        schema_ref = self._schema_quick_ref() if kind == "gen" else ""
         lines = [
             f"# Worker Agent：{self.spec.name} · {kind}",
             "",
@@ -601,9 +642,78 @@ class StepRunner:
             f"按上述要求产出 **严格符合 {self.spec.output_schema}** 的单个 JSON 对象。",
             f"直接写入: `{output_path}`",
             "",
-            "只写 JSON，不要任何解释、前言或结语。",
         ]
+        if schema_ref:
+            lines.extend([
+                "## Schema 字段速查（必须逐条对齐）",
+                "",
+                "以下是从实际 JSON Schema 文件提取的必填字段及其类型。产出 JSON 前逐条核验：",
+                "",
+                schema_ref,
+                "",
+                "> ⚠️ 字段名、类型、嵌套结构必须与上述定义完全一致。",
+                "> 不要仅凭指令文字描述推断字段类型。",
+                "",
+            ])
+        lines.extend([
+            "## JSON 安全写作指引",
+            "",
+            "- 产出含中文文案的 JSON 时，中文里的双引号使用 `「」` 或 `『』`，",
+            "  绝不使用 ASCII `\"` —— 它会和 JSON 结构引号冲突导致解析失败。",
+            "- 确保所有 JSON 数组和对象正确闭合（`]` / `}`）。",
+            "- 建议：全部构造完成后在脑中用 `json.loads()` 校验一遍。",
+            "",
+            "只写 JSON，不要任何解释、前言或结语。",
+        ])
         instruction_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _schema_quick_ref(self) -> str:
+        """Extract required fields + types from the output schema for worker guidance."""
+        schema = (self.skill_package.to_dict().get("schemas") or {}).get(
+            self.spec.output_schema
+        )
+        if not schema:
+            return ""
+        required = schema.get("required", [])
+        props = schema.get("properties", {})
+        if not required and not props:
+            return ""
+
+        lines: list[str] = []
+        lines.append(f"**Schema**: `{self.spec.output_schema}`\n")
+        if required:
+            lines.append("### 顶层必填字段")
+        for key in required:
+            ps = props.get(key, {})
+            ptype = ps.get("type", "?")
+            pdesc = ps.get("description", "")
+            desc = f" — {pdesc}" if pdesc else ""
+            lines.append(f"- `{key}`: **{ptype}**{desc}")
+            # If array, show item required fields
+            if ptype == "array":
+                items = ps.get("items", {})
+                item_req = items.get("required", [])
+                if item_req:
+                    item_props = items.get("properties", {})
+                    for ir in item_req:
+                        ip = item_props.get(ir, {})
+                        lines.append(f"  - `[各元素].{ir}`: {ip.get('type', '?')}  "
+                                     f"({ip.get('description', '')})".rstrip())
+
+        # Non-required but commonly missing fields
+        opt_objects = {
+            k: v for k, v in props.items()
+            if k not in required and isinstance(v, dict) and v.get("type") == "object"
+        }
+        if opt_objects:
+            lines.append("\n### 重要可选字段（类型）")
+            for key, ps in sorted(opt_objects.items()):
+                ptype = ps.get("type", "?")
+                subreq = ps.get("required", [])
+                sub = f", required: {subreq}" if subreq else ""
+                lines.append(f"- `{key}`: **{ptype}**{sub}")
+
+        return "\n".join(lines)
 
     def _compose_review_instruction(self, artifact: dict[str, Any], input_data: dict[str, Any]) -> str:
         all_rubrics = self.skill_package.to_dict().get("rubrics", [])
@@ -681,6 +791,9 @@ class StepRunner:
     @staticmethod
     def _signal_snapshot(upstream: dict[str, Any]) -> dict[str, Any]:
         """Extract the signal-relevant fields from an upstream artifact."""
+        projected = upstream.get("upstream_signal")
+        if isinstance(projected, dict):
+            return projected
         heavy = {"material_units", "pages", "evidence_bank", "style_guidance", "raw_text",
                   "reference_patterns", "historical_reference_materials", "input_inventory"}
         return {
@@ -816,7 +929,10 @@ class StepRunner:
         )
         if not dims:
             return ""
-        guidance = self.memory.generation_guidance(dims)
+        guidance = self.memory.generation_guidance(
+            dims,
+            active_capabilities=self.skill_package.selected_capabilities,
+        )
         if guidance:
             return f"已注入 {len(guidance)} 条历史风格记忆（维度：{','.join(dims[:3])}）"
         return ""

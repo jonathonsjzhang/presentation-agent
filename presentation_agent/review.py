@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
+from collections import Counter
 from typing import Any, Optional
 
+from presentation_agent.capabilities.budget import estimate_tokens
 from presentation_agent.io import flatten_text
 from presentation_agent.llm.client import LLMClient
 from presentation_agent.llm.schema import validate
@@ -59,6 +62,7 @@ class ArtifactReviewer:
 
     def __init__(self, llm: Optional[LLMClient] = None) -> None:
         self.llm = llm
+        self.last_prompt_budget: dict[str, int] = {}
 
     def review(
         self,
@@ -71,7 +75,7 @@ class ArtifactReviewer:
         objections: list[Objection] = []
         objections.extend(self._schema_gate(spec, artifact, skill_package))
         objections.extend(self._llm_review(spec, artifact, skill_package, upstream_artifact))
-        objections.extend(self._memory_scan(artifact, memory))
+        objections.extend(self._memory_scan(artifact, memory, skill_package))
         reviewer = "llm+deterministic" if self.llm is not None else "deterministic"
         return ReviewReport(reviewer=reviewer, objections=objections)
 
@@ -96,10 +100,38 @@ class ArtifactReviewer:
                 )
             )
 
+        selected = (skill_package or {}).get("selected_capabilities", [])
+        selected_formats = [
+            item.removeprefix("format.")
+            for item in selected
+            if isinstance(item, str) and item.startswith("format.")
+        ]
+        artifact_format = artifact.get("format") or artifact.get("output_format")
+        if len(selected_formats) == 1 and artifact_format:
+            aliases = {"pptx": "ppt", "doc": "document", "docx": "document"}
+            normalized = aliases.get(
+                str(artifact_format).lower(), str(artifact_format).lower()
+            )
+            if normalized != selected_formats[0]:
+                objections.append(
+                    Objection(
+                        id="P0-format-capability-mismatch",
+                        severity="P0",
+                        dimension="格式契约",
+                        message=(
+                            f"artifact format={normalized} 与 compiled "
+                            f"format.{selected_formats[0]} 冲突"
+                        ),
+                        evidence="selected_capabilities",
+                        suggestion="按本轮唯一激活的 format capability 重写产物",
+                    )
+                )
+
         schema = (skill_package or {}).get("schemas", {}).get(spec.output_schema)
         if schema:
-            errors = validate(artifact, schema)
-            for index, error in enumerate(errors, start=1):
+            raw_errors = validate(artifact, schema)
+            deduped = _dedup_validation_errors(raw_errors)
+            for index, error in enumerate(deduped, start=1):
                 objections.append(
                     Objection(
                         id=f"P0-schema-{index}",
@@ -195,6 +227,14 @@ class ArtifactReviewer:
         ])
 
         user = "\n\n".join(sections)
+        self.last_prompt_budget = {
+            "system_chars": len(system),
+            "system_tokens_estimate": estimate_tokens(system),
+            "user_chars": len(user),
+            "user_tokens_estimate": estimate_tokens(user),
+            "total_chars": len(system) + len(user),
+            "total_tokens_estimate": estimate_tokens(system + user),
+        }
         request = LLMRequest(
             system=system,
             user=user,
@@ -235,6 +275,9 @@ class ArtifactReviewer:
         consciously deviate from — strips heavy payloads (material_units, pages,
         evidence_bank, etc.) to keep the review prompt lean.
         """
+        projected = upstream.get("upstream_signal")
+        if isinstance(projected, dict):
+            return projected
         heavy = {"material_units", "pages", "evidence_bank", "style_guidance", "raw_text",
                   "reference_patterns", "historical_reference_materials", "input_inventory"}
         return {
@@ -244,19 +287,27 @@ class ArtifactReviewer:
 
     # -- layer 3: memory scan -------------------------------------------
 
-    def _memory_scan(self, artifact: dict[str, Any], memory: MemoryStore) -> list[Objection]:
+    def _memory_scan(
+        self,
+        artifact: dict[str, Any],
+        memory: MemoryStore,
+        skill_package: Optional[dict[str, Any]] = None,
+    ) -> list[Objection]:
         content = dict(artifact)
         content.pop("style_guidance", None)
         text = flatten_text(content)
         objections: list[Objection] = []
-        for item in memory.scan(text):
+        active_capabilities = (skill_package or {}).get(
+            "selected_capabilities", []
+        )
+        for item in memory.scan(text, active_capabilities=active_capabilities):
             objections.append(
                 Objection(
                     id=f"P1-memory-{item.id}",
                     severity="P1",
                     dimension=item.dimension,
                     message=f"命中历史 memory: {item.trigger}",
-                    evidence=item.id,
+                    evidence=f"{item.id} owner={item.owner}",
                     suggestion=item.suggestion,
                 )
             )
@@ -408,3 +459,45 @@ class StopChecker:
         )
         response = self.llm.complete(request)
         return response.data
+
+
+# ---------------------------------------------------------------------------
+# schema validation error deduplication
+# ---------------------------------------------------------------------------
+
+_ARRAY_INDEX_PAT = re.compile(r"\[\d+\]")
+
+
+def _dedup_validation_errors(errors: list[str]) -> list[str]:
+    """Collapse array-level repetition so a single missing field doesn't
+    produce one objection per array item.
+
+    ``$.material_units[0].foo: …`` and ``$.material_units[1].foo: …``
+    become ``$.material_units[*].foo: …  (×N)``.
+    """
+    if len(errors) <= 1:
+        return errors
+
+    # Group by (normalized path, error message)
+    groups: dict[tuple[str, str], list[str]] = {}
+    for err in errors:
+        # Extract path (before ": ") and message (after ": ")
+        parts = err.split(": ", 1)
+        path = parts[0] if len(parts) > 1 else err
+        msg = parts[1] if len(parts) > 1 else ""
+        norm_path = _ARRAY_INDEX_PAT.sub("[*]", path)
+        key = (norm_path, msg)
+        groups.setdefault(key, []).append(err)
+
+    result: list[str] = []
+    for (norm_path, msg), items in groups.items():
+        if len(items) == 1:
+            result.append(items[0])
+        else:
+            first_instance = _ARRAY_INDEX_PAT.search(items[0])
+            example_idx = first_instance.group(0) if first_instance else ""
+            result.append(
+                f"{norm_path}: {msg} "
+                f"(共 {len(items)} 处, 例: {example_idx})"
+            )
+    return result
