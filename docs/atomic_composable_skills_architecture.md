@@ -1,7 +1,7 @@
 # 可组合原子 Skills 架构方案
 
-> 状态：P0-P8 已落地；6 个 Worker 已启用 capability、projected context 与 scoped memory；真实模型盲评和真实 run token 采样待持续执行  
-> 目标：将当前 Manager + 6 Worker 架构中的场景规则拆成可组合原子能力，在保持 Worker 专业边界和 schema 稳定的前提下，降低单次执行上下文、重复规则与维护成本。  
+> 状态：P0-P8 已落地；6 个 Worker 已启用 capability、projected context 与 scoped memory；真实模型盲评和真实 run token 采样待持续执行
+> 目标：将当前 Manager + 6 Worker 架构中的场景规则拆成可组合原子能力，在保持 Worker 专业边界和 schema 稳定的前提下，降低单次执行上下文、重复规则与维护成本。
 > 关联：`README.md` 第八章 TODO、`configs/agents.json`、`presentation_agent/skill_package.py`
 > 实施拆分：`docs/atomic_skills_implementation_plan.md`
 

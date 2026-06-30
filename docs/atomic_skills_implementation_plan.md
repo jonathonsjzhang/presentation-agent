@@ -1,7 +1,7 @@
 # 可组合原子 Skills 实施计划
 
-> 状态：P0-P8 已完成；可自动化 Gate B 项已通过，真实模型盲评与真实 run token Gate 待执行  
-> 上游设计：`docs/atomic_composable_skills_architecture.md`  
+> 状态：P0-P8 已完成；可自动化 Gate B 项已通过，真实模型盲评与真实 run token Gate 待执行
+> 上游设计：`docs/atomic_composable_skills_architecture.md`
 > 实施原则：小步迁移、旧链路可回退、先纵向验证一个 Worker，再横向铺开。
 
 ## 1. 总体拆分
