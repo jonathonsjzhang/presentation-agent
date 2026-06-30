@@ -1,0 +1,13 @@
+{
+  "rubrics": [
+    {
+      "id": "AUD-EXT-SL-001",
+      "applies_to": ["storyline_design"],
+      "severity": "P0",
+      "dimension": "audience_fit",
+      "criterion": "外部分享不得保留内部授权诉求、敏感数据或不可公开来源。",
+      "check": "标题、so what、evidence 和结尾是否包含内部决策或敏感信息。",
+      "fix": "改写为公开洞察，删除或匿名化敏感内容。"
+    }
+  ]
+}

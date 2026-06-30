@@ -1,0 +1,52 @@
+{
+  "rules": [
+    {
+      "id": "AUD-STRATEGY-SL-G01",
+      "applies_to": ["storyline_design"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "assumption_visibility",
+      "instruction": "保留分析框架、关键假设、替代解释和验证路径；不能把有争议的推断藏在标题背后。"
+    },
+    {
+      "id": "AUD-STRATEGY-AS-G01",
+      "applies_to": ["argument_synthesis"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "assumption_visibility",
+      "instruction": "保留分析框架、关键假设、反方和验证路径，明确哪些是事实、推断和待验证判断。"
+    },
+    {
+      "id": "AUD-STRATEGY-PF-G01",
+      "applies_to": ["page_filling"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "assumption_visibility",
+      "instruction": "页面内容要看得见证据链、关键假设、替代解释和验证口径。"
+    },
+    {
+      "id": "AUD-STRATEGY-QA-G01",
+      "applies_to": ["qa_preparation"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "question_lens",
+      "instruction": "优先准备框架是否 MECE、反例、因果替代解释和假设验证方式等问题。"
+    },
+    {
+      "id": "AUD-STRATEGY-FM-G01",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "audience_fit",
+      "instruction": "正式材料可以保留较高信息密度、方法框架、关键假设和证据追溯，但必须维持清晰层级。"
+    },
+    {
+      "id": "AUD-STRATEGY-SS-G01",
+      "applies_to": ["speaker_script"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "delivery_tone",
+      "instruction": "讲清推理桥和关键假设，但不要把口播变成方法论讲座。"
+    }
+  ]
+}

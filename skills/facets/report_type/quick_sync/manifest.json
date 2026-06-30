@@ -1,0 +1,9 @@
+{
+  "id": "report.quick_sync",
+  "kind": "report_type",
+  "select_when": {"report_type": "quick_sync"},
+  "applies_to": ["argument_synthesis", "storyline_design", "page_filling", "format", "qa_preparation", "speaker_script"],
+  "owns": ["sync_scope", "compression"],
+  "incompatible_with": [],
+  "prompt_budget_tokens": 220
+}

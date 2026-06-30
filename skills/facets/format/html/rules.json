@@ -1,0 +1,61 @@
+{
+  "rules": [
+    {
+      "id": "FMT-HTML-SL-G01",
+      "applies_to": ["storyline_design"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "unit_type",
+      "instruction": "按浏览模块组织，pages[].unit_type 使用 module，并形成摘要、导航、内容模块、证据展开和附录层级；不指定具体前端控件。"
+    },
+    {
+      "id": "FMT-HTML-AS-G01",
+      "applies_to": ["argument_synthesis"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "format_fit",
+      "instruction": "区分首屏结论、可展开证据和深层附录，使论点支持分层浏览。"
+    },
+    {
+      "id": "FMT-HTML-PF-G01",
+      "applies_to": ["page_filling"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "unit_type",
+      "instruction": "按 module 生成内容，明确摘要、导航、常驻信息、可展开证据和附录层级，不照搬 PPT 页面。"
+    },
+    {
+      "id": "FMT-HTML-FM-G01",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "format_contract",
+      "instruction": "只生成 HTML modules：format=html，material_units[].unit_type=html_module，render_plan 使用 html_renderer，并提供摘要、导航、锚点、证据展开和附录层级；禁止加载 PPT/DOCX 执行流程。",
+      "context_requirements": ["pages", "draft_material", "global_sources", "global_data_gaps"]
+    },
+    {
+      "id": "FMT-HTML-FM-G02",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "web_readability",
+      "instruction": "主结论常驻、细节按需展开；外部分享必须脱敏，不把幻灯片顺序原样搬到网页。"
+    },
+    {
+      "id": "FMT-HTML-QA-G01",
+      "applies_to": ["qa_preparation"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "format_fit",
+      "instruction": "按模块和证据展开层级定位问题，引用可展开证据而不是假设听众看过全部内容。"
+    },
+    {
+      "id": "FMT-HTML-SS-G01",
+      "applies_to": ["speaker_script"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "delivery_granularity",
+      "instruction": "按导航模块讲，并说明哪些内容可展开阅读；不要把网页当幻灯片逐屏朗读。"
+    }
+  ]
+}

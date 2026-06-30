@@ -1,0 +1,13 @@
+{
+  "rubrics": [
+    {
+      "id": "AUD-BOARD-SL-001",
+      "applies_to": ["storyline_design"],
+      "severity": "P1",
+      "dimension": "audience_fit",
+      "criterion": "董事会故事线必须服务重大取舍，并呈现风险、替代方案或决策边界。",
+      "check": "主线是否被执行细节占据，结尾是否形成董事会可判断的决策请求。",
+      "fix": "上移到取舍和风险层，弱运营细节进入附录。"
+    }
+  ]
+}

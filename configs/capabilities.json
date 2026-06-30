@@ -1,0 +1,68 @@
+{
+  "version": "capability-registry.v1",
+  "runtime": {
+    "enabled": true,
+    "pilot_agents": [
+      "argument_synthesis",
+      "storyline_design",
+      "page_filling",
+      "format",
+      "qa_preparation",
+      "speaker_script"
+    ],
+    "legacy_fallback": true,
+    "context_mode": "projected"
+  },
+  "dimensions": {
+    "audience": [
+      "board",
+      "exec_office",
+      "strategy_lead",
+      "business_team",
+      "external"
+    ],
+    "report_type": [
+      "deep_dive",
+      "business_progress",
+      "quick_sync"
+    ],
+    "output_format": [
+      "document",
+      "ppt",
+      "html"
+    ]
+  },
+  "aliases": {
+    "audience": {
+      "董事会": "board",
+      "总办": "exec_office",
+      "总经理办公会": "exec_office",
+      "战略负责人": "strategy_lead",
+      "业务负责人": "business_team",
+      "业务团队": "business_team",
+      "外部分享": "external"
+    },
+    "report_type": {
+      "深度分析": "deep_dive",
+      "专题深度分析": "deep_dive",
+      "专题汇报": "deep_dive",
+      "业务进展": "business_progress",
+      "业务进展汇报": "business_progress",
+      "进展汇报": "business_progress",
+      "快速同步": "quick_sync",
+      "信息快速同步": "quick_sync"
+    },
+    "output_format": {
+      "文档": "document",
+      "word": "document",
+      "docx": "document",
+      "幻灯片": "ppt",
+      "网页": "html"
+    }
+  },
+  "prompt_budget": {
+    "generation_instruction_tokens": 4000,
+    "review_rubric_tokens": 3000,
+    "memory_tokens": 600
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "rules": [
+    {
+      "id": "FMT-DOC-SL-G01",
+      "applies_to": ["storyline_design"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "unit_type",
+      "instruction": "按可独立阅读的章节组织，pages[].unit_type 使用 section；允许完整推理层级，但不在 storyline 阶段写正文。"
+    },
+    {
+      "id": "FMT-DOC-AS-G01",
+      "applies_to": ["argument_synthesis"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "format_fit",
+      "instruction": "论点可以保留较完整推理链、假设和边界，便于后续章节化复核。"
+    },
+    {
+      "id": "FMT-DOC-PF-G01",
+      "applies_to": ["page_filling"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "unit_type",
+      "instruction": "按 section 生成可独立阅读的章节内容，使用段落、表格、来源注和脚注层级，不模拟 PPT 页面。"
+    },
+    {
+      "id": "FMT-DOC-FM-G01",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "format_contract",
+      "instruction": "只生成正式 DOCX 报告：format=document，material_units[].unit_type=document_section，首个正文单元为 Executive Summary，render_plan 使用 docx_report_renderer；禁止加载 PPT/HTML 执行流程。",
+      "context_requirements": ["pages", "draft_material", "global_sources", "global_data_gaps"]
+    },
+    {
+      "id": "FMT-DOC-FM-G02",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "document_readability",
+      "instruction": "正文按 action heading + bullet-first 证据链组织，表格、图表、caption、source 与 caveat 可独立阅读，不把 PPT 页面逐页摊平。"
+    },
+    {
+      "id": "FMT-DOC-QA-G01",
+      "applies_to": ["qa_preparation"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "format_fit",
+      "instruction": "问题和证据引用按章节定位，并利用文档中的方法、来源和附录细节回答复核型问题。"
+    },
+    {
+      "id": "FMT-DOC-SS-G01",
+      "applies_to": ["speaker_script"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "delivery_granularity",
+      "instruction": "按 Executive Summary 和关键章节讲，不逐段朗读文档；细节提醒听众会后查阅。"
+    }
+  ]
+}

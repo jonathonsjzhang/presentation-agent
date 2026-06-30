@@ -1,0 +1,52 @@
+{
+  "rules": [
+    {
+      "id": "RPT-QUICK-SL-G01",
+      "applies_to": ["storyline_design"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "sync_scope",
+      "instruction": "用最短主线讲清发生了什么、影响是什么、是否需要动作、下一步观察什么；不要扩展成完整战略专题。"
+    },
+    {
+      "id": "RPT-QUICK-AS-G01",
+      "applies_to": ["argument_synthesis"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "sync_scope",
+      "instruction": "只保留一句话判断、关键事实、影响、是否需要动作和后续观察点；不强制展开完整候选论点比较。"
+    },
+    {
+      "id": "RPT-QUICK-PF-G01",
+      "applies_to": ["page_filling"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "sync_scope",
+      "instruction": "每个内容单元只保留支持变化、影响、动作和观察点的最少充分证据。"
+    },
+    {
+      "id": "RPT-QUICK-QA-G01",
+      "applies_to": ["qa_preparation"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "sync_scope",
+      "instruction": "只准备少量高概率关键问题，不扩展成完整战略辩论或长篇答案。"
+    },
+    {
+      "id": "RPT-QUICK-FM-G01",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "sync_scope",
+      "instruction": "正式材料只保留变化、影响、动作和观察点，使用轻量结构并删除不影响同步目标的背景与方法细节。"
+    },
+    {
+      "id": "RPT-QUICK-SS-G01",
+      "applies_to": ["speaker_script"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "sync_scope",
+      "instruction": "默认用 3-5 分钟讲清变化、影响、动作和观察点，背景与方法一句带过。"
+    }
+  ]
+}

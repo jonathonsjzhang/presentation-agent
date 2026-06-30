@@ -1,0 +1,23 @@
+{
+  "skill_name": "format",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "把一份董事会深度分析的 page_content 转成 10 页以内可编辑 PPT；必须保留 downside、来源脚注和缺数占位，不要生成 DOCX/HTML 结构。",
+      "expected_output": "formatted_material.v1 with format=ppt, slide units, shape-native render plan, source/gap preservation, and no document/html harness leakage.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "把业务团队的月度业务进展材料整理成可独立阅读的正式 Word 报告，先写 Executive Summary，再按偏差、原因、动作和支持请求展开。",
+      "expected_output": "formatted_material.v1 with format=document, document_section units, Executive Summary first, bullet-first evidence, and docx renderer handoff only.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "把一份外部快速同步材料做成自包含 HTML，首屏给结论，证据可展开，清除内部行动指令和敏感来源。",
+      "expected_output": "formatted_material.v1 with format=html, html_module units, navigation/evidence expansion, redaction, and html renderer handoff only.",
+      "files": []
+    }
+  ]
+}

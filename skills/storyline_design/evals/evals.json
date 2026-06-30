@@ -1,0 +1,50 @@
+{
+  "skill_name": "storyline_design",
+  "evals": [
+    {
+      "id": 1,
+      "name": "board-deep-dive-ppt",
+      "prompt": "基于输入材料为董事会设计一份深度分析 PPT 的故事线，目标是判断下一年度是否扩大 AI 产品投入。",
+      "expected_output": "storyline.v1；主线聚焦重大取舍、风险收益和行动请求，unit_type=page，不包含外部分享或 HTML 规则。",
+      "files": [
+        "tests/fixtures/capability_cases/board_deep_dive_ppt/input.json"
+      ],
+      "assertions": [
+        "输出符合 storyline.v1",
+        "所有主线 unit_type 为 page",
+        "故事线包含决策取舍、风险或替代方案",
+        "结尾回到投入决策"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "business-progress-document",
+      "prompt": "为业务团队设计季度进展汇报文档的章节故事线，重点是识别目标偏差、卡点和需要的支持。",
+      "expected_output": "storyline.v1；按目标、进展、偏差、风险/卡点、支持请求和下一步组织，unit_type=section。",
+      "files": [
+        "tests/fixtures/capability_cases/business_progress_document/input.json"
+      ],
+      "assertions": [
+        "输出符合 storyline.v1",
+        "所有主线 unit_type 为 section",
+        "覆盖目标、偏差、风险/卡点、支持请求和下一步",
+        "不是已完成事项流水账"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "external-quick-sync-html",
+      "prompt": "为外部行业分享设计一个 HTML 快速同步故事线，简要说明 AI 产品近期变化、影响和后续观察点。",
+      "expected_output": "storyline.v1；公开可讲、短而清楚，unit_type=module，包含摘要和浏览展开层级。",
+      "files": [
+        "tests/fixtures/capability_cases/external_quick_sync_html/input.json"
+      ],
+      "assertions": [
+        "输出符合 storyline.v1",
+        "所有主线 unit_type 为 module",
+        "不包含内部授权诉求或敏感信息",
+        "主线聚焦变化、影响、动作和观察点"
+      ]
+    }
+  ]
+}

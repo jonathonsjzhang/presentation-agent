@@ -1,0 +1,9 @@
+{
+  "id": "audience.exec_office",
+  "kind": "audience",
+  "select_when": {"audience": "exec_office"},
+  "applies_to": ["argument_synthesis", "storyline_design", "page_filling", "format", "qa_preparation", "speaker_script"],
+  "owns": ["decision_lens", "coordination_lens"],
+  "incompatible_with": [],
+  "prompt_budget_tokens": 220
+}

@@ -1,0 +1,9 @@
+{
+  "id": "report.business_progress",
+  "kind": "report_type",
+  "select_when": {"report_type": "business_progress"},
+  "applies_to": ["argument_synthesis", "storyline_design", "page_filling", "format", "qa_preparation", "speaker_script"],
+  "owns": ["progress_structure", "variance_lens"],
+  "incompatible_with": [],
+  "prompt_budget_tokens": 260
+}

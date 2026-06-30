@@ -1,0 +1,52 @@
+{
+  "rules": [
+    {
+      "id": "AUD-BOARD-SL-G01",
+      "applies_to": ["storyline_design"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "decision_lens",
+      "instruction": "围绕重大取舍、风险收益、替代方案和授权边界推进故事；不能改变董事会判断的运营细节移入附录。"
+    },
+    {
+      "id": "AUD-BOARD-AS-G01",
+      "applies_to": ["argument_synthesis"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "decision_lens",
+      "instruction": "把论点提升到重大取舍、风险收益、替代方案和授权边界；不要把功能或运营细节当作塔尖结论。"
+    },
+    {
+      "id": "AUD-BOARD-PF-G01",
+      "applies_to": ["page_filling"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "detail_level",
+      "instruction": "主线内容只保留能改变董事会判断的证据、风险和取舍，执行细节进入附录。"
+    },
+    {
+      "id": "AUD-BOARD-QA-G01",
+      "applies_to": ["qa_preparation"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "question_lens",
+      "instruction": "优先准备投入价值、downside、替代方案、退出条件和判断错误代价等董事会问题。"
+    },
+    {
+      "id": "AUD-BOARD-FM-G01",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "audience_fit",
+      "instruction": "正式材料保持克制高层密度，突出决策、取舍、风险与退出条件，弱化操作细节并保留关键 caveat。"
+    },
+    {
+      "id": "AUD-BOARD-SS-G01",
+      "applies_to": ["speaker_script"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "delivery_tone",
+      "instruction": "先给结论和决策请求，再解释证据；表达克制、短、稳，并主动交代风险边界。"
+    }
+  ]
+}

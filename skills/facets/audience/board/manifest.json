@@ -1,0 +1,9 @@
+{
+  "id": "audience.board",
+  "kind": "audience",
+  "select_when": {"audience": "board"},
+  "applies_to": ["argument_synthesis", "storyline_design", "page_filling", "format", "qa_preparation", "speaker_script"],
+  "owns": ["decision_lens", "detail_level", "question_lens"],
+  "incompatible_with": [],
+  "prompt_budget_tokens": 220
+}

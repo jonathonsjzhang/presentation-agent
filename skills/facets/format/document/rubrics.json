@@ -1,0 +1,22 @@
+{
+  "rubrics": [
+    {
+      "id": "FMT-DOC-SL-001",
+      "applies_to": ["storyline_design"],
+      "severity": "P1",
+      "dimension": "format_adaptation",
+      "criterion": "文档故事线应使用 section 颗粒度并支持独立阅读。",
+      "check": "pages[].unit_type 是否为 section，结构是否仍是碎片化 PPT 页标题。",
+      "fix": "合并为章节级论证，保留章节小结、来源和附录层级。"
+    },
+    {
+      "id": "FMT-DOC-FM-001",
+      "applies_to": ["format"],
+      "severity": "P0",
+      "dimension": "format_contract",
+      "criterion": "文档产物只能包含 document_section，并以 Executive Summary 开篇。",
+      "check": "format 是否为 document；material_units[].unit_type 是否均为 document_section；首个正文单元是否为 Executive Summary；render_plan 是否使用 docx_report_renderer。",
+      "fix": "按独立阅读的 DOCX 章节重构，不逐页摊平 PPT。"
+    }
+  ]
+}

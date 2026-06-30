@@ -1,0 +1,6 @@
+{
+  "tools": [
+    "presentation_agent.renderers.ppt",
+    "presentation_agent.vendor.mck_ppt.DeckBuilder"
+  ]
+}

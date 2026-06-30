@@ -1,0 +1,52 @@
+{
+  "rules": [
+    {
+      "id": "AUD-BIZ-SL-G01",
+      "applies_to": ["storyline_design"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "action_lens",
+      "instruction": "把结论落到业务优先级、指标、owner、依赖和下一步动作；避免只讲长期战略价值。"
+    },
+    {
+      "id": "AUD-BIZ-AS-G01",
+      "applies_to": ["argument_synthesis"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "action_lens",
+      "instruction": "把论点落到业务优先级、指标和动作含义，避免只有抽象战略价值。"
+    },
+    {
+      "id": "AUD-BIZ-PF-G01",
+      "applies_to": ["page_filling"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "action_lens",
+      "instruction": "内容块要明确指标、owner、节奏、依赖和下一步，证据与业务动作直接相连。"
+    },
+    {
+      "id": "AUD-BIZ-QA-G01",
+      "applies_to": ["qa_preparation"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "question_lens",
+      "instruction": "优先准备如何落地、资源从哪来、指标如何变化、优先级如何排等问题。"
+    },
+    {
+      "id": "AUD-BIZ-FM-G01",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "audience_fit",
+      "instruction": "正式材料突出业务动作、指标、owner、时间点和依赖关系，使团队能直接进入执行。"
+    },
+    {
+      "id": "AUD-BIZ-SS-G01",
+      "applies_to": ["speaker_script"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "delivery_tone",
+      "instruction": "讲法务实，清楚连接结论、业务动作、指标和责任，不停留在宏观口号。"
+    }
+  ]
+}

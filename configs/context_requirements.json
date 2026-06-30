@@ -1,0 +1,100 @@
+{
+  "version": "context-requirements.v1",
+  "max_inline_chars_per_field": 12000,
+  "preview_items": 3,
+  "workers": {
+    "argument_synthesis": [
+      "topic",
+      "audience",
+      "report_type",
+      "output_format",
+      "decision_goal",
+      "expected_action",
+      "desired_direction",
+      "context",
+      "materials",
+      "research_findings",
+      "complete_evidence",
+      "constraints"
+    ],
+    "storyline_design": [
+      "topic",
+      "audience",
+      "report_type",
+      "output_format",
+      "executive_summary",
+      "core_question",
+      "core_thesis",
+      "expected_action",
+      "key_arguments",
+      "evidence_bank",
+      "risks_and_counterarguments",
+      "evidence_gaps",
+      "open_questions",
+      "recommended_story_angles"
+    ],
+    "page_filling": [
+      "topic",
+      "audience",
+      "report_type",
+      "output_format",
+      "selected_story_angle",
+      "story_arc",
+      "title_read_test",
+      "pages",
+      "appendix_plan",
+      "open_questions"
+    ],
+    "format": [
+      "topic",
+      "audience",
+      "report_type",
+      "output_format",
+      "storyline_trace",
+      "pages",
+      "draft_material",
+      "global_sources",
+      "global_data_gaps",
+      "format_handoff_summary"
+    ],
+    "qa_preparation": [
+      "topic",
+      "audience",
+      "format",
+      "output_format",
+      "material_units",
+      "appendix_units",
+      "artifact_manifest",
+      "sources",
+      "data_gaps",
+      "open_design_tasks",
+      "quality_checks"
+    ],
+    "speaker_script": [
+      "topic",
+      "audience",
+      "format",
+      "output_format",
+      "material_units",
+      "appendix_units",
+      "top_questions",
+      "risk_register",
+      "speaker_script_handoff",
+      "defensive_notes",
+      "meeting_handling_plan",
+      "data_gaps_to_close",
+      "pre_meeting_followups"
+    ]
+  },
+  "signal_fields": [
+    "topic",
+    "audience",
+    "report_type",
+    "output_format",
+    "decision_goal",
+    "expected_action",
+    "core_thesis",
+    "global_data_gaps",
+    "open_questions"
+  ]
+}

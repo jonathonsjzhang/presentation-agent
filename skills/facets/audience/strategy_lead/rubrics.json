@@ -1,0 +1,13 @@
+{
+  "rubrics": [
+    {
+      "id": "AUD-STRATEGY-SL-001",
+      "applies_to": ["storyline_design"],
+      "severity": "P1",
+      "dimension": "audience_fit",
+      "criterion": "战略负责人版本应能看清分析框架、关键假设和验证路径。",
+      "check": "强判断是否缺少假设、反方或后续验证安排。",
+      "fix": "补出假设与反证页或在相关页面标明验证路径。"
+    }
+  ]
+}

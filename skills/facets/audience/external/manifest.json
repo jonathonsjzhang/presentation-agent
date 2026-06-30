@@ -1,0 +1,9 @@
+{
+  "id": "audience.external",
+  "kind": "audience",
+  "select_when": {"audience": "external"},
+  "applies_to": ["argument_synthesis", "storyline_design", "page_filling", "format", "qa_preparation", "speaker_script"],
+  "owns": ["public_lens", "sensitivity", "explainability"],
+  "incompatible_with": [],
+  "prompt_budget_tokens": 220
+}

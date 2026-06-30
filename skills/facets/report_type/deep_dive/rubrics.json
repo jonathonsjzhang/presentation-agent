@@ -1,0 +1,13 @@
+{
+  "rubrics": [
+    {
+      "id": "RPT-DEEP-SL-001",
+      "applies_to": ["storyline_design"],
+      "severity": "P1",
+      "dimension": "report_type_fit",
+      "criterion": "深度分析故事线应包含完整推导、关键转折、反方或边界。",
+      "check": "主线是否只是结论清单，缺少证据如何推出判断的认知路径。",
+      "fix": "补齐推导、转折和边界，将低价值细节移入附录。"
+    }
+  ]
+}

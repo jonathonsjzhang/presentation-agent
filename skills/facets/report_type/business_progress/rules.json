@@ -1,0 +1,52 @@
+{
+  "rules": [
+    {
+      "id": "RPT-PROGRESS-SL-G01",
+      "applies_to": ["storyline_design"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "progress_structure",
+      "instruction": "按目标/承诺、当前进展、偏差与原因、风险/卡点、决策或支持请求、下一步组织主线；不能写成工作事项流水账。"
+    },
+    {
+      "id": "RPT-PROGRESS-AS-G01",
+      "applies_to": ["argument_synthesis"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "progress_structure",
+      "instruction": "围绕目标/承诺、实际进展、偏差与原因、风险/卡点、支持请求和下一步形成管理判断，不写成事项总结。"
+    },
+    {
+      "id": "RPT-PROGRESS-PF-G01",
+      "applies_to": ["page_filling"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "progress_structure",
+      "instruction": "内容必须看得见目标值、实际值、偏差、原因、风险、owner 和下一步，避免工作流水账。"
+    },
+    {
+      "id": "RPT-PROGRESS-QA-G01",
+      "applies_to": ["qa_preparation"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "progress_structure",
+      "instruction": "优先准备偏差原因、恢复计划、资源卡点、责任归属和支持请求是否必要等问题。"
+    },
+    {
+      "id": "RPT-PROGRESS-FM-G01",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "progress_structure",
+      "instruction": "正式材料按目标/实际、偏差、原因、风险、恢复动作和支持请求组织，不做工作流水账。"
+    },
+    {
+      "id": "RPT-PROGRESS-SS-G01",
+      "applies_to": ["speaker_script"],
+      "phase": ["generation", "review"],
+      "level": "P1",
+      "property": "progress_structure",
+      "instruction": "讲法先对齐目标与实际，再讲偏差、风险、需要的支持和下一步，不逐项念已完成工作。"
+    }
+  ]
+}
