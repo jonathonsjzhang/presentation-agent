@@ -6,38 +6,36 @@ const os = require("os");
 const path = require("path");
 const { pathToFileURL } = require("url");
 
-function requireFirst(candidates) {
-  const errors = [];
-  for (const candidate of candidates) {
-    try {
-      return require(candidate);
-    } catch (error) {
-      errors.push(`${candidate}: ${error.message}`);
-    }
-  }
-  throw new Error(errors.join("\n"));
-}
-
 function firstExisting(candidates) {
   return candidates.find((candidate) => candidate && fs.existsSync(candidate));
 }
 
-async function main() {
-  const [, , htmlPath, outputDir] = process.argv;
-  if (!htmlPath || !outputDir) {
-    throw new Error("usage: html_screenshot.js <input.html> <output-dir>");
-  }
-
-  fs.mkdirSync(outputDir, { recursive: true });
+function resolveRuntime() {
   const home = os.homedir();
   const bundledNodeModules = path.join(
     home,
     ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules"
   );
-  const { chromium } = requireFirst([
+  const candidates = [
     "playwright",
     path.join(bundledNodeModules, "playwright"),
-  ]);
+  ];
+  let playwright;
+  let modulePath;
+  const errors = [];
+  for (const candidate of candidates) {
+    try {
+      playwright = require(candidate);
+      modulePath = candidate;
+      break;
+    } catch (error) {
+      errors.push(`${candidate}: ${error.message}`);
+    }
+  }
+  if (!playwright) {
+    throw new Error(errors.join("\n"));
+  }
+
   const executablePath = firstExisting([
     process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
     path.join(
@@ -48,7 +46,50 @@ async function main() {
       home,
       "Library/Caches/ms-playwright/chromium-1200/chrome-mac-arm64/Chromium.app/Contents/MacOS/Chromium"
     ),
+    playwright.chromium.executablePath(),
   ]);
+  return {
+    chromium: playwright.chromium,
+    modulePath,
+    executablePath,
+  };
+}
+
+async function main() {
+  const [, , htmlPath, outputDir] = process.argv;
+  if (htmlPath === "--doctor") {
+    const runtime = resolveRuntime();
+    let browser;
+    let launchable = false;
+    let launchError = "";
+    try {
+      browser = await runtime.chromium.launch({
+        headless: true,
+        executablePath: runtime.executablePath,
+      });
+      launchable = true;
+    } catch (error) {
+      launchError = error && error.message ? error.message : String(error);
+    } finally {
+      if (browser) {
+        await browser.close().catch(() => {});
+      }
+    }
+    process.stdout.write(JSON.stringify({
+      playwright: runtime.modulePath,
+      chromium: runtime.executablePath || "",
+      chromium_exists: Boolean(runtime.executablePath),
+      chromium_launchable: launchable,
+      error: launchError,
+    }));
+    return;
+  }
+  if (!htmlPath || !outputDir) {
+    throw new Error("usage: html_screenshot.js <input.html> <output-dir>");
+  }
+
+  fs.mkdirSync(outputDir, { recursive: true });
+  const { chromium, executablePath } = resolveRuntime();
 
   let browser;
   try {

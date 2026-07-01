@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
@@ -35,6 +36,103 @@ class PreparedArtifact:
 
 class ArtifactPreparationError(RuntimeError):
     pass
+
+
+def evaluation_runtime_status(repo_root: Path | None = None) -> dict[str, Any]:
+    """Inspect format-specific visual evaluation dependencies without rendering."""
+    repo_root = (repo_root or Path(__file__).resolve().parents[2]).resolve()
+    soffice = _find_binary(
+        "PRESENTATION_AGENT_SOFFICE",
+        "soffice",
+        Path.home()
+        / ".cache/codex-runtimes/codex-primary-runtime/dependencies/bin/soffice",
+    )
+    pdftoppm = _find_binary(
+        "PRESENTATION_AGENT_PDFTOPPM",
+        "pdftoppm",
+        Path.home()
+        / ".cache/codex-runtimes/codex-primary-runtime/dependencies/bin/pdftoppm",
+    )
+    try:
+        pymupdf_available = importlib.util.find_spec("fitz") is not None
+    except (ImportError, ValueError):
+        pymupdf_available = False
+    pdf_renderer = "PyMuPDF (fitz)" if pymupdf_available else pdftoppm
+
+    node = _find_binary(
+        "PRESENTATION_AGENT_NODE",
+        "node",
+        Path.home()
+        / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+    )
+    html_runtime = _probe_html_runtime(node, repo_root)
+    chromium_launchable = bool(html_runtime.get("chromium_launchable"))
+    chromium_detail = str(
+        html_runtime.get("chromium")
+        or html_runtime.get("error")
+        or "Chromium was not checked because Node.js is unavailable"
+    )
+    if not chromium_launchable and html_runtime.get("error"):
+        executable = html_runtime.get("chromium") or "Chromium"
+        chromium_detail = f"{executable}; launch failed: {html_runtime['error']}"
+
+    dependencies = [
+        _dependency_status(
+            "soffice",
+            bool(soffice),
+            soffice or "LibreOffice/soffice not found",
+        ),
+        _dependency_status(
+            "pdf_renderer",
+            bool(pdf_renderer),
+            str(pdf_renderer) if pdf_renderer else "Neither PyMuPDF nor pdftoppm is available",
+        ),
+        _dependency_status("node", bool(node), node or "Node.js not found"),
+        _dependency_status(
+            "playwright",
+            bool(html_runtime.get("playwright")),
+            str(
+                html_runtime.get("playwright")
+                or html_runtime.get("error")
+                or "Playwright was not checked because Node.js is unavailable"
+            ),
+        ),
+        _dependency_status(
+            "chromium",
+            chromium_launchable,
+            chromium_detail,
+            unavailable_status=(
+                "unavailable"
+                if html_runtime.get("chromium_exists")
+                else "missing"
+            ),
+        ),
+    ]
+    office_ready = bool(soffice and pdf_renderer)
+    html_ready = bool(
+        node
+        and html_runtime.get("playwright")
+        and chromium_launchable
+    )
+    formats = {
+        "ppt": {
+            "ready": office_ready,
+            "requires": ["soffice", "pdf_renderer"],
+        },
+        "document": {
+            "ready": office_ready,
+            "requires": ["soffice", "pdf_renderer"],
+        },
+        "html": {
+            "ready": html_ready,
+            "requires": ["node", "playwright", "chromium"],
+        },
+    }
+    return {
+        "ok": all(item["ready"] for item in formats.values()),
+        "formats": formats,
+        "dependencies": dependencies,
+    }
 
 
 def infer_format(path: Path) -> str:
@@ -373,3 +471,60 @@ def _find_binary(env_name: str, command: str, bundled: Path) -> str | None:
     if bundled.exists():
         return str(bundled)
     return shutil.which(command)
+
+
+def _probe_html_runtime(node: str | None, repo_root: Path) -> dict[str, Any]:
+    if not node:
+        return {}
+    script = Path(__file__).with_name("html_screenshot.js")
+    try:
+        proc = subprocess.run(
+            [node, str(script), "--doctor"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"error": str(exc)[:1000]}
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or f"Node.js exited {proc.returncode}").strip()
+        return {"error": detail[:1000]}
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        return {"error": f"HTML runtime probe returned invalid JSON: {exc}"}
+    if not isinstance(payload, dict):
+        return {"error": "HTML runtime probe returned non-object JSON"}
+    if payload.get("error"):
+        payload["error"] = _compact_runtime_error(str(payload["error"]))
+    return payload
+
+
+def _dependency_status(
+    name: str,
+    available: bool,
+    detail: str,
+    *,
+    unavailable_status: str = "missing",
+) -> dict[str, str]:
+    return {
+        "name": name,
+        "status": "ok" if available else unavailable_status,
+        "detail": detail,
+    }
+
+
+def _compact_runtime_error(error: str, limit: int = 1000) -> str:
+    lines = [line.strip() for line in error.splitlines() if line.strip()]
+    if not lines:
+        return "unknown browser launch error"
+    markers = ("FATAL", "Permission denied", "Operation not permitted", "[err]")
+    selected = [lines[0]]
+    selected.extend(
+        line
+        for line in lines[1:]
+        if any(marker in line for marker in markers)
+    )
+    return " | ".join(dict.fromkeys(selected))[:limit]

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from presentation_agent.evaluation.adapters import evaluation_runtime_status
 from presentation_agent.io import read_json, write_json
 
 
@@ -102,11 +103,39 @@ def workspace_status(workspace: Workspace, repo_root: Path) -> dict[str, object]
         if not (workspace.data_dir / "agents" / agent_id / "memory.json").exists()
     ]
     checks.append(_check("agent_memory", not missing_memory, ", ".join(missing_memory) if missing_memory else "ok"))
+    evaluation = evaluation_runtime_status(repo_root)
+    ready_formats = [
+        name
+        for name, status in evaluation["formats"].items()
+        if status["ready"]
+    ]
+    unavailable_dependencies = [
+        item["name"]
+        for item in evaluation["dependencies"]
+        if item["status"] != "ok"
+    ]
+    evaluation_detail = (
+        f"ready formats: {', '.join(ready_formats) or 'none'}; "
+        f"unavailable: {', '.join(unavailable_dependencies) or 'none'}"
+    )
+    checks.append(
+        _check(
+            "evaluation_runtime",
+            bool(evaluation["ok"]),
+            evaluation_detail,
+            required=False,
+        )
+    )
     return {
-        "ok": all(item["status"] == "ok" for item in checks),
+        "ok": all(
+            item["status"] == "ok"
+            for item in checks
+            if item.get("required", True)
+        ),
         "repo": str(repo_root),
         "workspace": str(workspace.root),
         "checks": checks,
+        "evaluation": evaluation,
     }
 
 
@@ -171,5 +200,18 @@ def _agent_ids(repo_root: Path) -> list[str]:
     return ids
 
 
-def _check(name: str, ok: bool, detail: str) -> dict[str, str]:
-    return {"name": name, "status": "ok" if ok else "missing", "detail": detail}
+def _check(
+    name: str,
+    ok: bool,
+    detail: str,
+    *,
+    required: bool = True,
+) -> dict[str, object]:
+    result: dict[str, object] = {
+        "name": name,
+        "status": "ok" if ok else "missing",
+        "detail": detail,
+    }
+    if not required:
+        result["required"] = False
+    return result
