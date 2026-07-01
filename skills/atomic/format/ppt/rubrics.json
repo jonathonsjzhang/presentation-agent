@@ -68,9 +68,9 @@
       "applies_to": ["format"],
       "severity": "P0",
       "dimension": "layout_diversity",
-      "criterion": "禁止所有页面使用同一版式，按内容类型匹配。",
-      "check": "检查连续 3 页以上是否使用相同 layout_type；是否存在 format_decisions[].layout_rationale 记录版式选择理由。",
-      "fix": "根据内容类型重新分配版式：数据分析→方案A、多维对比→方案B、方法论→方案C、战略→方案D。"
+      "criterion": "禁止所有页面使用同一版式，按内容类型从 MckEngine 72 种布局中选择匹配。",
+      "check": "检查连续 3 页以上是否使用相同 layout_type；检查 format_decisions[].layout_rationale 是否记录了 layout_type 和选择理由。",
+      "fix": "根据内容类型从 MckEngine 72 种布局中重新选择：数据对比→#37-#39/#50/#70/#72、双变量→#48/#49/#53、框架矩阵→#13/#19/#22/#54/#56、仪表盘→#57/#58/#71。"
     },
     {
       "id": "FMT-PPT-FM-007",
@@ -80,6 +80,15 @@
       "criterion": "发现结论应以多种形式融入页面，不固定右侧面板。",
       "check": "是否超过 60% 的页面使用相同发现呈现方式；发现是否可作为标题/标注/引文融入。",
       "fix": "根据页面内容特点，将发现融入标题、图表标注、引文框或侧边面板，减少固定面板使用比例。"
+    },
+    {
+      "id": "FMT-PPT-FM-008",
+      "applies_to": ["format"],
+      "severity": "P1",
+      "dimension": "layout_content_match",
+      "criterion": "每个页面选择的 layout_type 应与内容类型匹配。",
+      "check": "检查 material_units[].layout_or_structure.layout_type 是否存在于 MckEngine 72 种布局列表中；检查 layout_type 是否匹配内容的数据特征（对比数据→图表类、定性→叙事类、流程→时间类）。",
+      "fix": "将 layout_type 替换为与内容数据特征匹配的 MckEngine 布局。参考 layout-catalog.md 的 13 个分类进行匹配。"
     }
   ]
 }

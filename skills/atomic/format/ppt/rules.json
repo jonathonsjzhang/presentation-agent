@@ -71,7 +71,7 @@
       "phase": ["generation", "review"],
       "level": "P0",
       "property": "layout_diversity",
-      "instruction": "禁止所有页面使用同一版式。按内容类型匹配版式：数据分析页用方案A（左图+右发现/散点联动）、多维对比用方案B（三栏/分组图）、方法论用方案C（上文字+下图）、战略建议用方案D（结构化卡片）。版式选择记录在 format_decisions[].layout_rationale 中。"
+      "instruction": "禁止所有页面使用同一版式。按内容类型从 MckEngine 72 种布局中选择匹配：数据对比→#37/#38/#39/#50/#70/#72、双变量→#48/#49/#53/#51、多维框架→#13/#19/#22/#54/#56/#65、仪表盘→#57/#58/#71、流程时间→#16/#30/#31/#28/#29、定性叙事→#23/#25/#26/#34。选择优先级：内容类型>数据维度>叙事目标。layout_type 和选择理由记录在 format_decisions[].layout_rationale 中。参考 skills/atomic/format/ppt/references/mck-engine/layout-catalog.md（72 种布局详情）。"
     },
     {
       "id": "FMT-PPT-FM-G06",
