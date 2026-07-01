@@ -30,7 +30,7 @@
       "phase": ["generation", "review"],
       "level": "P0",
       "property": "format_contract",
-      "instruction": "只生成 PPT slide：format=ppt，material_units[].unit_type=slide，render_plan 使用 mck_ppt_shape_native；每个正文页包含行动标题、主视觉或明确缺口、来源脚注，禁止加载 DOCX/HTML 执行流程。",
+      "instruction": "只生成 PPT slide：format=ppt，material_units[].unit_type=slide，render_plan 使用 mck_ppt_shape_native；每个正文页包含行动标题、主视觉或明确缺口、来源脚注，封面后第一页必须是 Execution Summary，禁止加载 DOCX/HTML 执行流程。",
       "context_requirements": ["pages", "draft_material", "global_sources", "global_data_gaps"]
     },
     {
@@ -56,6 +56,30 @@
       "level": "P0",
       "property": "delivery_granularity",
       "instruction": "按页讲，先说标题判断，再讲主证据和 so-what，不逐条念 bullet。"
+    },
+    {
+      "id": "FMT-PPT-PF-G02",
+      "applies_to": ["page_filling"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "visual_density",
+      "instruction": "每页必须包含至少一个视觉元素（图表/表格/形状/矩阵），禁止纯文字页。正文页信息密度要求：主视觉区域占正文区约 70%，来源和注释标注在页面底部。"
+    },
+    {
+      "id": "FMT-PPT-FM-G03",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "data_authenticity",
+      "instruction": "所有图表数据（柱数值、折线坐标、表格单元格）必须从 source_refs[] 引用的原始文档中真实提取，禁止使用模拟数据或示例数据。提取后应在 material_unit 中记录数据来源位置。若原始文档中无对应数据，必须在 gap_display.visible_note 中声明数据缺失。"
+    },
+    {
+      "id": "FMT-PPT-FM-G04",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "layout_quality",
+      "instruction": "文本溢出预防：标题不超过 40 字；表格单元格启用 word_wrap，内容不超过 50 字符/单元格；insight 要点不超过 5 条，每条不超过 80 字符。布局约束：使用安全区（距边界 >= 0.5 英寸）；形状之间保持 >= 0.1 英寸间距防止重叠。"
     }
   ]
 }
