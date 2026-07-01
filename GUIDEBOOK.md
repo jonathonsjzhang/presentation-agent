@@ -52,6 +52,116 @@ Manager 会从论点、故事线、单页内容、格式化、Q&A、逐字稿 6 
 
 ---
 
+## 第五步：触发 E2E 自动评测
+
+自动评测用于判断最终 PPT、DOCX 或 HTML 是否已经达到可用于管理层汇报的质量。它独立于生产过程中的 Worker review，不修改原材料、最终文件或长期 memory。
+
+### 对话中直接触发
+
+最简单的方式是让 Agent 评测刚生成的材料：
+
+> "请对刚才生成的最终材料执行 E2E 自动评测，并告诉我四个维度的得分、主要问题和修改建议。"
+
+也可以指定文件和原始素材：
+
+> "请用汇报助手的 E2E 自动评测功能评测 `/path/to/final.pptx`。Brief 是 `/path/to/brief.json`，原始材料包括 `/path/to/data.xlsx` 和 `/path/to/research.docx`。使用 v0.2 rubric。"
+
+Agent 应读取仓库中的 `skills/evaluator/SKILL.md`，自动完成文件预处理、Judge 调度和结果聚合。用户不需要手动执行命令。
+
+建议至少提供：
+
+| 输入 | 是否必需 | 作用 |
+|---|---|---|
+| 最终材料 | 必需 | 待评测的 `.pptx`、`.docx` 或 `.html` |
+| Brief / 汇报要求 | 建议 | 判断材料是否符合受众、决策目标和格式要求 |
+| 原始材料 | 建议 | 判断已有数据、论据和访谈是否被充分、准确使用 |
+| Rubric 版本 | 可选 | 默认使用 `v0.2`；指定版本便于历史结果可比 |
+
+### Agent 后台执行协议
+
+宿主 Agent 使用以下命令启动评测。`--material` 可以重复传入：
+
+```bash
+python -m presentation_agent.cli \
+  --root <repo-path> \
+  --workspace <workspace-path> \
+  eval start \
+  --artifact <final.pptx|final.docx|final.html> \
+  --brief-file <brief.json> \
+  --material <source-1.xlsx> \
+  --material <source-2.docx> \
+  --rubric v0.2
+```
+
+命令会返回 `instruction_path` 和 `output_path`。Agent 在独立上下文中执行该 instruction，把严格 JSON 写入 output 后调用：
+
+```bash
+python -m presentation_agent.cli \
+  --root <repo-path> \
+  --workspace <workspace-path> \
+  eval submit --run <eval-run>
+```
+
+第一次 `submit` 完成 Content Judge，并返回 Visual Judge instruction；Agent 执行后再次调用同一条 `eval submit`。第二次提交完成后读取结果：
+
+```bash
+python -m presentation_agent.cli \
+  --root <repo-path> \
+  --workspace <workspace-path> \
+  eval result --run <eval-run>
+```
+
+如果对话中断，可通过以下命令恢复：
+
+```bash
+python -m presentation_agent.cli \
+  --root <repo-path> \
+  --workspace <workspace-path> \
+  eval next --run <eval-run>
+```
+
+完整循环为：
+
+```text
+eval start
+  → Content Judge 写回 JSON
+  → eval submit
+  → Visual Judge 查看全部截图并写回 JSON
+  → eval submit
+  → eval result
+```
+
+### 不同格式如何评测
+
+- **PPT/PPTX**：提取 slide 文本，同时把每页渲染为 PNG；Visual Judge 必须逐页检查截图和 contact sheet。
+- **DOC/DOCX**：提取正文，同时按真实分页渲染；重点检查章节层级、表格/图形、分页和连续阅读体验。
+- **HTML**：提取可见文本，并通过浏览器生成模块截图或视口分片；重点检查首屏、导航、模块关系和滚动阅读节奏。
+
+视觉截图是正式评测的硬门。截图缺失或 PPT/HTML 页面覆盖不完整时，`visual_snapshots_ready` / `visual_coverage_complete` 会失败，系统不会退化成只读文本后仍宣称材料通过。`--no-render` 只用于诊断，不应用于正式评测。
+
+### 评分结果
+
+默认 `v0.2` rubric 包含：
+
+| 维度 | 权重 |
+|---|---:|
+| 信息密度 | 30% |
+| Storyline | 30% |
+| 表达精炼 | 20% |
+| 信息呈现 | 20% |
+
+每个维度按 0–5 分、0.5 分刻度评分。最终报告包含：
+
+- 四个维度的得分、理由和具体页码证据；
+- 加权总分及 100 分制换算；
+- 最主要的三个问题和三个修改建议；
+- 截图、格式和文件完整性 hard gates；
+- `formal_ready`、`needs_revision` 或 `not_usable` 结论。
+
+评测 run 默认保存在用户工作区的 `runs/evals/<eval-run>/`，其中 `final_report.json` 是最终结果，`prepared/pages/` 和 `contact-sheet.png` 是 Visual Judge 使用的视觉输入。
+
+---
+
 ## 可定制维度
 
 在提出需求时说明以下维度，Agent 会自动匹配对应的生成与审查配置：
@@ -73,6 +183,10 @@ Manager 会从论点、故事线、单页内容、格式化、Q&A、逐字稿 6 
 **中途断了怎么办？** 支持断点续传。下次对话中发送"继续上次汇报"即可从断点恢复。
 
 **更新会影响历史数据吗？** 不会。程序（`~/PresentationAgent/repo/`）与数据（`~/PresentationAgent/workspaces/`）分离存放，更新仅改动程序文件。
+
+**自动评测会修改材料或写入 memory 吗？** 不会。评测只读最终材料和输入上下文，结果写入独立 eval run。
+
+**为什么 PPT/HTML 评测失败但文件可以打开？** 先检查评测结果中的视觉 hard gate。PPT/DOCX 截图依赖 LibreOffice/PDF 渲染，HTML 截图依赖 Playwright/Chromium；无法生成完整截图时系统会主动阻断视觉放行。
 
 ---
 
