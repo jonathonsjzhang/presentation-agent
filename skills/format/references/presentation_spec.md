@@ -40,6 +40,26 @@
 - 高风险页必须列入 `manual_steps[]` 并配套 `appendix_units[]` 备份
 - `quality_checks` 必含：所有 slide 单元 `layout_type` 非空 + `chart_spec` 数据可解析
 
+## MckEngine 版式匹配指南
+
+完整的 72 种版式模板库见 `references/mck_engine_catalog.md`。内容类型到布局方法的快速匹配：
+
+| 内容类型 | 推荐方法 | layout_type |
+|---------|---------|-------------|
+| 单个关键数据 | `big_number` | `key_takeaway` |
+| 3-4 个并列概念 | `table_insight` (⭐首选) | `data_table` |
+| 多品类横向对比 | `grouped_bar` | `grouped_bar` |
+| 排名/长标签 | `horizontal_bar` | `horizontal_bar` |
+| 时序趋势 | `line_chart` | `line_chart` |
+| 四象限分析 | `matrix_2x2` | `matrix_2x2` |
+| 流程步骤 | `process_chevron` | `process_chevron` |
+| 漏斗转化 | `funnel` | `horizontal_bar` |
+| 数值分解 | `waterfall` | `waterfall` |
+| 占比构成 | `donut` / `pie` | `donut` / `pie` |
+| 表格+洞见 | `table_insight` (⭐开篇推荐) | `data_table` |
+| 用户原声 | `quote` | `key_takeaway` |
+| 行动建议 | `action_items` | `key_takeaway` |
+
 ## PPT 呈现形式细则
 
 ### 页面结构

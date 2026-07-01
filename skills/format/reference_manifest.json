@@ -3,6 +3,7 @@
   "max_chars": 12000,
   "generation": [
     "references/presentation_spec.md",
-    "references/mck_api_reference.md"
+    "references/mck_api_reference.md",
+    "references/mck_engine_catalog.md"
   ]
 }
