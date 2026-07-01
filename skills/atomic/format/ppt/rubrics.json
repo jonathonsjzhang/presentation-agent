@@ -53,6 +53,33 @@
       "criterion": "PPT 每页必须包含至少一个视觉元素（图表/表格/形状），禁止纯文字页。",
       "check": "逐页检查 material_units[].visual_object 中是否有 chart_spec/table_data/shape_spec；是否存在纯文字 layout 页。",
       "fix": "为纯文字页添加图表/表格/矩阵等视觉元素，或将纯文字内容合并到相邻页面。"
+    },
+    {
+      "id": "FMT-PPT-FM-005",
+      "applies_to": ["format"],
+      "severity": "P0",
+      "dimension": "exec_summary_structure",
+      "criterion": "Execution Summary 应使用分层论点树结构，而非并列卡片。",
+      "check": "封面后第一页是否为编号发现+缩进子发现的论点树格式；是否存在 3 张以上并列同级卡片。",
+      "fix": "改为分层结构：发现1（主论点）→ 发现1.1/1.2（子发现）递进排列。"
+    },
+    {
+      "id": "FMT-PPT-FM-006",
+      "applies_to": ["format"],
+      "severity": "P0",
+      "dimension": "layout_diversity",
+      "criterion": "禁止所有页面使用同一版式，按内容类型匹配。",
+      "check": "检查连续 3 页以上是否使用相同 layout_type；是否存在 format_decisions[].layout_rationale 记录版式选择理由。",
+      "fix": "根据内容类型重新分配版式：数据分析→方案A、多维对比→方案B、方法论→方案C、战略→方案D。"
+    },
+    {
+      "id": "FMT-PPT-FM-007",
+      "applies_to": ["format"],
+      "severity": "P1",
+      "dimension": "discovery_variety",
+      "criterion": "发现结论应以多种形式融入页面，不固定右侧面板。",
+      "check": "是否超过 60% 的页面使用相同发现呈现方式；发现是否可作为标题/标注/引文融入。",
+      "fix": "根据页面内容特点，将发现融入标题、图表标注、引文框或侧边面板，减少固定面板使用比例。"
     }
   ]
 }
