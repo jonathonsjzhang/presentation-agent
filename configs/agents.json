@@ -37,6 +37,9 @@
       "qa_preparation",
       "speaker_script"
     ],
+    "optional_workers": [
+      "evidence_harvester"
+    ],
     "human_review_required": true,
     "automatic_backtracking": false,
     "automation_policy": "no_self_triggered_automation; memory update may be assisted after human feedback",
@@ -98,6 +101,100 @@
     }
   ],
   "agents": [
+    {
+      "id": "evidence_harvester",
+      "name": "证据完整盘点",
+      "stage": 0,
+      "skill": "evidence_harvester",
+      "description": "对原始材料做完整、原子化、可追溯的证据盘点，产出 Evidence Catalog，不形成战略结论。",
+      "previous_agent_id": "manager",
+      "next_agent_id": "argument_synthesis",
+      "input_schema": "manager_task.v1",
+      "output_schema": "evidence_catalog.v1",
+      "input_contract": {
+        "required_inputs": [
+          "原始材料文件或完整结构化材料",
+          "report charter",
+          "证据盘点范围"
+        ],
+        "optional_inputs": [
+          "访谈画像",
+          "问卷口径",
+          "数据字典"
+        ],
+        "accepted_material_formats": [
+          "json",
+          "text",
+          "docx",
+          "pdf",
+          "xlsx",
+          "csv",
+          "png",
+          "jpg",
+          "jpeg"
+        ],
+        "input_preparation_focus": "完整读取所有 source units，区分文本、表格和图片的检查状态"
+      },
+      "output_contract": {
+        "primary_artifact": "Evidence Catalog",
+        "required_handoff_fields": [
+          "source_units",
+          "evidence_items",
+          "source_unit_disposition",
+          "unresolved_units",
+          "coverage_summary"
+        ],
+        "downstream_use": "argument_synthesis 基于完整证据目录选择证据、形成论证并说明未使用原因"
+      },
+      "memory_dimensions": [
+        "证据完整性",
+        "来源追溯",
+        "访谈原子性",
+        "Caveat",
+        "多模态读取"
+      ],
+      "rubrics": [
+        "所有 source unit 必须有 disposition",
+        "所有 evidence item 必须引用真实 source unit",
+        "不生成 thesis 或 recommendation"
+      ],
+      "max_revision_rounds": 2,
+      "loop": {
+        "trigger": "manager_dispatch_for_deep_dive_or_complex_materials",
+        "workflow_owner": "skill",
+        "reviewer": "clean_context_review_sub_agent",
+        "stop_checker": "schema_and_p0_gate",
+        "human_review_required": true,
+        "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
+      },
+      "state": {
+        "global_reads": [
+          "audience_profile",
+          "target_action"
+        ],
+        "global_writes": [],
+        "agent_memory_scope": "evidence_harvester_only",
+        "generation_memory_dimensions": [
+          "证据完整性",
+          "来源追溯",
+          "访谈原子性"
+        ]
+      },
+      "harness": {
+        "skill_package": "skills/evidence_harvester",
+        "runtime_adapter": "generic_llm_skill_runtime",
+        "review_policy": "schema_validation + machine_check + llm_p1",
+        "connectors": [
+          "docx_reader",
+          "pdf_reader",
+          "xlsx_reader",
+          "csv_reader",
+          "image_reader"
+        ],
+        "implementation_status": "implemented"
+      },
+      "optional_features": {}
+    },
     {
       "id": "argument_synthesis",
       "name": "核心论点提炼",

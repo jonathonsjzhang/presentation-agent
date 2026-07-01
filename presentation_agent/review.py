@@ -211,7 +211,8 @@ class ArtifactReviewer:
                 "",
                 "检查上游 artifact 的关键信号是否在当前 artifact 中被正确地继承或演化：",
                 "- **矛盾**：当前 artifact 的结论、预设受众、方向是否与上游的明确信号正面冲突？",
-                "- **退化**：上游的尖锐判断在当前 artifact 中是否被模糊化、稀释或退回为中性描述？",
+                "- **强度漂移**：当前 artifact 是否无依据升级，或无理由弱化上游判断？",
+                "- **上游越界处置**：若上游判断超过证据边界，当前 artifact 是否提交 revision request，而不是静默继承或静默改写？",
                 "- **缺失继承**：上游明确提出的约束（受众类型、页数上限、目标 action）是否在当前 artifact "
                 "中被忽略？",
                 "",
@@ -293,6 +294,12 @@ class ArtifactReviewer:
                 for page in pages
                 if isinstance(page, dict)
             ]
+        evidence_index = ArtifactReviewer._evidence_index(upstream)
+        if evidence_index:
+            snapshot["evidence_index"] = evidence_index
+        readiness = upstream.get("input_readiness")
+        if isinstance(readiness, dict):
+            snapshot["input_readiness"] = readiness
         if snapshot:
             return snapshot
         heavy = {"material_units", "pages", "evidence_bank", "style_guidance", "raw_text",
@@ -301,6 +308,52 @@ class ArtifactReviewer:
             k: v for k, v in upstream.items()
             if k not in heavy and v not in ("", [], {}, None)
         }
+
+    @staticmethod
+    def _evidence_index(upstream: dict[str, Any]) -> dict[str, Any]:
+        containers: list[dict[str, Any]] = [upstream]
+        raw_brief = upstream.get("raw_brief")
+        if isinstance(raw_brief, dict):
+            containers.append(raw_brief)
+        for source in dict(upstream.get("inputs", {})).values():
+            if not isinstance(source, dict):
+                continue
+            inline = source.get("inline_fields")
+            if isinstance(inline, dict):
+                containers.append(inline)
+
+        result: dict[str, Any] = {}
+        for container in containers:
+            for field, id_key in (
+                ("evidence_items", "evidence_id"),
+                ("evidence_bank", "id"),
+                ("source_units", "source_unit_id"),
+            ):
+                value = container.get(field)
+                if isinstance(value, dict) and value.get("_projection"):
+                    result[field] = value
+                    continue
+                if not isinstance(value, list):
+                    continue
+                summaries = []
+                for item in value[:200]:
+                    if not isinstance(item, dict):
+                        continue
+                    summaries.append(
+                        {
+                            id_key: item.get(id_key),
+                            "type": item.get("type"),
+                            "source_unit_refs": item.get("source_unit_refs", []),
+                            "scope": item.get("scope"),
+                            "modality": item.get("modality"),
+                            "inspection_status": item.get("inspection_status"),
+                        }
+                    )
+                result[field] = {
+                    "count": len(value),
+                    "items": summaries,
+                }
+        return result
 
     @staticmethod
     def _page_evidence_contract(page: dict[str, Any]) -> dict[str, Any]:

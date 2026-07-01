@@ -27,6 +27,7 @@ description: Expand an approved storyline into evidence-grounded content units, 
 - 正文中的数字、事实和因果都可追溯。
 - 图表 brief 不得假设不存在的数据。
 - 不重排 storyline，不把 gap 藏进脚注。
+- 不新增 storyline/argument 中不存在的 timeline、KPI、owner、预算、组织调整、里程碑或路线图。
 - 需要拆页、补方法论页或回退补数时，显式请求 Manager 调整 storyline，不静默删证据。
 - 颗粒度、密度和载体表现只服从 active capabilities。
 - **量化结论必须包含数值、指标口径、对象范围和来源；涉及领先/提升时还必须有对比基线**。
@@ -47,6 +48,7 @@ description: Expand an approved storyline into evidence-grounded content units, 
 - 量化结论只有概括表述（如「留存率显著更高」），缺乏具体数值和基线（数据页）；
 - 对比型页面写成多段并列描述，未落到实体 × 维度矩阵（对比页）。
 - 为满足页数限制而删除关键方法论、矩阵、反方或 caveat，却没有发出 storyline change request。
+- 把战略方向“丰富化”为 action item、排期、KPI、owner 或时间轴。
 
 ## Bundled references
 

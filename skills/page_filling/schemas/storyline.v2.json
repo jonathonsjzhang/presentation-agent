@@ -14,6 +14,7 @@
     "title_read_test",
     "pages",
     "appendix_plan",
+    "upstream_revision_requests",
     "open_questions"
   ],
   "properties": {
@@ -67,6 +68,7 @@
       }
     },
     "appendix_plan": { "type": "array" },
+    "upstream_revision_requests": { "type": "array" },
     "open_questions": { "type": "array" }
   }
 }

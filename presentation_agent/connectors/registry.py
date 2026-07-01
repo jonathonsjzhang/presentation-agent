@@ -8,6 +8,7 @@ from presentation_agent.connectors.docx import DocxConnector
 from presentation_agent.connectors.image import ImageConnector
 from presentation_agent.connectors.pdf import PdfConnector
 from presentation_agent.connectors.xlsx import XlsxConnector
+from presentation_agent.connectors.source_units import attach_source_units
 from presentation_agent.models import AgentSpec
 
 
@@ -32,7 +33,7 @@ def connector_for(path: Path, spec: AgentSpec) -> Connector:
 def load_with_connector(path: Path, spec: AgentSpec) -> dict:
     context = ConnectorContext.from_spec(spec)
     connector = connector_for(path, spec)
-    return connector.load(path, context)
+    return attach_source_units(connector.load(path, context), path)
 
 
 def list_connectors() -> list[dict[str, object]]:

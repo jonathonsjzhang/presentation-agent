@@ -73,6 +73,30 @@
       "criterion": "影响结论强度的 caveat 和不显著结果必须页面可见，不能只留在内部 gap 或被改写成行动建议。",
       "check": "对照上游 must_keep_caveats、caveat evidence 与正式单元。",
       "fix": "恢复可见 caveat，并校准标题和建议强度。"
+    },
+    {
+      "id": "FMT-NO-AMPLIFICATION",
+      "severity": "P0",
+      "dimension": "recommendation_scope",
+      "criterion": "Format 不得新增上游不存在的 timeline、KPI、owner、预算、组织调整、里程碑或路线图。",
+      "check": "检查 headline、finalized_content、visual_object、layout_type 和 render plan。",
+      "fix": "删除执行化细节；上游未提供时间计划时不得使用 timeline layout。",
+      "machine_check": {
+        "each": "material_units",
+        "rules": [
+          {
+            "kind": "forbidden_pattern",
+            "paths": ["headline", "finalized_content", "visual_object"],
+            "patterns": [
+              "(未来|在)?\\s*\\d+\\s*[-–~至]\\s*\\d+\\s*(周|月|季度|年)(内)?\\s*(完成|推进|实现|上线|评估|落地)",
+              "\\bQ[1-4]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "\\bH[12]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "路线图|甘特图|里程碑|KPI|负责人|成立.{0,8}(团队|小组)"
+            ],
+            "label": "format execution amplification"
+          }
+        ]
+      }
     }
   ]
 }

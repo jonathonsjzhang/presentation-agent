@@ -26,6 +26,202 @@ Use `PYTHONDONTWRITEBYTECODE=1` or set `PYTHONPYCACHEPREFIX` to a writable temp/
 
 ---
 
+## [ERR-20260701-001] git_switch_with_overlapping_worktree_changes
+
+**Logged**: 2026-07-01T00:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: infra
+
+### Summary
+Creating a PR branch directly from `origin/main` was blocked because uncommitted changes overlapped files changed on the target branch.
+
+### Error
+```text
+error: Your local changes to the following files would be overwritten by checkout
+```
+
+### Context
+- Command: `git switch -c codex/evidence-grounded-argument-pipeline origin/main`
+- The current feature branch had already been merged through different commit hashes, while the working tree contained the next change set.
+
+### Suggested Fix
+Stage only the intended PR paths, temporarily stash unrelated worktree changes, create a transfer commit, then cherry-pick it onto a clean branch based on `origin/main`.
+
+### Metadata
+- Reproducible: yes
+- Related Files: .git/, README.md, configs/, presentation_agent/, skills/
+
+### Resolution
+- **Resolved**: 2026-07-01T00:00:00+08:00
+- **Notes**: Switched to the reversible transfer-commit workflow and kept unrelated deletions and learning logs outside the PR.
+
+---
+
+## [ERR-20260701-001] apply_patch_large_section_context_mismatch
+
+**Logged**: 2026-07-01T16:30:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: docs
+
+### Summary
+A large Markdown section replacement failed because the patch depended on an exact copy of a long context block.
+
+### Error
+```text
+apply_patch verification failed: Failed to find expected lines
+```
+
+### Context
+- Attempted to replace sections three through five of `docs/汇报助手流水线质量复盘与修改方案.md` in one context-heavy update.
+- The requested change was documentation-only; no project source files were affected.
+
+### Suggested Fix
+For wholesale document rewrites, replace the file atomically or use smaller section-boundary patches instead of matching hundreds of existing lines.
+
+### Metadata
+- Reproducible: yes
+- Related Files: docs/汇报助手流水线质量复盘与修改方案.md
+
+### Resolution
+- **Resolved**: 2026-07-01T16:30:00+08:00
+- **Notes**: Switched to an atomic full-document replacement.
+
+---
+
+## [ERR-20260701-002] apply_patch_schema_format_mismatch
+
+**Logged**: 2026-07-01T16:45:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: config
+
+### Summary
+A multi-file schema patch used expanded JSON context against compact JSON source formatting.
+
+### Error
+```text
+apply_patch verification failed: Failed to find expected lines
+```
+
+### Context
+- Attempted to update Manager schemas, Skill text, rubrics, and runtime prompt in one patch.
+- The JSON schema source uses compact one-line property definitions.
+
+### Suggested Fix
+Inspect exact file formatting and apply narrow per-file patches with stable anchors.
+
+### Metadata
+- Reproducible: yes
+- Related Files: skills/manager/schemas/report_charter.v1.json
+- See Also: ERR-20260701-001
+
+### Resolution
+- **Resolved**: 2026-07-01T16:45:00+08:00
+- **Notes**: Switched to narrow patches using exact compact JSON anchors.
+
+---
+
+## [ERR-20260701-003] shell_backtick_command_substitution
+
+**Logged**: 2026-07-01T16:47:00+08:00
+**Priority**: medium
+**Status**: resolved
+**Area**: infra
+
+### Summary
+Markdown backticks in a double-quoted shell search pattern were interpreted as command substitution.
+
+### Error
+```text
+zsh: command not found: report_charter
+zsh: command not found: execution_plan
+```
+
+### Context
+- A read-only `rg` command included Markdown field names wrapped in backticks inside the shell command string.
+- No file mutation occurred.
+
+### Suggested Fix
+Use single-quoted shell patterns without embedded command substitutions, or remove Markdown backticks from search expressions.
+
+### Metadata
+- Reproducible: yes
+- Related Files: skills/manager/SKILL.md
+
+### Resolution
+- **Resolved**: 2026-07-01T16:47:00+08:00
+- **Notes**: Continued with safe, backtick-free search patterns.
+
+---
+
+## [ERR-20260701-004] apply_patch_multi_file_schema_anchor
+
+**Logged**: 2026-07-01T17:00:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: config
+
+### Summary
+A multi-file patch failed because a Storyline schema property anchor appeared in a different order than expected.
+
+### Error
+```text
+apply_patch verification failed: Failed to find expected lines
+```
+
+### Context
+- The patch combined Storyline schema, Skills, and downstream rubrics.
+- No partial patch was applied.
+
+### Suggested Fix
+Patch each schema and rubric separately after inspecting the exact local tail/context.
+
+### Metadata
+- Reproducible: yes
+- Related Files: skills/storyline_design/schemas/storyline.v2.json
+- See Also: ERR-20260701-001, ERR-20260701-002
+
+### Resolution
+- **Resolved**: 2026-07-01T17:00:00+08:00
+- **Notes**: Switched to exact single-file patches.
+
+---
+
+## [ERR-20260701-005] machine_check_patch_anchor_mismatch
+
+**Logged**: 2026-07-01T17:12:00+08:00
+**Priority**: low
+**Status**: resolved
+**Area**: backend
+
+### Summary
+An additive machine-check patch failed on a documentation-block anchor.
+
+### Error
+```text
+apply_patch verification failed: Failed to find expected lines
+```
+
+### Context
+- The intended change adds several new generic deterministic check kinds.
+- No partial changes were applied to `machine_check.py`.
+
+### Suggested Fix
+For a cohesive module-level extension, replace the small module atomically rather than relying on prose anchors.
+
+### Metadata
+- Reproducible: yes
+- Related Files: presentation_agent/machine_check.py
+- See Also: ERR-20260701-001
+
+### Resolution
+- **Resolved**: 2026-07-01T17:12:00+08:00
+- **Notes**: Switched to an atomic module replacement.
+
+---
+
 ## [ERR-20260630-007] ruff_missing_from_bundled_runtime
 
 **Logged**: 2026-06-30T16:14:00+08:00

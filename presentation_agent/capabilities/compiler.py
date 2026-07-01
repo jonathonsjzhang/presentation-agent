@@ -34,7 +34,12 @@ def compile_skill_package(
             ("report_type", profile.report_type),
             ("format", profile.output_format),
         )
-        instruction_sections = [legacy.instructions.strip()]
+        core_instructions = legacy.instructions.strip()
+        if spec.id == "format":
+            core_instructions = core_instructions.split(
+                "## Format capabilities", 1
+            )[0].rstrip()
+        instruction_sections = [core_instructions]
         rubrics = list(legacy.rubrics)
         tools: list[str] = []
         context_requirements: list[str] = []

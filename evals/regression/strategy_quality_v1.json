@@ -1,0 +1,66 @@
+{
+  "schema": "strategy_quality_regression.v1",
+  "version": "v1",
+  "cases": [
+    {
+      "id": "REGR-E01",
+      "dimension": "evidence_inventory_recall",
+      "expected": {
+        "quote_caveat_explanatory_recall_min": 0.95,
+        "fabricated_evidence_count": 0
+      }
+    },
+    {
+      "id": "REGR-E02",
+      "dimension": "evidence_disposition",
+      "expected": {
+        "disposition_coverage": 1.0,
+        "unused_material_in_evidence_gaps": 0
+      }
+    },
+    {
+      "id": "REGR-A01",
+      "dimension": "claim_grounding",
+      "expected": {
+        "supported_claim_reference_rate": 1.0,
+        "interview_population_overclaims": 0
+      }
+    },
+    {
+      "id": "REGR-A02",
+      "dimension": "claim_calibration",
+      "expected": {
+        "unsupported_causal_claims": 0,
+        "unattributed_absolute_claims": 0
+      }
+    },
+    {
+      "id": "REGR-R01",
+      "dimension": "unsupported_roadmap",
+      "expected": {
+        "unsupported_execution_specifics": 0
+      }
+    },
+    {
+      "id": "REGR-R02",
+      "dimension": "source_backed_urgency",
+      "expected": {
+        "urgency_without_source_refs": 0
+      }
+    },
+    {
+      "id": "REGR-D01",
+      "dimension": "downstream_amplification",
+      "expected": {
+        "new_unsupported_claims_or_roadmaps": 0
+      }
+    },
+    {
+      "id": "REGR-C01",
+      "dimension": "context_completeness",
+      "expected": {
+        "generation_when_required_full_field_is_preview": 0
+      }
+    }
+  ]
+}

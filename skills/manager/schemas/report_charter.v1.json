@@ -12,6 +12,9 @@
     "out_of_scope",
     "constraints",
     "success_criteria",
+    "recommendation_granularity",
+    "unsupported_specificity_policy",
+    "evidence_inventory_policy",
     "global_state_seed",
     "blocking_questions"
   ],
@@ -26,6 +29,18 @@
     "out_of_scope": {"type": "array", "items": {"type": "string"}},
     "constraints": {"type": "array", "items": {"type": "string"}},
     "success_criteria": {"type": "array", "items": {"type": "string"}},
+    "recommendation_granularity": {
+      "type": "string",
+      "enum": ["strategic_direction", "strategic_choice", "execution_plan"]
+    },
+    "unsupported_specificity_policy": {
+      "type": "string",
+      "enum": ["forbid", "source_backed_only", "allow"]
+    },
+    "evidence_inventory_policy": {
+      "type": "string",
+      "enum": ["full_catalog_for_deep_dive", "full_catalog", "lightweight_prepass"]
+    },
     "material_inventory": {"type": "array"},
     "global_state_seed": {"type": "object"},
     "blocking_questions": {"type": "array", "items": {"type": "string"}},

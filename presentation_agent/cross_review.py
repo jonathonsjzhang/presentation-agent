@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any, Optional
 
 from presentation_agent.io import flatten_text, read_json
@@ -67,6 +68,7 @@ class CrossStageReviewer:
                     "message": f"storyline 可能未显式承接上游 {key}",
                     "suggested_owner": "storyline_design",
                 })
+        issues.extend(self._execution_amplification_issues(upstream, artifact, "storyline_design"))
         return self._result("warn" if issues else "pass", issues, "storyline upstream alignment checked")
 
     def _check_page_filling(self, upstream: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
@@ -85,6 +87,7 @@ class CrossStageReviewer:
                 "evidence": missing_titles[:3],
                 "suggested_owner": "page_filling",
             })
+        issues.extend(self._execution_amplification_issues(upstream, artifact, "page_filling"))
         return self._result("warn" if issues else "pass", issues, "page filling storyline retention checked")
 
     def _check_format(self, upstream: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
@@ -104,7 +107,43 @@ class CrossStageReviewer:
                 "message": "format 产物可能未保留上游 open_questions / 待补问题",
                 "suggested_owner": "format",
             })
+        issues.extend(self._execution_amplification_issues(upstream, artifact, "format"))
         return self._result("warn" if issues else "pass", issues, "format retention checked")
+
+    @staticmethod
+    def _execution_amplification_issues(
+        upstream: dict[str, Any],
+        artifact: dict[str, Any],
+        owner: str,
+    ) -> list[dict[str, Any]]:
+        patterns = [
+            r"(?:未来|在)?\s*\d+\s*[-–~至]\s*\d+\s*(?:周|月|季度|年)(?:内)?\s*(?:完成|推进|实现|上线|评估|落地)",
+            r"\bQ[1-4]\b.{0,8}(?:路线图|完成|推进|上线|落地)",
+            r"\bH[12]\b.{0,8}(?:路线图|完成|推进|上线|落地)",
+            r"路线图|甘特图|里程碑|KPI|负责人|成立.{0,8}(?:团队|小组)",
+        ]
+        upstream_text = flatten_text(upstream)
+        current_text = flatten_text(artifact)
+        upstream_hits = {
+            match.group(0)
+            for pattern in patterns
+            for match in re.finditer(pattern, upstream_text, flags=re.IGNORECASE)
+        }
+        current_hits = {
+            match.group(0)
+            for pattern in patterns
+            for match in re.finditer(pattern, current_text, flags=re.IGNORECASE)
+        }
+        added = sorted(current_hits - upstream_hits)
+        if not added:
+            return []
+        return [{
+            "severity": "P0",
+            "dimension": "recommendation_scope",
+            "message": f"{owner} 新增了上游不存在的执行化细节",
+            "evidence": added[:5],
+            "suggested_owner": owner,
+        }]
 
     def _check_qa(self, upstream: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
         upstream_text = flatten_text(upstream)

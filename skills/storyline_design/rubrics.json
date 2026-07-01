@@ -91,6 +91,30 @@
       "fix": "删除无依据的行动闭环，收束到已支持的判断、边界或待验证方向。"
     },
     {
+      "id": "SL-CLAIM-CALIBRATION",
+      "severity": "P0",
+      "dimension": "claim_calibration",
+      "criterion": "Leadline 不得升级上游 claim 的 claim_type、support_level、因果强度、确定性或建议粒度。",
+      "check": "逐页对照 source_argument_refs；检查是否新增绝对判断、因果、预测、时间表、KPI、owner、预算或执行步骤。",
+      "fix": "恢复上游允许的强度；若上游本身 overclaim，提交 blocking upstream_revision_request，退回 argument 修复。",
+      "machine_check": {
+        "each": "pages",
+        "rules": [
+          {
+            "kind": "forbidden_pattern",
+            "paths": ["leadline", "title", "points_to_make"],
+            "patterns": [
+              "(未来|在)?\\s*\\d+\\s*[-–~至]\\s*\\d+\\s*(周|月|季度|年)(内)?\\s*(完成|推进|实现|上线|评估|落地)",
+              "\\bQ[1-4]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "\\bH[12]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "路线图|甘特图|里程碑|KPI|负责人|成立.{0,8}(团队|小组)"
+            ],
+            "label": "downstream execution amplification"
+          }
+        ]
+      }
+    },
+    {
       "id": "SL-EVIDENCE-001",
       "severity": "P0",
       "dimension": "evidence_trace",

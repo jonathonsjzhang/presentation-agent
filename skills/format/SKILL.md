@@ -43,6 +43,7 @@ description: "[v2] Convert approved page content into a render-ready formal deli
 
 - 不改变 core thesis、故事线顺序、结论强度或证据含义。
 - 不新增无来源事实，不隐藏 low confidence、caveat 或 blocking gap。
+- 不把上游战略方向丰富为 timeline、KPI、owner、预算、组织调整、里程碑、路线图或时间轴；上游未明确提供时，禁止选择 timeline layout。
 - 每个正式单元只服务一个主要 takeaway，并有明确的信息层级。
 - sources、confidence、data gaps 和 open tasks 必须进入正式内容或交付清单。
 - Agent 只描述 render intent；`render_result=rendered` 只能由真实 renderer 回填。
@@ -2974,4 +2975,3 @@ def get_brand_color(color_name):
 - ✅ 高管汇报、董事会汇报、战略分析等高质量输出
 
 > **v1.0 版本说明（正式版）**：本次版本在 v0.9.1 基础上完成通用化改造，将"腾讯专用"泛化为"通用专业咨询风格"，适用于各行业和各类型企业。同时整合了 v0.7 → v0.9.1 的所有改进（MckEngine API 速查表、PPT 呈现规范、QA 规则等），形成第一个正式稳定版本。推荐所有新项目使用 v1.0。
-
