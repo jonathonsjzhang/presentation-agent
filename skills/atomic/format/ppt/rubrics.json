@@ -70,7 +70,7 @@
       "dimension": "layout_diversity",
       "criterion": "禁止所有页面使用同一版式，按内容类型从 MckEngine 72 种布局中选择匹配。",
       "check": "检查连续 3 页以上是否使用相同 layout_type；检查 format_decisions[].layout_rationale 是否记录了 layout_type 和选择理由。",
-      "fix": "根据内容类型从 MckEngine 72 种布局中重新选择：数据对比→#37-#39/#50/#70/#72、双变量→#48/#49/#53、框架矩阵→#13/#19/#22/#54/#56、仪表盘→#57/#58/#71。"
+      "fix": "参考 layout-catalog.md 的 6 个分类重新匹配布局。"
     },
     {
       "id": "FMT-PPT-FM-007",

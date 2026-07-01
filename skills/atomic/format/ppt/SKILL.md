@@ -27,20 +27,16 @@ Use this atomic capability only when `output_format=ppt`. Storyline units are pa
   - **行动标题**：页面最顶部，一句话结论（≤ 25 字）
   - **主视觉区域**：占据正文区 ~70%，包含图表/表格/矩阵等视觉元素
   - **来源与注释**：页面底部，标注数据来源、关键定义、计算方法
-- **版式按内容类型匹配，禁止所有页面使用同一版式**。从 MckEngine 72 种布局中按内容类型和叙事目标选择：
-
-  | 内容类型 | 推荐方案 | 可用 MckEngine 布局 | 占比参考 |
-  |---------|---------|-------------------|---------|
-  | **数据对比**（多实体/时间/维度） | 方案H: 图表类 | #37 Grouped Bar / #38 Stacked Bar / #39 Horizontal Bar / #50 Line Trend / #70 Stacked Area / #72 Multi-Bar Panel | ~25% |
-  | **双变量分析**（幅度 vs 比率） | 方案J: 高级可视化 | #53 Bubble/Scatter / #49 Waterfall / #51 Pareto / #48 Donut / #64 Pie | ~15% |
-  | **结构化多维度**（评分/对比/矩阵） | 方案CDF: 框架矩阵 | #13 2x2 Matrix / #19 Side-by-Side / #22 Traffic Light / #56 Harvey Ball / #54 Heat Matrix / #65 SWOT | ~20% |
-  | **数据驱动叙事**（指标+图表+洞察） | 方案K: 仪表盘 | #57 Dashboard KPI+Chart+Takeaways / #58 Table+Chart+Factoids / #71 Table+Insight Panel | ~20% |
-  | **流程/时间/层级** | 方案F: 时间流程 | #28 Timeline / #29 Vertical Steps / #30 Cycle / #31 Funnel / #16 Process Chevron / #15 Staircase / #67 Value Chain | ~10% |
-  | **定性/引用/摘要** | 方案E: 内容叙事 | #23 Executive Summary / #25 Quote / #26 Two-Column / #27 Four-Column / #24 Key Takeaway / #34 Action Items | ~10% |
-
+- **版式按内容类型匹配，禁止所有页面使用同一版式**。从 MckEngine 72 种布局中按内容类型和叙事目标选择（完整映射表见 `references/mck-engine/layout-catalog.md`）：
+  - 数据对比 → 图表类布局（#37-#39 / #50 / #70 / #72）
+  - 双变量分析 → 高级可视化（#48-#49 / #51 / #53 / #64）
+  - 结构化多维度 → 框架矩阵（#13 / #19 / #22 / #54 / #56 / #65）
+  - 数据驱动叙事 → 仪表盘（#57-#58 / #71）
+  - 流程/时间 → 时间流程（#16 / #28-#31 / #67）
+  - 定性/引用 → 内容叙事（#23-#27 / #34）
 - **选择优先级**：内容类型 > 数据维度 > 叙事目标 > 布局可用性
-- 每个布局对应 `layout_type` 字段，记录在 `format_decisions[].layout_rationale` 中
-- 布局的具体参数和可调用方法参考 `references/mck-engine/engine-api.md`（67 个方法）和 `references/mck-engine/layout-catalog.md`（72 种布局详情）
+- 布局和选择理由记录在 `format_decisions[].layout_rationale` 中
+- 布局参数和调用方法参考 `engine-api.md`（67 个方法）
 
 - 正文页建议包含主视觉 + 2-4 条 insight + 脚注
 - **用户原声引用应嵌入对应分析页**（作为论据支撑发现），而非独立成页
