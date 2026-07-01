@@ -1,47 +1,32 @@
 # 页内论证链
 
-## 什么是论证链
+论证链不是证据列表。它要说明每条证据与结论的关系，以及多条证据为什么能共同推出 takeaway。
 
-论证链不是 bullet 列表。它的核心是讲清楚：**证据 A 证明什么 → 证据 B 是补充/对比/拆解/边界 → A+B 共同推出什么 → 最终结论有没有说过头**。
-
-## 推荐结构
-
-```
-Evidence A  →  Evidence B  →  Inference  →  Page Takeaway
-   ↓              ↓              ↓               ↓
-证明了什么     与A是什么关系    A+B推出什么    结论，不能强于证据
+```text
+主证据 → 对比/拆解 → 机制或反例 → 边界 → inference → takeaway
 ```
 
-## 关系类型（evidence_steps[].relation）
+## `evidence_steps[].relation`
 
-| relation | 含义 | 示例 |
-|---|---|---|
-| `direct_support` | 直接支撑 claim 的核心证据 | 「纯白用户强留存 27%，直接证明纯白人群价值高」 |
-| `comparison` | 与另一个实体/基线/时段的对比 | 「相比非纯白用户 12%，纯白提升 +14pp」 |
-| `decomposition` | 对主证据的拆解（按人群/功能/渠道等） | 「拆成教育/工作/社交三种获客场景，教育占比最高 45%」 |
-| `mechanism` | 解释为什么（行为/因果/路径） | 「用户原声解释为何留存高：纯白用户有固定使用场景」 |
-| `caveat` | 边界限定或不确定性 | 「样本 n=1,243，置信区间 ±3%，不排除季节性波动」 |
+| relation | 作用 |
+|---|---|
+| `direct_support` | 直接证明核心判断 |
+| `comparison` | 给出同行、对照组、历史或时段基线 |
+| `decomposition` | 按人群、功能、渠道、时间等拆解主结果 |
+| `mechanism` | 解释行为路径或原因；用户原声通常在此 |
+| `caveat` | 限定样本、口径、适用范围或替代解释 |
 
-## 论证链的质量标准
+## 合格标准
 
-1. **每一步都有来源**：每个 evidence step 的 `evidence_ref_or_material` 指向可追溯的上游 artifact 字段。
-2. **步骤不是并列**：如果两个 evidence step 之间没有 `relation` 桥接（如「第一步是第二步的拆解」「第二步是第一步的对比基线」），那它们只是并列堆砌，不构成链。
-3. **inference 不是重复 claim**：`logic_bridge` 要写「证据如何共同指向结论」，不能只是「综上所述」同义改写。
-4. **takeaway 不能强于证据**：如果证据只证明相关性，takeaway 不能写因果；如果证据只证明局部样本，takeaway 不能升格为全局结论。
+- 每一步都有 `source_ref` 或可定位的 `evidence_ref_or_material`；
+- `supports` 写清“这条证据证明哪一步”，不能复述数字；
+- `logic_bridge` 解释证据如何共同推出结论，不能只写“综上”；
+- 相关性不升级为因果，局部样本不升级为全局；
+- 关键证据同步进入 `format_handoff_notes.must_render_evidence`。
 
-## 反例
+## 退化信号
 
-❌ 弱论证链（AI 版常见）：
-- 证据 A：「纯白用户留存较高」→ 证据 B：「非纯白用户留存较低」→ inference：「因此纯白用户很有价值」。
-- 问题：证据 A/B 是同义重复，inference 是 claim 的同义改写，缺乏真正的「推出」过程。
-
-✅ 强论证链（人工版范例）：
-- 证据 A：「纯白用户 30 日强留存 27%（n=1,243）」→ direct_support
-- 证据 B：「非纯白用户同期 30 日强留存 12%（n=3,871）」→ comparison（对照基线）
-- 证据 C：「纯白/非纯白获客渠道拆解：纯白 45% 来自学校/单位，非纯白 72% 来自应用商店搜索」→ decomposition（解释差异来源）
-- 推理桥：「纯白用户留存高并非因用户质量先天差异，而是获客场景差异——线下场景带来的用户有更强的固定使用场景绑定。」
-- Takeaway：「纯白用户价值高的本质是场景价值，而非人群标签价值——功能纯白（被特定功能吸引来并留存）比人群纯白更可获取。」
-
-## 与 Format 的交接
-
-论证链的每一步都要让 format agent 能看到「哪些证据必须上屏」——靠 `format_handoff_notes.primary_focus` 和 `on_screen_numbers` 表达，不能只停留在 proof_chain 的 JSON 深层字段。
+- 两条 evidence 是同义重复；
+- baseline、delta 或 metric 只有文字描述，没有结构化 quant；
+- 结论需要两页才能证明，却被压进一个大标题；
+- caveat 只藏在 data gap，没有进入上屏契约。

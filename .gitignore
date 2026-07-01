@@ -35,6 +35,7 @@ agents.codex/
 # ===== Tests（默认仅本地保留；E2E 评测契约随仓库发布） =====
 tests/*
 !tests/test_evaluation.py
+!tests/test_page_filling_v2.py
 .workbuddy/
 .learnings/
 

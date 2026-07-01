@@ -276,13 +276,67 @@ class ArtifactReviewer:
         evidence_bank, etc.) to keep the review prompt lean.
         """
         projected = upstream.get("upstream_signal")
-        if isinstance(projected, dict):
-            return projected
+        snapshot = dict(projected) if isinstance(projected, dict) else {}
+        pages = upstream.get("pages")
+        if not isinstance(pages, list):
+            for source in dict(upstream.get("inputs", {})).values():
+                if not isinstance(source, dict):
+                    continue
+                inline = source.get("inline_fields", {})
+                candidate = inline.get("pages") if isinstance(inline, dict) else None
+                if isinstance(candidate, list):
+                    pages = candidate
+                    break
+        if isinstance(pages, list):
+            snapshot["page_evidence_contracts"] = [
+                ArtifactReviewer._page_evidence_contract(page)
+                for page in pages
+                if isinstance(page, dict)
+            ]
+        if snapshot:
+            return snapshot
         heavy = {"material_units", "pages", "evidence_bank", "style_guidance", "raw_text",
                   "reference_patterns", "historical_reference_materials", "input_inventory"}
         return {
             k: v for k, v in upstream.items()
             if k not in heavy and v not in ("", [], {}, None)
+        }
+
+    @staticmethod
+    def _page_evidence_contract(page: dict[str, Any]) -> dict[str, Any]:
+        handoff = page.get("format_handoff_notes", {})
+        matrix = page.get("comparison_matrix", {})
+        qualitative = page.get("qualitative_evidence", [])
+        return {
+            "page_no": page.get("page_no"),
+            "title": page.get("title"),
+            "page_type": page.get("page_type"),
+            "page_takeaway": page.get("page_takeaway"),
+            "claim_strength": page.get("claim_strength"),
+            "must_render_evidence": handoff.get("must_render_evidence", [])
+            if isinstance(handoff, dict)
+            else [],
+            "on_screen_numbers": handoff.get("on_screen_numbers", [])
+            if isinstance(handoff, dict)
+            else [],
+            "must_keep_caveats": handoff.get("must_keep_caveats", [])
+            if isinstance(handoff, dict)
+            else [],
+            "comparison_matrix": {
+                "reader_takeaway": matrix.get("reader_takeaway"),
+                "source_refs": matrix.get("source_refs", []),
+            }
+            if isinstance(matrix, dict)
+            else {},
+            "qualitative_evidence": [
+                {
+                    "source_ref": row.get("source_ref"),
+                    "role": row.get("role"),
+                    "attribution": row.get("attribution"),
+                }
+                for row in qualitative
+                if isinstance(row, dict)
+            ],
         }
 
     # -- layer 3: memory scan -------------------------------------------

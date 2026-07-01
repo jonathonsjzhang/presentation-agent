@@ -22,7 +22,7 @@
       "phase": ["generation", "review"],
       "level": "P0",
       "property": "unit_type",
-      "instruction": "按 page 生成一页一结论的内容。PPT 密度策略：优先用表格/矩阵承载多实体对比数据（一表省十行 bullet），留出空间给一段判断性文字；不用三段并列 prose 代替一张对比表。每页 1 个主视觉（图表/矩阵/表格）+ 2-4 条 insight bullet + 脚注 caveat/source。"
+      "instruction": "按 page 生成一页一结论的内容。PPT 密度策略：优先用表格/矩阵承载多实体对比数据，不用三段并列 prose 代替一张对比表。每页围绕 1 个分析构图组织信息；该构图可包含主图、矩阵、拆解、quote 与 caveat 等多个联动视图，但都必须服务同一 takeaway。"
     },
     {
       "id": "FMT-PPT-FM-G01",

@@ -2,6 +2,24 @@
   "version": "context-requirements.v1",
   "max_inline_chars_per_field": 12000,
   "preview_items": 3,
+  "field_inline_limits": {
+    "page_filling": {
+      "materials": 60000,
+      "research_findings": 40000,
+      "complete_evidence": 60000,
+      "evidence_bank": 60000,
+      "qualitative_evidence": 40000,
+      "data_tables": 60000,
+      "source_notes": 30000
+    },
+    "format": {
+      "pages": 100000,
+      "draft_material": 100000,
+      "global_sources": 40000,
+      "global_data_gaps": 30000,
+      "format_handoff_summary": 30000
+    }
+  },
   "workers": {
     "argument_synthesis": [
       "topic",
@@ -43,7 +61,14 @@
       "title_read_test",
       "pages",
       "appendix_plan",
-      "open_questions"
+      "open_questions",
+      "materials",
+      "research_findings",
+      "complete_evidence",
+      "evidence_bank",
+      "qualitative_evidence",
+      "data_tables",
+      "source_notes"
     ],
     "format": [
       "topic",
