@@ -19,7 +19,7 @@ description: Convert approved page content into a render-ready formal deliverabl
 - 目标格式已在 report charter 与 active capability 中确定；
 - 每个上游单元能追溯 page takeaway、证据、来源和 data gap；
 - 需要的原始细节若被投影，应按 `material_refs[].artifact_path` 读取，不能根据 preview 补写事实。
-- **数据真实性**：`visual_object.chart_spec.data_ref` 或 `visual_object.table_data` 中的数据必须从原始文档中真实提取，禁止使用模拟数据。
+- **数据真实性**：`visual_object.chart_spec.data_ref` 或 `visual_object.table_data` 中的数据**必须**从原始文档/数据中真实提取，**禁止**使用模拟数据或示例数据。若原始文档中无对应数据，必须在 `gap_display.visible_note` 中声明"数据缺失"，并将 `quality_status` 设为 `partial`。
 - 呈现形式所需 token（typography / color / chart palette）已就位或可在 active capability 的呈现形式子节中声明。
 
 输出 `input_readiness.status = ready | partial | blocked`。输入不完整时可以生成 provisional spec，但必须把缺口写进对应单元和 `open_design_tasks`，不得把 deliverable 标为 completed。
@@ -51,7 +51,7 @@ description: Convert approved page content into a render-ready formal deliverabl
 - `artifact_manifest`
 - `render_plan`
 - `material_units[]`, `appendix_units[]`
-- `style_tokens`（至少含 typography / color / spacing 三个子集）
+- `style_tokens`（至少含 typography / color / spacing 三个子集，取值由 active format capability 的呈现形式规则定义）
 - `source_policy`, `gap_policy`, `redaction_policy`
 - `format_decisions[]`
 - `open_design_tasks[]`
@@ -61,7 +61,7 @@ description: Convert approved page content into a render-ready formal deliverabl
 每个 `material_unit` 至少包含：
 
 - `unit_id`, `source_page_no`, `unit_type`, `headline`
-- `layout_or_structure`
+- `layout_or_structure`（必含 `presentation_style_ref` 引用 active capability 呈现形式子节中的具体 token）
 - `finalized_content`
 - `visual_object`
 - `source_display`
@@ -80,7 +80,7 @@ description: Convert approved page content into a render-ready formal deliverabl
 - 只有格式建议，没有正式材料单元；
 - 未真实渲染却声称 completed；
 - 同一产物混入两种或三种载体结构；
-- 使用模拟数据填充图表/表格。
+- 使用模拟数据填充图表/表格（违反数据真实性规则）。
 
 ## Bundled references
 
