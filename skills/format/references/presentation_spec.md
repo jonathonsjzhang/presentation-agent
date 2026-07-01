@@ -8,22 +8,22 @@
 - **能做**：8–12 页（不超过 15 页）演示稿；每页一个 takeaway；图表用 native shape 渲染；动画克制。
 - **不能做**：长篇论证、跨页细读、脚注密集引用、供会后反复翻阅的存档版本。
 
-## Layout 库（10 个 `layout_type`）
+## Layout 库（10 个 `layout_type`，与 schema formatted_material.v1 对齐）
 
-| `layout_type` | 适用单元 | `hierarchy_map` 必含 | 触发 |
+| `layout_type` (schema) | 适用单元 | `hierarchy_map` 必含 | 触发 |
 |---|---|---|---|
-| `title_slide` | slide (cover) | `topic`, `subtitle` | 仅第 1 页 |
+| `cover` | slide (cover) | `topic`, `subtitle` | 仅第 1 页 |
 | `executive_summary` | slide | `primary`(1 句结论), `supporting`(≤3) | **必在 page 2**（封面后一页） |
-| `action_title` | slide（默认） | `action_title`(1 句结论), `supporting`(1–2) | 大多数内容页 |
-| `key_takeaway` | slide | `takeaway`(1 句), `evidence`(1) | 总结性单点页 |
-| `pyramid` | slide | `top`(结论), `layers`(3–4) | 结构性框架 |
+| `key_takeaway` | slide | `takeaway`(1 句), `evidence`(1-2) | 大多数内容页 |
+| `process_chevron` | slide | `stages[]`(3-5) | 结构性框架/金字塔 |
 | `matrix_2x2` | slide | `quadrants[]`(4) | 战略定位/分类 |
-| `funnel` | slide | `stages[]`(3–5) | 漏斗转化 |
+| `horizontal_bar` | slide | `items[]` | 漏斗/转化 |
 | `waterfall` | slide | `start`, `deltas[]`, `end` | 数值分解 |
-| `bar_chart` | slide | `chart_spec` | 横向比较 |
+| `grouped_bar` | slide | `chart_spec` | 横向柱状对比 |
 | `line_chart` | slide | `chart_spec` | 时间序列 |
+| `data_table` | slide | `headers[]`, `rows[][]` | 数据表格/矩阵 |
 
-**禁止类型**：目录页（directory page）和章节分隔页（section divider page）不在本 layout 库中。
+**禁止类型**：`section_divider` 和目录页（directory page）不在本 layout 库中。
 
 ## 字段填写规则（PPT 特化）
 
