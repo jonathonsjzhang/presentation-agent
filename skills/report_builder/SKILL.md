@@ -188,7 +188,10 @@ CLI 会返回 JSON，记录：
 3. 把严格 JSON 写入 output_path
 4. report submit
 5. actor=manager/worker：继续 next/submit，不自行改变调度
-6. actor=human：展示 present_to_user，等待用户决策
+6. actor=human：⚠️ **必须暂停执行**，将 `present_to_user` 原样展示给用户，
+   等待用户明确指令。用户说"继续" / "approve" 才 `report approve`；
+   用户提出修改意见才 `report feedback`。
+   **禁止在 human gate 处自动 approve、禁止替用户做决策。**
 7. 用户确认：report approve
 8. 用户要求调整或回答 Manager 问题：report feedback
 ```

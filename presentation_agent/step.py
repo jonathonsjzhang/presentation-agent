@@ -283,7 +283,14 @@ class StepRunner:
         self._write_state(state, "prepare_revise", f"revise round {state['round_index']} 指令已就绪")
 
         p0_msgs = [o.get("message", "") for o in objections_raw[:3]]
-        revision_reason = "P0 问题：" + "；".join(p0_msgs) if p0_msgs else "返工修复"
+        schema_p0s = [o for o in objections_raw if "schema-" in str(o.get("rubric_id", ""))]
+        llm_p0s = [o for o in objections_raw if "schema-" not in str(o.get("rubric_id", ""))]
+        parts = []
+        if schema_p0s:
+            parts.append(f"schema 校验发现 {len(schema_p0s)} 个 P0")
+        if llm_p0s:
+            parts.append(f"LLM review 发现 {len(llm_p0s)} 个 P0")
+        revision_reason = "；".join(parts) if parts else ("P0 问题：" + "；".join(p0_msgs) if p0_msgs else "返工修复")
 
         return {
             "step": "revise",
@@ -618,7 +625,14 @@ class StepRunner:
         try:
             data = json.loads(text)
         except json.JSONDecodeError as exc:
-            raise StepError(f"handoff 输出不是合法 JSON: {exc}") from exc
+            try:
+                from presentation_agent.llm.schema import extract_json
+                data = extract_json(text)
+            except Exception as e2:
+                raise StepError(
+                    f"handoff 输出无法解析为 JSON。原始错误: {exc}；"
+                    f"容错解析失败: {e2}。请修复输出文件后重新 commit。"
+                ) from exc
         if not isinstance(data, dict):
             raise StepError("handoff 输出必须是 JSON 对象")
         return data
@@ -914,7 +928,9 @@ class StepRunner:
         p1 = getattr(report, "p1", [])
         lines = [f"审查轮次 {round_idx}：P0={len(p0)}，P1={len(p1)}"]
         for o in p0[:5]:
-            lines.append(f"  P0 [{o.dimension}]: {o.message}")
+            source = "schema_gate" if "schema-" in str(o.id) else \
+                     "memory_scan" if "memory-" in str(o.id) else "llm_review"
+            lines.append(f"  P0 [{o.dimension}] [{source}]: {o.message}")
         for o in p1[:3]:
             lines.append(f"  P1 [{o.dimension}]: {o.message}")
         return "\n".join(lines)
