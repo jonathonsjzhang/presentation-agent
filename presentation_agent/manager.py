@@ -71,13 +71,47 @@ class ManagerAgentRuntime:
             ])
         lines.extend([
             "",
+            "## 必填字段速查（planning 阶段须写入以下所有嵌套字段）",
+            "",
+            "### report_charter 必填字段（除 material_inventory/assumptions 外全部 required）",
+            "- topic: string",
+            "- audience: string (board / exec_office / strategy_lead / business_team / external)",
+            "- report_type: string (deep_dive / business_progress / quick_sync)",
+            "- output_format: string (document / ppt / html)",
+            "- decision_goal: string",
+            "- expected_action: string",
+            "- scope: string[]  ← 字符串数组，不是 {included,excluded} 对象",
+            "- out_of_scope: string[]",
+            "- constraints: string[]",
+            "- success_criteria: string[]",
+            "- global_state_seed: object",
+            "- blocking_questions: string[]",
+            "",
+            "### execution_plan 每项 task 必填字段",
+            "- plan_id: string",
+            "- tasks: object[]  每项必填: task_id, agent_id, objective, dependencies, status",
+            "  - task_id: string  (如 t1, t2, task-argument_synthesis)",
+            "  - agent_id: string  (argument_synthesis / storyline_design / page_filling / format / qa_preparation / speaker_script)",
+            "  - objective: string  单句描述本任务要产出什么",
+            "  - dependencies: string[]  依赖的 task_id 列表, 无依赖则为 []",
+            "  - status: string  枚举值 planned / dispatched / completed / accepted / revision_required / skipped",
+            "- human_gates: array",
+            "- completion_criteria: string[]",
+            "",
+            "### acceptance_report 必填字段（acceptance 阶段）",
+            "- task_id: string  ← 必须精确等于当前验收的 task_id, 不能为 null",
+            "- verdict: string  (accept / revise / blocked)",
+            "- criteria_results: array",
+            "- cross_stage_findings: array",
+            "- reason: string",
+            "",
             "## Manager Rubrics",
             "",
             "```json",
             json.dumps(rubrics, ensure_ascii=False, indent=2),
             "```",
             "",
-            "## 输出 Schema",
+            "## 输出 Schema（完整 JSON Schema）",
             "",
             "```json",
             json.dumps(schema, ensure_ascii=False, indent=2),
@@ -650,7 +684,14 @@ class ManagerOrchestrator:
             "text": feedback,
         })
         state["current_actor"] = "manager"
-        state["manager_phase"] = "planning" if gate == "plan" else "acceptance"
+        _phase_after_feedback = {
+            "brief": "brief_confirmation",
+            "plan": "planning",
+            "worker_result": "acceptance",
+            "decision": "acceptance",
+            "final": "acceptance",
+        }
+        state["manager_phase"] = _phase_after_feedback.get(gate, "acceptance")
         state["manager_step"] = "init"
         state["last_event"] = "human_feedback"
         state["human_gate"] = None
