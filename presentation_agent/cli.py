@@ -86,6 +86,42 @@ def build_parser() -> argparse.ArgumentParser:
     report_manager_plan.add_argument("--run", required=True, help="Run id or run directory.")
     _add_spawn_adapter_option(report_manager_plan)
 
+    evaluation = sub.add_parser("eval", help="Host-driven E2E material evaluation commands.")
+    eval_subs = evaluation.add_subparsers(dest="eval_command", required=True)
+
+    eval_start = eval_subs.add_parser(
+        "start",
+        help="Prepare a PPT/DOCX/HTML artifact and return the first Judge instruction.",
+    )
+    eval_start.add_argument("--artifact", required=True, help="Final PPTX, DOCX, or HTML file.")
+    eval_start.add_argument("--brief-file", help="Optional report brief or task context file.")
+    eval_start.add_argument(
+        "--material",
+        action="append",
+        default=[],
+        help="Raw material path. Repeat this option for multiple files.",
+    )
+    eval_start.add_argument("--rubric", default="v0.2", help="Frozen E2E rubric version.")
+    eval_start.add_argument("--out", help="Optional evaluation run directory.")
+    eval_start.add_argument(
+        "--no-render",
+        action="store_true",
+        help="Skip visual rendering for diagnostics only; the visual hard gate will fail.",
+    )
+
+    eval_next = eval_subs.add_parser("next", help="Return the current Judge instruction.")
+    eval_next.add_argument("--run", required=True, help="Evaluation run id or directory.")
+
+    eval_submit = eval_subs.add_parser("submit", help="Validate Judge output and advance.")
+    eval_submit.add_argument("--run", required=True, help="Evaluation run id or directory.")
+    eval_submit.add_argument("--output-file", help="Optional JSON output produced by the host Agent.")
+
+    eval_status = eval_subs.add_parser("status", help="Show evaluation run state.")
+    eval_status.add_argument("--run", required=True, help="Evaluation run id or directory.")
+
+    eval_result = eval_subs.add_parser("result", help="Show the final aggregated evaluation report.")
+    eval_result.add_argument("--run", required=True, help="Evaluation run id or directory.")
+
     run = sub.add_parser("run", help="Run one agent loop.")
     run.add_argument("agent_id")
     run.add_argument("--input", required=True, help="Input artifact JSON path.")
@@ -269,6 +305,10 @@ def main() -> None:
 
     if args.command == "report":
         _handle_report_command(args, root, workspace)
+        return
+
+    if args.command == "eval":
+        _handle_eval_command(args, root, workspace)
         return
 
     if args.command == "list-agents":
@@ -746,6 +786,61 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "next_action": "host_write_output_then_report_submit",
         })
         return
+
+
+def _handle_eval_command(args: argparse.Namespace, root: Path, workspace) -> None:
+    from presentation_agent.evaluation import EvalError, EvaluationRunner
+    from presentation_agent.io import read_json
+
+    if args.eval_command == "start":
+        init_workspace(workspace, root)
+        run_dir = Path(args.out).expanduser().resolve() if args.out else None
+        runner = EvaluationRunner(
+            root,
+            run_dir=run_dir,
+            runs_root=workspace.runs_dir / "evals",
+        )
+        try:
+            result = runner.start(
+                Path(args.artifact),
+                brief_path=Path(args.brief_file) if args.brief_file else None,
+                material_paths=[Path(path) for path in args.material],
+                rubric_version=args.rubric,
+                render_visuals=not args.no_render,
+            )
+        except EvalError as exc:
+            _print_json({"ok": False, "error": str(exc)})
+            raise SystemExit(3)
+        _print_json({"ok": True, **result})
+        return
+
+    eval_runs_root = workspace.runs_dir / "evals"
+    run_dir = EvaluationRunner.resolve_run(
+        root,
+        args.run,
+        runs_root=eval_runs_root,
+    )
+    runner = EvaluationRunner(root, run_dir=run_dir, runs_root=eval_runs_root)
+    try:
+        if args.eval_command == "next":
+            result = runner.prepare()
+        elif args.eval_command == "submit":
+            result = runner.submit(
+                Path(args.output_file) if args.output_file else None
+            )
+        elif args.eval_command == "status":
+            result = runner.status()
+        elif args.eval_command == "result":
+            result_path = run_dir / "final_report.json"
+            if not result_path.exists():
+                raise EvalError(f"Evaluation result is not ready: {result_path}")
+            result = read_json(result_path)
+        else:
+            raise EvalError(f"Unknown eval command: {args.eval_command}")
+    except EvalError as exc:
+        _print_json({"ok": False, "error": str(exc)})
+        raise SystemExit(3)
+    _print_json({"ok": True, "run_dir": str(run_dir), "result": result})
 
 
 def _current_stage_dir(stepper: PipelineStepper, run_dir: Path) -> Path | None:
