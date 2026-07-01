@@ -6,7 +6,7 @@
       "phase": ["generation", "review"],
       "level": "P1",
       "property": "sync_scope",
-      "instruction": "用最短主线讲清发生了什么、影响是什么、是否需要动作、下一步观察什么；不要扩展成完整战略专题。"
+      "instruction": "用最短主线覆盖与同步目标相关的变化、影响、是否需要动作和后续观察点；按最有信息增量的判断组织顺序，不机械套用四段式，也不要扩展成完整战略专题。"
     },
     {
       "id": "RPT-QUICK-AS-G01",

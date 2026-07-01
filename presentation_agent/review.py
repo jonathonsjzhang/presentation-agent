@@ -309,7 +309,11 @@ class ArtifactReviewer:
         qualitative = page.get("qualitative_evidence", [])
         return {
             "page_no": page.get("page_no"),
-            "title": page.get("title"),
+            "leadline": page.get("leadline"),
+            "title": page.get("title") or page.get("leadline"),
+            "page_question": page.get("page_question"),
+            "points_to_make": page.get("points_to_make", []),
+            "evidence_refs": page.get("evidence_refs", []),
             "page_type": page.get("page_type"),
             "page_takeaway": page.get("page_takeaway"),
             "claim_strength": page.get("claim_strength"),

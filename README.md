@@ -50,8 +50,8 @@
 |---|---|---|---|
 | 控制面 | Manager | 定义任务、规划依赖、派发 Worker、验收、返工和完结 | Report charter、execution plan、task packet、acceptance report |
 | Worker | 核心论点提炼 | 提炼 Executive Summary、核心结论、关键论点和 action | Executive Summary |
-| Worker | Storyline 设计 | 设计每页标题、关键问题、so what、证据安排 | Storyline |
-| Worker | 单页内容填充 | 把 storyline 展开成 dummy page 和图表 brief | Page content |
+| Worker | Storyline 设计 | 建立动态 message pyramid，设计每页 leadline、page question、points to make 和逻辑顺序 | Storyline |
+| Worker | 单页内容填充 | 保留 storyline leadline，把 points 展开成证据链、dummy page 和图表 brief | Page content |
 | Worker | Format | 生成 PPT / HTML / 文档形态的正式材料结构 | Formatted material |
 | Worker | Q&A 梳理 | 预判追问、风险点、回答策略、待补信息 | Q&A pack |
 | Worker | 逐字稿 | 生成完整汇报话术和时间节奏 | Speaker script |
@@ -126,9 +126,11 @@ skills/<agent_id>/
 - `rubrics.json`：定义 P0/P1 审查标准，是 review 的核心质量边界。
 - `schemas/`：定义输入/输出 JSON 结构契约，保证上下游交接稳定。
 
-运行时由 `presentation_agent/skill_package.py` 读取 skill 包，再由 `presentation_agent/skills/generic.py` 组装 prompt。大多数 Agent 使用通用 `GenericSkill` runtime；`storyline_design` 另有一个样板 runtime：`presentation_agent/skills/storyline.py`。
+运行时由 `presentation_agent/skill_package.py` 读取 skill 包，再由 `presentation_agent/skills/generic.py` 组装 prompt。所有 Worker 使用通用 `GenericSkill` runtime；`presentation_agent/skills/storyline.py` 只保留为直接调用场景下的安全 fallback，不负责选择固定 Story Arc。
 
 这种设计的好处是：修改 Agent 行为时，优先改 skill 包，而不是改 Python runtime。SOP、rubrics、schema 都可以独立演进。
+
+Storyline 与 Page Filling 各司其职：Storyline v2 先根据 governing question 和上游论点建立动态 message pyramid，再形成逐页 leadline spine；它不预设 Problem-Solution 等固定 Story Arc，也不填具体数字和图表。Page Filling 必须逐字保留 leadline，并把每页 `points_to_make` 展开为可追溯的 proof chain、内容块和视觉 brief；无法支撑时通过 `storyline_change_requests` 回退，而不是静默改标题或删观点。
 
 Skill 体系覆盖了战略汇报的常见场景，由 Manager planning 收敛为 `report_charter` 并通过 task packet 和 global state 向 Worker 传递：
 

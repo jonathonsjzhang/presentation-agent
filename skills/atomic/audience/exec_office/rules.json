@@ -6,7 +6,7 @@
       "phase": ["generation", "review"],
       "level": "P1",
       "property": "coordination_lens",
-      "instruction": "突出待拍板事项、跨部门卡点、责任关系和不协调的后果；结尾明确需要总办确认什么。"
+      "instruction": "突出上游材料已经提出的待拍板事项、跨部门卡点、责任关系和不协调后果；若任务确实包含总办决策请求，结尾明确需要确认什么，否则收束到当前能够支持的判断与待验证事项。"
     },
     {
       "id": "AUD-EXEC-AS-G01",

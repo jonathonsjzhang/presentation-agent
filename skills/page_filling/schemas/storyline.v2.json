@@ -1,0 +1,72 @@
+{
+  "schema": "storyline.v2",
+  "description": "Page Filling 接收的 Storyline v2 输入契约。",
+  "type": "object",
+  "required": [
+    "agent_id",
+    "schema",
+    "topic",
+    "audience",
+    "objective",
+    "message_pyramid",
+    "ordering_rationale",
+    "closing_intent",
+    "title_read_test",
+    "pages",
+    "appendix_plan",
+    "open_questions"
+  ],
+  "properties": {
+    "agent_id": { "const": "storyline_design" },
+    "schema": { "const": "storyline.v2" },
+    "topic": { "type": "string" },
+    "audience": { "type": "string" },
+    "report_type": { "type": "string" },
+    "output_format": { "type": "string" },
+    "objective": { "type": "string" },
+    "message_pyramid": { "type": "object" },
+    "ordering_rationale": { "type": "string" },
+    "closing_intent": { "type": "string" },
+    "title_read_test": { "type": "object" },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "page_no",
+          "unit_type",
+          "leadline",
+          "title",
+          "page_question",
+          "points_to_make",
+          "role_in_story",
+          "evidence_refs",
+          "transition_from_previous",
+          "transition_to_next",
+          "tag"
+        ],
+        "properties": {
+          "page_no": { "type": "integer" },
+          "unit_type": { "type": "string" },
+          "leadline": { "type": "string" },
+          "title": { "type": "string" },
+          "page_question": { "type": "string" },
+          "points_to_make": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          },
+          "role_in_story": { "type": "string" },
+          "source_argument_refs": { "type": "array", "items": { "type": "string" } },
+          "evidence_refs": { "type": "array", "items": { "type": "string" } },
+          "transition_from_previous": { "type": "string" },
+          "transition_to_next": { "type": "string" },
+          "tag": { "type": "string" }
+        }
+      }
+    },
+    "appendix_plan": { "type": "array" },
+    "open_questions": { "type": "array" }
+  }
+}

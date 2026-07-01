@@ -202,11 +202,11 @@
       "name": "storyline 设计",
       "stage": 2,
       "skill": "storyline_design",
-      "description": "把 Executive Summary 和完整论据转成每页/模块标题、关键问题、so what 和预期放置的论据素材。",
+      "description": "把 Executive Summary 和完整论据转成动态 message pyramid，以及每页/模块的 leadline、page question、points to make 和逻辑转场。",
       "previous_agent_id": "argument_synthesis",
       "next_agent_id": "page_filling",
       "input_schema": "argument_synthesis.v1",
-      "output_schema": "storyline.v1",
+      "output_schema": "storyline.v2",
       "input_contract": {
         "required_inputs": [
           "Executive Summary",
@@ -222,18 +222,19 @@
           "json",
           "docx"
         ],
-        "input_preparation_focus": "围绕塔尖结论组织 2-4 个 MECE 论点，并判断每页/模块应放置哪些证据"
+        "input_preparation_focus": "围绕 governing question 和塔尖结论建立动态 message pyramid，再按论点依赖和关键张力决定内容单元顺序"
       },
       "output_contract": {
         "primary_artifact": "storyline",
         "required_handoff_fields": [
-          "story_arc",
+          "message_pyramid",
+          "ordering_rationale",
           "title_read_test",
           "pages",
           "appendix_plan",
           "open_questions"
         ],
-        "downstream_use": "page_filling 按每页/模块的 title、key_question、evidence 和 expected_evidence_materials 生成 dummy page"
+        "downstream_use": "page_filling 按每页/模块受保护的 leadline、page_question、points_to_make 和 evidence_refs 生成 dummy page"
       },
       "memory_dimensions": [
         "Wording",
@@ -244,10 +245,11 @@
         "篇幅控制"
       ],
       "rubrics": [
-        "标题必须是完整结论，不能只是主题词",
-        "必须一页一问一结论，并明确 so what",
+        "leadline 必须是完整、原子的结论，不能只是主题词",
+        "必须一页一问一结论，points_to_make 共同支撑 leadline",
+        "页面顺序来自 message pyramid 的真实论证关系，不套固定 Story Arc",
         "高层 PPT 正文默认控制在 15 页以内，主线 8-12 页，其余进附录",
-        "结尾必须回到预期 action"
+        "结尾不能超出上游论据支持的判断、讨论或 action"
       ],
       "max_revision_rounds": 2,
       "loop": {
@@ -279,7 +281,7 @@
       },
       "harness": {
         "skill_package": "skills/storyline_design",
-        "runtime_adapter": "storyline_design_python_adapter",
+        "runtime_adapter": "generic_llm_skill_runtime",
         "review_policy": "schema_validation + machine_check + llm_p1",
         "connectors": [
           "docx_to_storyline_input"
@@ -302,12 +304,12 @@
       "description": "基于 storyline 生成 dummy page：每页 page brief、页内结构、图表信息、证据摆放和缺口标记。",
       "previous_agent_id": "storyline_design",
       "next_agent_id": "format",
-      "input_schema": "storyline.v1",
+      "input_schema": "storyline.v2",
       "output_schema": "page_content.v2",
       "input_contract": {
         "required_inputs": [
           "storyline.pages",
-          "每页预期论据素材"
+          "每页 leadline、page_question 和 points_to_make"
         ],
         "optional_inputs": [
           "原始数据表",
@@ -321,7 +323,7 @@
           "csv",
           "image"
         ],
-        "input_preparation_focus": "把每页结论拆成页面叙事、图表 brief、证据引用和待补素材"
+        "input_preparation_focus": "保留 storyline leadline 和 points_to_make，把每页结论展开为页面叙事、图表 brief、证据引用和待补素材"
       },
       "output_contract": {
         "primary_artifact": "dummy page content",
@@ -343,7 +345,7 @@
         "来源标注"
       ],
       "rubrics": [
-        "每页必须保留原 storyline 的核心结论和 so what",
+        "每页必须逐字保留原 storyline leadline，并覆盖全部 points_to_make",
         "图表 brief 必须说明指标、维度、口径、来源和想证明的判断",
         "缺证据时必须标记 open question，不得编造数据"
       ],
