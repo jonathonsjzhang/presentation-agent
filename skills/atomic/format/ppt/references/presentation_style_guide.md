@@ -1,8 +1,10 @@
-# Professional Consulting Style Presentation Guide
+# Professional Consulting Style Presentation Guide (v1.1)
 
 > 本指南提供专业咨询风格（McKinsey/BCG 水准）的 PPT 呈现形式参考。
+> 版本：v1.1 | 更新：2026-07-01
 > 当 `output_format=ppt` 且目标受众为高管/董事会/战略决策层时，建议遵循本指南。
 > 若用户提供了特定的 PPT 模板，优先适配用户模板。
+> 示例参考：`examples/retention-case1/`（AI 产品留存分析案例）
 
 ## 1. 导航标签栏（推荐）
 

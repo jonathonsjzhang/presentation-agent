@@ -53,3 +53,23 @@ Use this atomic capability only when `output_format=ppt`. Storyline units are pa
   - 使用 try-except 捕获 API 错误，提供友好错误信息
   - 日志记录关键步骤，方便调试
   - 渲染后运行 QA 门禁检查输出质量
+
+## 参考资源
+
+| 资源 | 位置 | 说明 |
+|------|------|------|
+| **专业咨询风格指南** | `references/presentation_style_guide.md` | 导航栏、发现面板、数据强调、模板、配色方案 |
+| **MckEngine API 文档** | `references/mck-engine/engine-api.md` | MckEngine 布局方法的完整 API 参考 |
+| **布局目录** | `references/mck-engine/layout-catalog.md` | 所有可用布局类型说明 |
+| **配色方案** | `references/mck-engine/color-palette.md` | 颜色定义和用法 |
+| **品牌指南** | `references/mck-engine/brand-guide.md` | 品牌色和设计系统 |
+| **呈现规范** | `references/mck-engine/presentation-convention.md` | 团队级 PPT 呈现约定 |
+
+## 示例
+
+| 示例 | 位置 | 说明 |
+|------|------|------|
+| **AI 产品留存分析** | `examples/retention-case1/README.md` | format skill 输出 vs 人工稿对比 |
+| 人工绘制参考 | `examples/retention-case1/20251208_AI产品用户留存洞察_vS.pdf` | 23 页专业咨询风格 PPT |
+| AI 生成输出 | `examples/retention-case1/AI_product_retention_analysis.pptx` | 使用 format skill v1.1 规则生成 |
+| 源文档 | `examples/retention-case1/AI 产品用户留存分析_文档资料.pdf` | 原始调研报告
