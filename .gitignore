@@ -27,8 +27,9 @@ ENV/
 .claude/
 .codex/
 
-# ===== Tests（仅本地保留，不入库） =====
-tests/
+# ===== Tests（默认仅本地保留；E2E 评测契约随仓库发布） =====
+tests/*
+!tests/test_evaluation.py
 .workbuddy/
 .learnings/
 

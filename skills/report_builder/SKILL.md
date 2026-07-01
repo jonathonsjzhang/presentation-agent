@@ -3,10 +3,10 @@ name: report_builder
 description: >-
   互联网战略分析汇报助手【宿主入口 · GitHub 分发 · CLI 调度】。当用户说"安装汇报助手"、
   "更新汇报助手"、"帮我做一份战略汇报 / 复盘 / 高管汇报 / 汇报 PPT / storyline /
-  分析报告"，或给出汇报主题、对象、材料和希望支撑的决策时使用。宿主 Agent 负责自动
-  clone/pull 官方仓库、初始化 workspace，并通过 presentation-agent report 命令推进
-  Manager Agent 与专业 Worker loop。触发词：战略汇报、复盘报告、汇报PPT、高管汇报、storyline、分析报告、
-  安装汇报助手、更新汇报助手。
+  分析报告"，或要求对最终 PPT、DOCX、HTML 材料做 E2E 评测、打分、质量验收时使用。
+  宿主 Agent 负责自动 clone/pull 官方仓库、初始化 workspace，并通过 presentation-agent
+  report 或 eval 命令推进对应协议。触发词：战略汇报、复盘报告、汇报PPT、高管汇报、
+  storyline、分析报告、最终材料评测、E2E评测、材料打分、安装汇报助手、更新汇报助手。
 ---
 
 # 汇报助手 · Host Adapter Skill
@@ -66,6 +66,34 @@ python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces
 ```
 
 然后再次 doctor。
+
+## 最终材料 E2E 自动评测
+
+当用户要求“评测 / 打分 / 验收最终材料是否够格”，且对象是已经生成的 PPT、DOCX 或
+HTML 时，路由到仓库内的 `skills/evaluator/SKILL.md`，不要启动新的 `report start`，
+也不要把生产流程里的 Worker review 当作 E2E 评分。
+
+执行前先运行：
+
+```bash
+cd "$HOME/PresentationAgent/repo"
+python -m presentation_agent.cli \
+  --workspace "$HOME/PresentationAgent/workspaces/default" \
+  doctor
+```
+
+读取 `doctor` 返回的 `evaluation.formats`。目标格式的 `ready=false` 时，向用户报告
+`evaluation.dependencies` 中缺失或不可启动的运行时，不得用纯文本评分冒充视觉评测。运行时就绪后，
+完整读取并遵循 `skills/evaluator/SKILL.md`，由宿主 Agent 执行其
+`eval start → next/submit → result` 协议。
+
+路由边界：
+
+- “帮我生成 / 修改一份材料” → `report` Manager/Worker loop。
+- “检查某个生产环节产物” → 当前 Worker 的 `gen → review → revise` 闭环。
+- “评价已经生成的最终 PPT / DOCX / HTML 是否够格” → `evaluator` E2E 协议。
+- 同一请求既要求生成又要求最终评分时，先完成 `report`，再以最终文件启动独立 eval run；
+  Judge 不继承生产 Agent 的自评、review、memory 或返工理由。
 
 ## 更新
 
