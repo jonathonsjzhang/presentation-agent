@@ -1,0 +1,8 @@
+{
+  "version": "reference-manifest.v1",
+  "max_chars": 12000,
+  "generation": [
+    "references/presentation_spec.md",
+    "references/mck_api_reference.md"
+  ]
+}
