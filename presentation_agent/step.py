@@ -98,6 +98,11 @@ class StepRunner:
         self.full_global_state = _load_run_state(root, run_dir, data_root=self.data_root)
 
         self.reviewer = ArtifactReviewer(llm=None)  # deterministic-only in inline mode
+        # 宿主自执行模式下不创建独立的 LLM checker。
+        # StopChecker 仅做确定性判定（P0 数量、schema 匹配）。
+        # LLM sanity check 由宿主在 review 阶段通过 _compose_review_instruction 完成。
+        # LoopRunner 路径使用 StopChecker(llm=review_llm) 执行独立 LLM 合理性扫描，
+        # 两者应对的场景不同：前者宿主只有一个模型可用，后者 harness 自持多个 LLM client。
         self.stop_checker = StopChecker()
 
     # ---- public API ---------------------------------------------------------

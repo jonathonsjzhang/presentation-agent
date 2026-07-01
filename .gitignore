@@ -27,6 +27,11 @@ ENV/
 .claude/
 .codex/
 
+# ===== Auto-generated agent definitions (derived from configs/agents.json) =====
+agents.workbuddy/
+agents.claude/
+agents.codex/
+
 # ===== Tests（默认仅本地保留；E2E 评测契约随仓库发布） =====
 tests/*
 !tests/test_evaluation.py

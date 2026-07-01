@@ -171,11 +171,6 @@ class WorkerExecutor:
         self.data_root = data_root
         self.spawn_adapter = build_spawn_adapter(root, override=spawn_adapter)
         config = read_json(root / "configs" / "agents.json", default={})
-        capability_config = read_json(
-            root / "configs" / "capabilities.json", default={}
-        )
-        runtime_config = capability_config.get("runtime", {})
-        self.context_mode = str(runtime_config.get("context_mode") or "legacy")
         self.context_assembler = ContextAssembler(root)
         active = set(config.get("pipeline", {}).get("stages", []))
         self.specs = {
@@ -227,24 +222,14 @@ class WorkerExecutor:
                 resolved_artifacts.append((path, data))
 
         raw_brief = read_json(raw_brief_path, default={})
-        if self.context_mode == "projected":
-            worker_input = self.context_assembler.assemble(
-                worker_id=agent_id,
-                report_charter=report_charter,
-                manager_task=packet,
-                raw_brief=raw_brief if isinstance(raw_brief, dict) else {},
-                raw_brief_path=raw_brief_path,
-                artifacts=resolved_artifacts,
-            )
-        else:
-            worker_input = dict(report_charter)
-            for _, data in resolved_artifacts:
-                worker_input.update(data)
-            # Control-plane contracts are authoritative and cannot be overwritten
-            # by an upstream artifact that carries the same field names.
-            worker_input["report_charter"] = report_charter
-            worker_input["manager_task"] = packet
-            worker_input["raw_brief"] = raw_brief
+        worker_input = self.context_assembler.assemble(
+            worker_id=agent_id,
+            report_charter=report_charter,
+            manager_task=packet,
+            raw_brief=raw_brief if isinstance(raw_brief, dict) else {},
+            raw_brief_path=raw_brief_path,
+            artifacts=resolved_artifacts,
+        )
 
         input_path = task_dir / "input.json"
         write_json(input_path, worker_input)
@@ -253,7 +238,7 @@ class WorkerExecutor:
             context_manifest_path,
             {
                 "schema": "context_manifest.v1",
-                "mode": self.context_mode,
+                "mode": "projected",
                 "worker_id": agent_id,
                 "input_path": str(input_path),
                 "resolved_input_artifacts": resolved_inputs,
@@ -277,7 +262,7 @@ class WorkerExecutor:
             "input_path": str(input_path),
             "manager_task": packet,
             "resolved_input_artifacts": resolved_inputs,
-            "context_mode": self.context_mode,
+            "context_mode": "projected",
             "context_manifest_path": str(context_manifest_path),
             "output_dir": str(task_dir),
             "p0_open": [],
@@ -760,9 +745,50 @@ class ManagerOrchestrator:
         self._save_state(state)
         return self._human_gate_result(state)
 
+    def _scan_acceptance_memory(
+        self, state: dict[str, Any], decision: dict[str, Any]
+    ) -> list[str]:
+        """Scan Manager memory for acceptance-stage insights.
+
+        Looks at historical memory tagged with dimensions relevant to
+        acceptance: 验收, 返工, 跨阶段一致性.  Returns human-readable
+        reminders that the Manager can factor into its acceptance decision.
+        """
+        alerts: list[str] = []
+        report = decision.get("acceptance_report") or {}
+        verdict = report.get("verdict", "")
+        try:
+            memory_items = self.agent.memory.scan()
+        except Exception:
+            return alerts
+
+        acceptance_dims = {"验收", "返工", "跨阶段一致性"}
+        for item in memory_items:
+            dims = set(str(item.get("dimension", "")).split(","))
+            if not acceptance_dims & dims:
+                continue
+            trigger = str(item.get("trigger", ""))
+            suggestion = str(item.get("suggestion", ""))
+            hit_count = int(item.get("hit_count", 0))
+            # Only surface items with enough history to be trustworthy
+            if hit_count < 2:
+                continue
+            # Check if trigger matches the current acceptance context
+            agent_id = state.get("current_task", {}).get("agent_id", "")
+            if trigger and agent_id and trigger not in agent_id and trigger not in verdict:
+                continue
+            alerts.append(suggestion or trigger)
+        return alerts
+
     def _commit_acceptance(self, state: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
         action = decision["action"]
         task = state.get("current_task")
+
+        # --- Manager memory scan for acceptance insights ---
+        memory_alerts = self._scan_acceptance_memory(state, decision)
+        if memory_alerts:
+            decision.setdefault("memory_alerts", []).extend(memory_alerts)
+
         if isinstance(task, dict):
             task["manager_acceptance"] = decision.get("acceptance_report")
             task["status"] = "accepted" if action in ("dispatch", "complete") else "revision_required"
