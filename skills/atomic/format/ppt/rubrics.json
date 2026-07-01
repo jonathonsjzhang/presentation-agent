@@ -26,6 +26,33 @@
       "criterion": "PPT 产物只能包含 slide 单元并使用 PPT renderer handoff。",
       "check": "format 是否为 ppt；material_units[].unit_type 是否均为 slide；render_plan 是否指向 mck_ppt_shape_native；是否混入 document/html 专属结构。",
       "fix": "移除其他载体结构，按 slide + shape-native render plan 重建。"
+    },
+    {
+      "id": "FMT-PPT-FM-002",
+      "applies_to": ["format"],
+      "severity": "P0",
+      "dimension": "information_structure",
+      "criterion": "封面后第一页必须是 Execution Summary（核心发现摘要）。",
+      "check": "第一正文页是否包含汇总核心发现的 summary/executive_summary 布局；如果没有，是否在 format_decisions 中有合理理由。",
+      "fix": "在封面后插入 execution_summary 页面，汇总 3-5 条核心发现。"
+    },
+    {
+      "id": "FMT-PPT-FM-003",
+      "applies_to": ["format"],
+      "severity": "P0",
+      "dimension": "data_authenticity",
+      "criterion": "所有图表数据必须从原始文档提取，禁止使用模拟数据。",
+      "check": "检查 chart_spec.data_ref 或 table_data 是否可追溯到 source_refs[]；是否存在无来源的数值数据。",
+      "fix": "从原始文档中提取真实数据替换模拟数据；若数据不可获得，标记 quality_status=partial 并声明数据缺失。"
+    },
+    {
+      "id": "FMT-PPT-FM-004",
+      "applies_to": ["format"],
+      "severity": "P0",
+      "dimension": "visual_density",
+      "criterion": "PPT 每页必须包含至少一个视觉元素（图表/表格/形状），禁止纯文字页。",
+      "check": "逐页检查 material_units[].visual_object 中是否有 chart_spec/table_data/shape_spec；是否存在纯文字 layout 页。",
+      "fix": "为纯文字页添加图表/表格/矩阵等视觉元素，或将纯文字内容合并到相邻页面。"
     }
   ]
 }
