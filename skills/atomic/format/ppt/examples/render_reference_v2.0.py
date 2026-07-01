@@ -320,6 +320,41 @@ def user_voice(sl):
        9,False,CTS)
     ft(sl)
 
+# ── Next Steps 结束页 ──────────────────────────────────
+def next_steps(sl):
+    tb(sl,Inches(0.5),Inches(0.3),Inches(5),Inches(0.5),"下一步方向",18,True,C0)
+    steps = [
+        ("元宝：聚焦拍照答疑+AI创作纯白", CP["元宝"], [
+            "提升拍照答疑纯白占比（当前16%，DS为17%，豆包为10%）",
+            "AI创作纯白拉动+14pp，值得加大投入",
+            "纯白用户仅占5.2%，Onboarding优化空间大",
+        ]),
+        ("DS：强化可靠性+情绪价值", CP["DS"], [
+            "可靠性驱动25.2%但满意度相关仅0.158，填补体验差距",
+            "情绪价值5分满意度达23.3%，是差异化竞争点",
+            "纯白用户留存+18pp效果最显著，加大纯白认证推广",
+        ]),
+        ("豆包：巩固优势+探索新增长", CP["豆包"], [
+            "深度思考和拍照答疑已领先，持续优化保持壁垒",
+            "功能纯白拉动相对较小(4-10pp)，需寻找新增长点",
+            "红点策略效果显著(14.0%)，可推广至桌面入口",
+        ]),
+    ]
+    y=Inches(1.0);cw=Inches(3.9);gap=Inches(0.4)
+    for i,(title,accent,items) in enumerate(steps):
+        x=Inches(0.5)+i*(cw+gap);h=Inches(4.8)
+        rrect(sl,x,y,cw,h,fill=CW,border=CBO)
+        rect(sl,x,y,cw,Inches(0.06),fill=accent)
+        tb(sl,x+Inches(0.2),y+Inches(0.2),cw-Inches(0.4),Inches(0.5),title,12,True,CT)
+        jy=y+Inches(0.8)
+        for j,item in enumerate(items):
+            num_rect_y = jy+Inches(0.02)
+            rrect(sl,x+Inches(0.2),num_rect_y,Inches(0.25),Inches(0.25),fill=accent)
+            tb(sl,x+Inches(0.2),num_rect_y,Inches(0.25),Inches(0.25),str(j+1),9,True,CW,a=PP_ALIGN.CENTER)
+            tb(sl,x+Inches(0.6),jy,cw-Inches(0.8),Inches(0.8),item,9,False,CTS)
+            jy+=Inches(1.0)
+    ft(sl)
+
 # ── 封面 & 执行摘要 ──────────────────────────────────────
 def cover(sl):
     rect(sl,0,0,SW,SH,fill=C0)
@@ -397,6 +432,8 @@ def main():
     info.append({"type":"dual","l":"split_findings","d":"annotation","v":True})
     s=prs.slides.add_slide(bl);user_voice(s)
     info.append({"type":"quotes","l":"quote_analysis","d":"quote","v":True})
+    s=prs.slides.add_slide(bl);next_steps(s)
+    info.append({"type":"next_steps","l":"card","d":"none","v":True})
     
     prs.save(str(OUT))
     qa=run_qa(info)
