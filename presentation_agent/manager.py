@@ -465,13 +465,16 @@ class ManagerOrchestrator:
                 "argument_synthesis", "storyline_design", "page_filling",
                 "format", "qa_preparation", "speaker_script"
             ]
+            selected_workers = brief.get("selected_workers") or available_workers
+            user_message = self._format_brief_confirmation(brief, selected_workers)
             state["current_actor"] = "human"
             state["human_gate"] = "brief"
             state["pending_decision"] = {
                 "brief": brief,
                 "missing_fields": missing,
                 "available_workers": available_workers,
-                "selected_workers": brief.get("selected_workers") or available_workers,
+                "selected_workers": selected_workers,
+                "user_message": user_message,
             }
             state["status"] = "awaiting_brief_confirmation"
             self._save_state(state)
@@ -1080,6 +1083,75 @@ class ManagerOrchestrator:
                 })
         return catalog
 
+    @staticmethod
+    def _format_brief_confirmation(
+        brief: dict[str, Any], selected_workers: list[str]
+    ) -> str:
+        """Build a structured Markdown brief confirmation for the user.
+
+        The host agent simply echo this string to the user verbatim.
+        Structured so the user can scan it in one glance and confirm
+        accuracy, missing info, or run_mode preference.
+        """
+        topic = str(brief.get("topic", "（未指定）"))
+        audience = str(brief.get("audience", "（未指定）"))
+        decision_goal = str(brief.get("decision_goal", "（未指定）"))
+        report_type = str(brief.get("report_type", "deep_dive"))
+        output_format = str(brief.get("output_format", "ppt"))
+        constraints = brief.get("constraints") or []
+        page_limit = next(
+            (c for c in constraints if "页" in str(c)), ""
+        )
+        materials = brief.get("materials") or []
+
+        # ---- Worker pipeline label ----
+        worker_labels = {
+            "argument_synthesis": "核心论点提炼",
+            "storyline_design": "故事线设计",
+            "page_filling": "草稿填充",
+            "format": "材料可视化",
+            "qa_preparation": "QA 梳理",
+            "speaker_script": "逐字稿生成",
+        }
+        pipeline = " → ".join(
+            f"`{w}` {worker_labels.get(w, w)}" for w in selected_workers
+        )
+
+        lines = [
+            "## Brief 确认",
+            "",
+            "| 项目 | 内容 |",
+            "|------|------|",
+            f"| **汇报主题** | {topic} |",
+            f"| **汇报对象** | {audience} |",
+            f"| **决策目标** | {decision_goal} |",
+            f"| **报告类型** | {report_type} |",
+            f"| **输出格式** | {output_format} |",
+        ]
+        if page_limit:
+            lines.append(f"| **页数约束** | {page_limit} |")
+
+        lines.append("")
+        lines.append(f"**选定的 Worker 管线**（{len(selected_workers)} 个环节）：")
+        lines.append(pipeline)
+
+        if materials:
+            lines.append("")
+            lines.append(f"**挂载素材**（{len(materials)} 份）：")
+            for i, m in enumerate(materials, 1):
+                if isinstance(m, dict):
+                    name = m.get("claim") or m.get("path") or m.get("file") or str(m)
+                else:
+                    name = str(m)
+                lines.append(f"{i}. {name}")
+
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+        lines.append("请通过下方选项确认 Brief 信息并选择运行模式。")
+
+        return "\n".join(lines)
+
     def _human_gate_result(self, state: dict[str, Any]) -> dict[str, Any]:
         decision = state.get("pending_decision") or {}
         gate = state.get("human_gate")
@@ -1112,6 +1184,28 @@ class ManagerOrchestrator:
                 "custom": "指定暂停的 Worker 列表，如 [\"argument_synthesis\", \"format\"]",
             }
             result["next_action"] = "human_feedback"
+            # Structured questions for host AskUserQuestion
+            result["questions"] = [
+                {
+                    "header": "Brief确认",
+                    "question": "Brief 信息是否准确？有无需要补充或修改的地方？",
+                    "multiSelect": False,
+                    "options": [
+                        {"label": "准确，继续", "description": "信息完整，直接进入 Manager 规划阶段"},
+                        {"label": "需要修改", "description": "稍后通过 report feedback 提交修改意见"},
+                    ],
+                },
+                {
+                    "header": "运行模式",
+                    "question": "选择运行模式",
+                    "multiSelect": False,
+                    "options": [
+                        {"label": "full_auto", "description": "全程自动，一口气跑完，不中断"},
+                        {"label": "step_by_step", "description": "每个 Worker 完成后暂停，逐环节确认"},
+                        {"label": "custom", "description": "只在指定环节暂停，如 [\"argument_synthesis\", \"format\"]"},
+                    ],
+                },
+            ]
 
         elif gate == "plan":
             result["report_charter"] = state.get("report_charter")
