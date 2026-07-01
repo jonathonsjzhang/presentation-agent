@@ -188,10 +188,17 @@ CLI 会返回 JSON，记录：
 3. 把严格 JSON 写入 output_path
 4. report submit
 5. actor=manager/worker：继续 next/submit，不自行改变调度
-6. actor=human：⚠️ **必须暂停执行**，将 `present_to_user` 原样展示给用户，
-   等待用户明确指令。用户说"继续" / "approve" 才 `report approve`；
-   用户提出修改意见才 `report feedback`。
+6. actor=human：⚠️ **必须暂停执行**，将 `present_to_user` 原样展示给用户。
+   若 `result.questions` 存在 → 用 `AskUserQuestion` 发起结构化选择（见下方），
+   将用户答案写回 `pending_decision` 后调用 `report approve`。
+   若 `result.questions` 不存在 → 等待用户口头指令，
+   用户说"继续"才 `report approve`；用户说修改才 `report feedback`。
    **禁止在 human gate 处自动 approve、禁止替用户做决策。**
+
+   **AskUserQuestion 映射**（仅 brief gate）：
+   - "Brief确认": "准确，继续" → approve；"需要修改" → 先展示问题，等用户说修改内容后 feedback
+   - "运行模式": "full_auto" / "step_by_step" / "custom" → 把值写入 brief.run_mode 后 approve
+     (若选 custom，追问具体暂停环节列表)
 7. 用户确认：report approve
 8. 用户要求调整或回答 Manager 问题：report feedback
 ```
