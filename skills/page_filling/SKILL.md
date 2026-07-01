@@ -13,8 +13,8 @@ description: Expand an approved storyline into evidence-grounded content units, 
 
 0. 审计输入可用性：确认 granular 数字、对比实体、用户研究和口径确实进入当前上下文；只有 preview 时不得补写事实。
 1. 为每页选择 schema 允许的 `page_type`，按运行时已注入的 page archetype reference 确认必备证据角色。
-2. 对每个 storyline unit 锁定 question、takeaway、evidence refs 与 role；若一页包含多个独立结论或关键页型缺失，写入 `storyline_change_requests`。
-3. 写 headline、proof chain 和 content blocks。数据型页面将证据落到具体数值、基线/拆解、指标口径、对象范围和 `source_ref`。
+2. 对每个 storyline unit 锁定受保护的 `leadline`、`page_question`、`points_to_make`、evidence refs 与 role；若一页包含多个独立结论、points 无法共同支撑 leadline 或关键页型缺失，写入 `storyline_change_requests`。
+3. 逐字继承 leadline，并围绕全部 points_to_make 写 proof chain 和 content blocks。数据型页面将证据落到具体数值、基线/拆解、指标口径、对象范围和 `source_ref`。
 4. 将可视化关系写成 `visual_plan.visual_layers`；一个分析构图可以包含多个联动视图，但每个视图都要服务同一 takeaway。
 5. 继承 sources、confidence、caveat 和 gaps。影响结论强度的 caveat 必须可见，不能被反向改写。
 6. 把关键数字、矩阵、用户原声和 caveat 写入 `format_handoff_notes.must_render_evidence`；检查跨页重复和遗漏。
@@ -22,6 +22,8 @@ description: Expand an approved storyline into evidence-grounded content units, 
 ## Invariants
 
 - 一个单元只服务一个 takeaway。
+- Storyline 的 leadline 是受保护字段；页面 `title`、`source_storyline_leadline` 和核心 claim 必须继承它，不得用“优化措辞”为由静默改写。
+- 每个 `points_to_make` 都必须进入 proof chain 或 content blocks；若证据无法支撑，发出 storyline change request，不得删除该 point 后假装完成。
 - 正文中的数字、事实和因果都可追溯。
 - 图表 brief 不得假设不存在的数据。
 - 不重排 storyline，不把 gap 藏进脚注。
@@ -38,6 +40,7 @@ description: Expand an approved storyline into evidence-grounded content units, 
 ## Failure conditions
 
 - 正文只是标题的同义改写；
+- 页面遗漏、稀释或改写 Storyline leadline / points_to_make；
 - 证据不足却生成确定图表；
 - 来源、口径、confidence 或 caveat 丢失；
 - 混入未激活载体的结构规则；

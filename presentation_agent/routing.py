@@ -52,13 +52,13 @@ def build_routing_policy(
 def _actions_for(spec: AgentSpec, high_stakes: bool, emphasis: list[str]) -> list[str]:
     actions: list[str] = []
     if high_stakes:
-        actions.append("面向高层汇报，默认强化结论先行、so what、action闭环")
+        actions.append("面向高层汇报，强化结论先行和决策含义，但不把未成熟判断强行闭环为 action")
     if "Leadline" in emphasis or "Wording" in emphasis:
         actions.append("标题和关键句需优先通过结论化/高层化检查")
     if "证据" in emphasis or "图表" in emphasis:
         actions.append("所有关键判断必须保留证据口径和来源说明")
     if spec.id == "storyline_design":
-        actions.append("执行标题连读测试，并检查一页一问一结论")
+        actions.append("执行结构化标题连读测试，并检查一页一问一 leadline、points 共同支撑该判断")
     if spec.id == "format":
         actions.append("优先检查可读性、视觉层级和载体适配")
     return actions[:5]

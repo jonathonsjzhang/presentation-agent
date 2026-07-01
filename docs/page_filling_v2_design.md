@@ -186,7 +186,8 @@ skills/page_filling/
 ├── schemas/
 │   ├── page_content.v1.json          # 保留（回退用）
 │   ├── page_content.v2.json          # 新增：v1 超集 + §3 四个增量
-│   └── storyline.v1.json             # 既有，不动
+│   ├── storyline.v1.json             # 旧输入契约（兼容参考）
+│   └── storyline.v2.json             # 动态 message pyramid + leadline/points 输入契约
 ├── references/
 │   ├── argument_chain.md             # 页内论证链：evidence → relation → inference → takeaway
 │   ├── information_sufficiency.md     # 信息充分性：主证据/辅助证据/边界信息

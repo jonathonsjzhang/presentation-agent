@@ -74,14 +74,14 @@ class CrossStageReviewer:
         current_text = flatten_text(artifact)
         missing_titles = []
         for page in upstream.get("pages", []) if isinstance(upstream.get("pages"), list) else []:
-            title = str(page.get("title") or page.get("leadline") or "").strip() if isinstance(page, dict) else ""
-            if title and title not in current_text:
-                missing_titles.append(title)
+            leadline = str(page.get("leadline") or page.get("title") or "").strip() if isinstance(page, dict) else ""
+            if leadline and leadline not in current_text:
+                missing_titles.append(leadline)
         if missing_titles:
             issues.append({
                 "severity": "P1",
                 "dimension": "cross_stage_consistency",
-                "message": f"page_filling 可能丢失 {len(missing_titles)} 个 storyline 页面标题或结论",
+                "message": f"page_filling 可能丢失或改写 {len(missing_titles)} 个受保护的 storyline leadline",
                 "evidence": missing_titles[:3],
                 "suggested_owner": "page_filling",
             })

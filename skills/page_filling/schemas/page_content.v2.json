@@ -29,7 +29,9 @@
       "properties": {
         "storyline_schema": { "type": "string" },
         "selected_story_angle": { "type": "string" },
-        "title_read_test": { "type": "string" },
+        "message_pyramid": { "type": "object" },
+        "ordering_rationale": { "type": "string" },
+        "title_read_test": { "type": ["object", "string"] },
         "source_artifact": { "type": "string" }
       }
     },
@@ -41,7 +43,8 @@
           "page_no",
           "unit_type",
           "title",
-          "source_storyline_title",
+          "source_storyline_leadline",
+          "source_storyline_points",
           "key_question",
           "role_in_story",
           "page_type",
@@ -59,8 +62,24 @@
         "properties": {
           "page_no": { "type": "integer" },
           "unit_type": { "type": "string", "enum": ["page", "section", "module"] },
-          "title": { "type": "string" },
-          "source_storyline_title": { "type": "string" },
+          "title": {
+            "type": "string",
+            "description": "默认必须逐字等于 source_storyline_leadline；需要修改时先发出 storyline_change_request。"
+          },
+          "source_storyline_leadline": {
+            "type": "string",
+            "description": "从 Storyline v2 逐字继承的受保护 leadline。"
+          },
+          "source_storyline_points": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" },
+            "description": "从 Storyline v2 继承、必须在页面中覆盖的 points_to_make。"
+          },
+          "source_storyline_title": {
+            "type": "string",
+            "description": "兼容 Storyline v1 的旧字段；新产物不再依赖。"
+          },
           "reason_for_title_change": { "type": "string" },
           "key_question": { "type": "string" },
           "role_in_story": { "type": "string" },

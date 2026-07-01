@@ -6,7 +6,7 @@
       "phase": ["generation", "review"],
       "level": "P0",
       "property": "progress_structure",
-      "instruction": "按目标/承诺、当前进展、偏差与原因、风险/卡点、决策或支持请求、下一步组织主线；不能写成工作事项流水账。"
+      "instruction": "主线需要覆盖与本次管理判断相关的目标/承诺、实际进展、关键偏差、原因、风险/卡点和支持请求；具体顺序由最重要的判断及其论证依赖决定，不能写成工作事项流水账，也不能机械套用固定章节序列。"
     },
     {
       "id": "RPT-PROGRESS-AS-G01",

@@ -7,84 +7,142 @@ from presentation_agent.skills.base import SkillContext
 
 
 class StorylineDesignSkill:
+    """Legacy-compatible Storyline fallback.
+
+    Production routing uses ``GenericSkill`` so the compiled Storyline package
+    can reason about hierarchy and ordering. This class remains as a safe
+    fallback for direct imports; it deliberately avoids choosing a fixed story
+    arc or turning the last page into a recommendation.
+    """
+
     id = "storyline_design"
 
     def generation_dimensions(self) -> list[str]:
         return ["Leadline", "Wording", "结构", "证据"]
 
-    def run(self, spec: AgentSpec, input_data: dict[str, Any], context: SkillContext) -> dict[str, Any]:
+    def run(
+        self,
+        spec: AgentSpec,
+        input_data: dict[str, Any],
+        context: SkillContext,
+    ) -> dict[str, Any]:
         executive_summary = input_data.get("executive_summary") or {}
-        key_arguments = input_data.get("key_arguments") or []
-        materials = input_data.get("materials") or key_arguments or []
+        materials = input_data.get("materials") or input_data.get("key_arguments") or []
         objective = (
             input_data.get("objective")
             or input_data.get("expected_action")
             or executive_summary.get("expected_action")
             or executive_summary.get("decision_request")
-            or "本次汇报目标"
+            or "形成对核心问题的判断"
         )
-        if not materials:
-            materials = [
-                {
-                    "claim": input_data.get("topic", "待分析主题"),
-                    "evidence": [],
-                    "evidence_refs": [],
-                    "so_what": str(objective),
-                }
-            ]
+        governing_question = (
+            input_data.get("core_question")
+            or executive_summary.get("decision_request")
+            or f"围绕“{input_data.get('topic', '本议题')}”需要形成什么判断？"
+        )
+        core_answer = (
+            executive_summary.get("core_conclusion")
+            or input_data.get("core_thesis")
+        )
+        if not core_answer:
+            core_answer = (
+                self._claim(materials[0], "待形成核心判断")
+                if materials
+                else "待形成核心判断"
+            )
 
-        pages = []
+        pages: list[dict[str, Any]] = []
+        supporting_messages: list[dict[str, Any]] = []
+        unit_type = self._unit_type(input_data.get("output_format", "ppt"))
         for index, material in enumerate(materials, start=1):
-            claim = str(material.get("claim", "")).strip() or f"第 {index} 个核心判断"
-            evidence = material.get("evidence", [])
-            if isinstance(evidence, str):
-                evidence_list = [evidence] if evidence.strip() else []
-            else:
-                evidence_list = [str(item) for item in evidence if str(item).strip()]
-            so_what = str(material.get("so_what", "")).strip() or "TODO: 提炼 so what"
-            evidence_refs = [str(item) for item in material.get("evidence_refs", []) if str(item).strip()]
-            expected_materials = [
-                {
-                    "material": item,
-                    "evidence_ref": evidence_refs[i] if i < len(evidence_refs) else "",
-                    "purpose": f"支撑本页判断：{claim}",
-                    "status": "available" if evidence_refs or "需要补充" not in item else "needs_evidence",
-                }
-                for i, item in enumerate(evidence_list)
-            ]
-            if not expected_materials and evidence_refs:
-                expected_materials = [
-                    {
-                        "material": f"引用证据 {ref}",
-                        "evidence_ref": ref,
-                        "purpose": f"支撑本页判断：{claim}",
-                        "status": "available",
-                    }
-                    for ref in evidence_refs
-                ]
+            claim = self._claim(material, f"第 {index} 个核心判断")
+            evidence_refs = self._strings(material.get("evidence_refs", []))
+            points = self._points(material, claim)
+            page_question = str(material.get("key_question", "")).strip()
+            if not page_question:
+                page_question = f"为什么可以得出“{claim}”？"
+            source_refs = self._strings(
+                material.get("source_argument_refs", material.get("argument_refs", []))
+            )
+
             pages.append(
                 {
                     "page_no": index,
-                    "unit_type": "page" if input_data.get("output_format", "ppt") == "ppt" else "module",
-                    "title": self._title_from_claim(claim),
-                    "key_question": str(material.get("key_question", "")).strip()
-                    or f"这个判断如何支撑 {objective}?",
-                    "role_in_story": str(material.get("role_in_story", "")).strip() or self._role_for_index(index, len(materials)),
+                    "unit_type": unit_type,
+                    "leadline": claim,
+                    "title": claim,
+                    "page_question": page_question,
+                    "points_to_make": points,
+                    "role_in_story": str(material.get("role_in_story", "")).strip()
+                    or "support_core_answer",
+                    "source_argument_refs": source_refs,
                     "evidence_refs": evidence_refs,
-                    "evidence": evidence_list,
-                    "expected_evidence_materials": expected_materials,
-                    "so_what": so_what,
-                    "transition": str(material.get("transition", "")).strip() or "下一页继续验证该判断对最终 action 的含义。",
-                    "tag": material.get("tag", "mainline"),
+                    "transition_from_previous": str(
+                        material.get("transition_from_previous", "")
+                    ).strip()
+                    or ("建立核心判断" if index == 1 else "承接上一判断并继续推进"),
+                    "transition_to_next": str(
+                        material.get("transition_to_next", "")
+                    ).strip()
+                    or ("收束到当前可支持的判断" if index == len(materials) else "引出下一层判断"),
+                    "tag": str(material.get("tag", "mainline")),
+                }
+            )
+            supporting_messages.append(
+                {
+                    "message": claim,
+                    "relationship_to_core": str(
+                        material.get("relationship_to_core", "")
+                    ).strip()
+                    or "支撑或限定 core answer",
+                    "source_argument_refs": source_refs,
+                    "page_nos": [index],
                 }
             )
 
-        titles = [page["title"] for page in pages if page.get("tag") == "mainline"]
-        core_conclusion = (
-            executive_summary.get("core_conclusion")
-            or input_data.get("core_thesis")
-            or (titles[0] if titles else input_data.get("topic", ""))
-        )
+        if not pages:
+            pages = [
+                {
+                    "page_no": 1,
+                    "unit_type": unit_type,
+                    "leadline": str(core_answer),
+                    "title": str(core_answer),
+                    "page_question": str(governing_question),
+                    "points_to_make": ["明确当前材料能够支持的核心判断"],
+                    "role_in_story": "establish_core_answer",
+                    "source_argument_refs": [],
+                    "evidence_refs": [],
+                    "transition_from_previous": "开场提出 governing question",
+                    "transition_to_next": "收束到当前可支持的判断",
+                    "tag": "mainline",
+                }
+            ]
+            supporting_messages = [
+                {
+                    "message": str(core_answer),
+                    "relationship_to_core": "直接表达 core answer",
+                    "source_argument_refs": [],
+                    "page_nos": [1],
+                }
+            ]
+
+        titles = [page["leadline"] for page in pages if page.get("tag") == "mainline"]
+        title_checks = {
+            dimension: {
+                "passes": False,
+                "issue_pages": [],
+                "note": "Fallback 仅保证结构完整，需由独立 reviewer 做语义检查。",
+            }
+            for dimension in (
+                "completeness",
+                "progression",
+                "adjacency",
+                "necessity",
+                "atomicity",
+                "supportability",
+                "decision_maturity",
+            )
+        }
         return {
             "agent_id": spec.id,
             "schema": spec.output_schema,
@@ -92,11 +150,26 @@ class StorylineDesignSkill:
             "audience": input_data.get("audience", ""),
             "report_type": input_data.get("report_type", ""),
             "output_format": input_data.get("output_format", ""),
-            "objective": objective,
-            "selected_story_angle": input_data.get("selected_story_angle", "executive_summary_to_action"),
-            "story_angle_options": input_data.get("recommended_story_angles", []),
-            "story_arc": f"围绕“{core_conclusion}”展开，先交代关键判断，再用核心论据逐步证明，最后回到“{objective}”。",
-            "title_read_test": " -> ".join(titles),
+            "objective": str(objective),
+            "message_pyramid": {
+                "governing_question": str(governing_question),
+                "core_answer": str(core_answer),
+                "supporting_messages": supporting_messages,
+            },
+            "ordering_rationale": str(
+                input_data.get("ordering_rationale")
+                or "沿用上游论点顺序；生产运行应由 compiled LLM skill 根据真实论证依赖重排。"
+            ),
+            "closing_intent": str(
+                input_data.get("closing_intent")
+                or "收束到当前论据能够支持的判断，不自动补行动建议。"
+            ),
+            "title_read_test": {
+                "title_chain": titles,
+                "passes": False,
+                "checks": title_checks,
+                "revision_notes": ["需要独立 reviewer 完成结构化 title-read test。"],
+            },
             "memory_points": input_data.get("memory_points", []),
             "style_guidance": context.get("style_guidance", []),
             "pages": pages,
@@ -112,52 +185,40 @@ class StorylineDesignSkill:
         objections: list[Objection],
         context: SkillContext,
     ) -> dict[str, Any]:
-        artifact = dict(previous_artifact)
-        pages = [dict(page) for page in artifact.get("pages", [])]
-        for objection in objections:
-            if "page" in objection.evidence:
-                self._fix_pages(pages)
-            if "schema" in objection.evidence:
-                artifact["schema"] = spec.output_schema
-        if not pages:
-            artifact = self.run(spec, input_data, context)
-        else:
-            self._fix_pages(pages)
-            artifact["pages"] = pages
-        return artifact
+        # A deterministic fallback cannot safely repair semantic storyline
+        # objections. Rebuild a schema-complete artifact without inventing a
+        # fixed arc; the production GenericSkill handles genuine revisions.
+        return self.run(spec, input_data, context)
 
-    def _fix_pages(self, pages: list[dict[str, Any]]) -> None:
-        for index, page in enumerate(pages, start=1):
-            page.setdefault("page_no", index)
-            page.setdefault("unit_type", "page")
-            page.setdefault("title", f"第 {index} 页需要形成明确结论")
-            page.setdefault("key_question", "这页要回答什么关键问题?")
-            page.setdefault("role_in_story", self._role_for_index(index, len(pages)))
-            page.setdefault("evidence_refs", [])
-            page.setdefault("evidence", ["TODO: 补充来源和数据"])
-            page.setdefault(
-                "expected_evidence_materials",
-                [{"material": "TODO: 补充来源和数据", "purpose": "支撑本页判断", "status": "needs_evidence"}],
-            )
-            page.setdefault("so_what", "TODO: 补充管理层含义")
-            page.setdefault("transition", "下一页继续推进故事线。")
-            page.setdefault("tag", "mainline")
-            if not page["evidence"]:
-                page["evidence"] = ["TODO: 补充来源和数据"]
-            if not page["expected_evidence_materials"]:
-                page["expected_evidence_materials"] = [
-                    {"material": item, "purpose": "支撑本页判断", "status": "available"} for item in page["evidence"]
-                ]
+    @staticmethod
+    def _unit_type(output_format: str) -> str:
+        return {
+            "ppt": "page",
+            "document": "section",
+            "html": "module",
+        }.get(str(output_format), "page")
 
-    def _title_from_claim(self, claim: str) -> str:
-        title = claim.strip()
-        if title.endswith(("。", ".", "!", "！", "?", "？")):
-            title = title[:-1]
-        return title
+    @staticmethod
+    def _claim(material: dict[str, Any], fallback: str) -> str:
+        claim = str(material.get("claim", "")).strip() if isinstance(material, dict) else ""
+        return claim.rstrip("。.!！?？") or fallback
 
-    def _role_for_index(self, index: int, total: int) -> str:
-        if index == 1:
-            return "opening"
-        if index == total:
-            return "recommendation"
-        return "driver"
+    @staticmethod
+    def _strings(value: Any) -> list[str]:
+        if isinstance(value, str):
+            return [value] if value.strip() else []
+        if isinstance(value, list):
+            return [str(item) for item in value if str(item).strip()]
+        return []
+
+    def _points(self, material: dict[str, Any], claim: str) -> list[str]:
+        explicit = self._strings(material.get("points_to_make", []))
+        if explicit:
+            return explicit
+        candidates = [
+            material.get("logic_chain"),
+            material.get("why_it_matters"),
+            material.get("so_what"),
+        ]
+        points = [str(item).strip() for item in candidates if str(item or "").strip()]
+        return list(dict.fromkeys(points)) or [f"解释并支撑：{claim}"]

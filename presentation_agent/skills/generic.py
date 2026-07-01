@@ -237,7 +237,7 @@ class GenericSkill:
 
     def _output_schema(self, package: dict[str, Any], spec: AgentSpec) -> Optional[dict[str, Any]]:
         schemas = package.get("schemas", {})
-        # schemas are keyed by file stem, e.g. "storyline.v1"
+        # schemas are keyed by file stem, e.g. "storyline.v2"
         return schemas.get(spec.output_schema)
 
     def _stamp(self, artifact: dict[str, Any], spec: AgentSpec) -> dict[str, Any]:

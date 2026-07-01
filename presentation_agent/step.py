@@ -861,7 +861,8 @@ class StepRunner:
         priority_keys = [
             "topic", "topic_summary", "report_brief", "decision_goal",
             "core_conclusion", "executive_summary", "story_angle",
-            "selected_story_angle", "story_arc", "title", "key_question",
+            "message_pyramid", "ordering_rationale", "closing_intent",
+            "leadline", "title", "page_question", "key_question",
             "headline", "hook", "opening", "closing", "summary",
         ]
         lines: list[str] = []

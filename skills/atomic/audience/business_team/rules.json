@@ -6,7 +6,7 @@
       "phase": ["generation", "review"],
       "level": "P1",
       "property": "action_lens",
-      "instruction": "把结论落到业务优先级、指标、owner、依赖和下一步动作；避免只讲长期战略价值。"
+      "instruction": "把结论连接到上游已经明确的业务优先级、指标、owner、依赖或下一步动作；缺少依据时不得为追求闭环补造这些内容，避免只讲长期战略价值。"
     },
     {
       "id": "AUD-BIZ-AS-G01",
