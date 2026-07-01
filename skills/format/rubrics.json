@@ -41,6 +41,38 @@
       "criterion": "Q&A 与 speaker 能定位高风险单元、弱证据、caveat 和讲述种子。",
       "check": "检查 downstream_handoff、question_risk_tags 和 speaker_note_seed。",
       "fix": "补充与正式材料单元绑定的下游交接。"
+    },
+    {
+      "id": "FMT-EVIDENCE-001",
+      "severity": "P0",
+      "dimension": "evidence_preservation",
+      "criterion": "Page Filling 声明的 must-render evidence 必须上屏，或在 evidence_trace 中逐项记录省略理由。",
+      "check": "按 source_page_no 对照上游 must_render_evidence 与 rendered_evidence_refs / omitted_evidence_refs。",
+      "fix": "恢复关键数字、矩阵、quote 或 caveat；确需省略时记录具体理由。"
+    },
+    {
+      "id": "FMT-COMPARE-001",
+      "severity": "P1",
+      "dimension": "comparison_rendering",
+      "criterion": "上游 comparison matrix 应转成可横向扫描的表、图或矩阵，不得退化为多段并列描述。",
+      "check": "对照上游 comparison_matrix 与 layout、tables、visual_object。",
+      "fix": "使用表格、热力图、散点图或多面板，并保留 reader takeaway 和来源。"
+    },
+    {
+      "id": "FMT-QUAL-001",
+      "severity": "P1",
+      "dimension": "qualitative_evidence",
+      "criterion": "被标为 must-render 的用户原声必须作为机制/例证/反例呈现，并保留署名与来源。",
+      "check": "检查 quote_blocks、callouts 和 evidence_trace。",
+      "fix": "恢复 quote、attribution、role 和 source ref；不得把 quote 当量化证明。"
+    },
+    {
+      "id": "FMT-CAVEAT-001",
+      "severity": "P0",
+      "dimension": "caveat_visibility",
+      "criterion": "影响结论强度的 caveat 和不显著结果必须页面可见，不能只留在内部 gap 或被改写成行动建议。",
+      "check": "对照上游 must_keep_caveats、caveat evidence 与正式单元。",
+      "fix": "恢复可见 caveat，并校准标题和建议强度。"
     }
   ]
 }

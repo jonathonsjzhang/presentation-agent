@@ -67,6 +67,8 @@
           "headline",
           "layout_or_structure",
           "finalized_content",
+          "visual_object",
+          "evidence_trace",
           "source_display",
           "gap_display",
           "quality_status"
@@ -189,6 +191,31 @@
               },
               "asset_requirements": { "type": "array" },
               "limitations": { "type": "array" }
+            }
+          },
+          "evidence_trace": {
+            "type": "object",
+            "required": ["rendered_evidence_refs", "omitted_evidence_refs", "omission_reasons"],
+            "properties": {
+              "rendered_evidence_refs": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "omitted_evidence_refs": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "omission_reasons": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["evidence_ref", "reason"],
+                  "properties": {
+                    "evidence_ref": { "type": "string" },
+                    "reason": { "type": "string" }
+                  }
+                }
+              }
             }
           },
           "source_display": {
