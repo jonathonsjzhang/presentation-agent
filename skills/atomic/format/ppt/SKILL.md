@@ -49,7 +49,7 @@ Use this atomic capability only when `output_format=ppt`. Storyline units are pa
 ### 4. 文本溢出预防
 - 标题 ≤ 40 字（中文）
 - 表格单元格启用 word_wrap，内容 ≤ 50 字符/单元格
-- 发现面板/insight 要点数 ≤ 5 条，每点 ≤ 80 字符
+- 发现区域/insight 要点数 ≤ 5 条，每点 ≤ 80 字符
 - 文本框内容 ≤ 150 字符
 
 ### 5. 布局约束
@@ -82,7 +82,7 @@ Use this atomic capability only when `output_format=ppt`. Storyline units are pa
 
 | 资源 | 位置 | 说明 |
 |------|------|------|
-| **专业咨询风格指南** | `references/presentation_style_guide.md` | 导航栏、发现面板、数据强调、模板、配色方案 |
+| **专业咨询风格指南** | `references/presentation_style_guide.md` | 导航栏、发现多样化、数据强调、模板、配色方案 |
 | **MckEngine API 文档** | `references/mck-engine/engine-api.md` | MckEngine 布局方法的完整 API 参考 |
 | **布局目录** | `references/mck-engine/layout-catalog.md` | 所有可用布局类型说明 |
 | **配色方案** | `references/mck-engine/color-palette.md` | 颜色定义和用法 |
