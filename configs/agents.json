@@ -303,7 +303,7 @@
       "previous_agent_id": "storyline_design",
       "next_agent_id": "format",
       "input_schema": "storyline.v1",
-      "output_schema": "page_content.v1",
+      "output_schema": "page_content.v2",
       "input_contract": {
         "required_inputs": [
           "storyline.pages",
@@ -327,10 +327,11 @@
         "primary_artifact": "dummy page content",
         "required_handoff_fields": [
           "pages",
-          "chart_briefs",
-          "source_notes",
-          "visual_requirements",
-          "open_questions"
+          "global_sources",
+          "global_data_gaps",
+          "format_handoff_summary",
+          "open_questions",
+          "storyline_change_requests"
         ],
         "downstream_use": "format 按 dummy page 内容制作正式 PPT/HTML/文档"
       },
@@ -397,7 +398,7 @@
       "description": "把 dummy page 转成对应格式的正式材料，支持 PPT、HTML 或文档，并保持结论与证据不变形。",
       "previous_agent_id": "page_filling",
       "next_agent_id": "qa_preparation",
-      "input_schema": "page_content.v1",
+      "input_schema": "page_content.v2",
       "output_schema": "formatted_material.v1",
       "input_contract": {
         "required_inputs": [

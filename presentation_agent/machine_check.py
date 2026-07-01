@@ -188,7 +188,9 @@ def _objection(
 ) -> Objection:
     return Objection(
         id=f"{severity}-{rubric_id}",
-        severity=severity if severity in ("P0", "P1") else "P0",
+        # Unknown/advisory severities must never become a blocking P0 by
+        # accident. Rubric authors should use P1 for non-blocking findings.
+        severity=severity if severity in ("P0", "P1") else "P1",
         dimension=dimension,
         message=message,
         evidence=evidence,

@@ -19,6 +19,15 @@ class ContextAssembler:
             config.get("max_inline_chars_per_field", 12000)
         )
         self.preview_items = int(config.get("preview_items", 3))
+        self.field_inline_limits = {
+            str(worker): {
+                str(field): int(limit)
+                for field, limit in dict(fields).items()
+            }
+            for worker, fields in dict(
+                config.get("field_inline_limits", {})
+            ).items()
+        }
 
     def assemble(
         self,
@@ -35,7 +44,7 @@ class ContextAssembler:
         upstream_signal: dict[str, Any] = {}
         material_refs: list[dict[str, Any]] = []
         projected_brief, brief_projected_fields = self._inline_projection(
-            raw_brief, required
+            raw_brief, required, worker_id=worker_id
         )
         omitted_brief_fields = [
             key for key in raw_brief if required and key not in required
@@ -55,7 +64,9 @@ class ContextAssembler:
             source_id = self._unique_source_id(
                 self._source_id(path, data, index), inputs
             )
-            inline, projected_fields = self._inline_projection(data, required)
+            inline, projected_fields = self._inline_projection(
+                data, required, worker_id=worker_id
+            )
             inputs[source_id] = {
                 "artifact_path": str(path),
                 "agent_id": data.get("agent_id", ""),
@@ -113,15 +124,21 @@ class ContextAssembler:
         return f"{source_id}_{suffix}"
 
     def _inline_projection(
-        self, data: dict[str, Any], required: set[str]
+        self,
+        data: dict[str, Any],
+        required: set[str],
+        *,
+        worker_id: str = "",
     ) -> tuple[dict[str, Any], list[str]]:
         inline: dict[str, Any] = {}
         projected_fields: list[str] = []
+        limits = self.field_inline_limits.get(worker_id, {})
         for key, value in data.items():
             if required and key not in required:
                 continue
             encoded = json.dumps(value, ensure_ascii=False, default=str)
-            if len(encoded) <= self.max_inline_chars:
+            inline_limit = limits.get(key, self.max_inline_chars)
+            if len(encoded) <= inline_limit:
                 inline[key] = value
                 continue
             projected_fields.append(key)

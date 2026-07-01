@@ -1,4 +1,4 @@
-"""Render backends that turn formatted_material.v1 / page_content.v1 into real files.
+"""Render backends that turn formatted_material.v1 / page_content.v2 into real files.
 
 Three targets:
 - ppt.py   -> .pptx via the vendored McKinsey engine (mck_ppt)

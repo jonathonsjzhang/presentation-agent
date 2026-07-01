@@ -63,8 +63,8 @@ README TODO #2 指出当前痛点：
 | 1 | `task_positioning` | 任务定位 | `raw_brief.v1` | `task_positioning.v1` | `skills/task_positioning` |
 | 2 | `argument_synthesis` | 核心论点提炼 | `task_positioning.v1` | `argument_synthesis.v1` | `skills/argument_synthesis` |
 | 3 | `storyline_design` | storyline 设计 | `argument_synthesis.v1` | `storyline.v1` | `skills/storyline_design` |
-| 4 | `page_filling` | 单页内容填充 | `storyline.v1` | `page_content.v1` | `skills/page_filling` |
-| 5 | `format` | format | `page_content.v1` | `formatted_material.v1` | `skills/format` |
+| 4 | `page_filling` | 单页内容填充 | `storyline.v1` | `page_content.v2` | `skills/page_filling` |
+| 5 | `format` | format | `page_content.v2` | `formatted_material.v1` | `skills/format` |
 | 6 | `qa_preparation` | Q&A 梳理 | `formatted_material.v1` | `qa_pack.v1` | `skills/qa_preparation` |
 | 7 | `speaker_script` | 逐字稿 | `qa_pack.v1` | `speaker_script.v1` | `skills/speaker_script` |
 
