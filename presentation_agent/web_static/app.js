@@ -706,8 +706,8 @@ function fallbackOverview() {
     ["manager", "汇报项目 Manager", "manager_context.v1", "manager_decision.v1", "定义任务、规划、派发 Worker、验收与返工"],
     ["argument_synthesis", "核心论点提炼", "manager_task.v1", "argument_synthesis.v1", "形成 Executive Summary 和预期推动的 action"],
     ["storyline_design", "storyline 设计", "argument_synthesis.v1", "storyline.v1", "设计每页标题、关键问题、证据和 so what"],
-    ["page_filling", "单页内容填充", "storyline.v1", "page_content.v1", "把故事线展开成 dummy page 和图表 brief"],
-    ["format", "format", "page_content.v1", "formatted_material.v1", "生成 PPT、HTML 或文档形式的正式材料"],
+    ["page_filling", "单页内容填充", "storyline.v1", "page_content.v2", "把故事线展开成证据充分、可追溯的页面内容"],
+    ["format", "format", "page_content.v2", "formatted_material.v1", "生成 PPT、HTML 或文档形式的正式材料"],
     ["qa_preparation", "Q&A 梳理", "formatted_material.v1", "qa_pack.v1", "梳理可能追问、回答策略和需补充信息"],
     ["speaker_script", "逐字稿", "qa_pack.v1", "speaker_script.v1", "生成逐页对应、可排练的完整讲稿"],
   ];

@@ -7,7 +7,7 @@ description: Convert approved page content into a render-ready formal deliverabl
 
 ## Role
 
-把 `page_content.v1` 转为 `formatted_material.v1`。你负责正式表达、信息层级、来源与缺口呈现、renderer handoff 和下游交接，但不重新做论点、故事线、Q&A 或逐字稿。
+把 `page_content.v2` 转为 `formatted_material.v1`。你负责正式表达、信息层级、来源与缺口呈现、renderer handoff 和下游交接，但不重新做论点、故事线、Q&A 或逐字稿。
 
 本 Skill 只定义三种载体共有的稳定职责。本轮只能执行 compiled package 中唯一激活的 `format.*` capability；不要自行加载或混用其他载体流程。
 
@@ -19,16 +19,19 @@ description: Convert approved page content into a render-ready formal deliverabl
 - 目标格式已在 report charter 与 active capability 中确定；
 - 每个上游单元能追溯 page takeaway、证据、来源和 data gap；
 - 需要的原始细节若被投影，应按 `material_refs[].artifact_path` 读取，不能根据 preview 补写事实。
+- **数据真实性**：`visual_object.chart_spec.data_ref` 或 `visual_object.table_data` 中的数据**必须**从原始文档/数据中真实提取，**禁止**使用模拟数据或示例数据。若原始文档中无对应数据，必须在 `gap_display.visible_note` 中声明"数据缺失"，并将 `quality_status` 设为 `partial`。
 
 输出 `input_readiness.status = ready | partial | blocked`。输入不完整时可以生成 provisional spec，但必须把缺口写进对应单元和 `open_design_tasks`，不得把 deliverable 标为 completed。
 
 ## Stable workflow
 
 1. 审计输入，记录无法保真的内容或 renderer 阻断。
-2. 依据唯一 active `format.*` capability 生成正式单元。
-3. 保持每个单元与 `source_page_no`、结论、证据和缺口的映射。
-4. 建立 `artifact_manifest`、`render_plan` 与 `quality_checks`。
-5. 把弱证据、风险页、caveat 和 speaker note seed 交给 Q&A / speaker。
+2. 逐页读取 `must_render_evidence`、`on_screen_numbers`、comparison matrix、qualitative evidence、visual layers 和 caveat。
+3. 依据唯一 active `format.*` capability 生成正式单元；一个分析构图可以包含多个联动视图，不把复杂证据强行退化为单图 + prose。
+4. 填写 `evidence_trace`：逐项记录已上屏证据、被省略证据及理由。
+5. 保持每个单元与 `source_page_no`、结论、证据和缺口的映射。
+6. 建立 `artifact_manifest`、`render_plan` 与 `quality_checks`。
+7. 把弱证据、风险页、caveat 和 speaker note seed 交给 Q&A / speaker。
 
 ## Invariants
 
@@ -36,6 +39,9 @@ description: Convert approved page content into a render-ready formal deliverabl
 - 不新增无来源事实，不隐藏 low confidence、caveat 或 blocking gap。
 - 每个正式单元只服务一个主要 takeaway，并有明确的信息层级。
 - sources、confidence、data gaps 和 open tasks 必须进入正式内容或交付清单。
+- `must_render_evidence` 中的项目必须上屏；确因版面省略时写入 `omitted_evidence_refs` 和具体理由，不能静默丢失。
+- comparison matrix 优先转为表格、热力图、散点或多面板，不得退化为按实体分段的 prose。
+- qualitative evidence 仅用于机制、例证或反例，并保留 attribution 与 source ref。
 - Agent 只描述 render intent；`render_result=rendered` 只能由真实 renderer 回填。
 - artifact 的 `format` 必须与 compiled `format.*` capability 一致。
 
@@ -48,7 +54,7 @@ description: Convert approved page content into a render-ready formal deliverabl
 - `artifact_manifest`
 - `render_plan`
 - `material_units[]`, `appendix_units[]`
-- `style_tokens`
+- `style_tokens`（至少含 typography / color / spacing 三个子集，取值由 active format capability 的呈现形式规则定义）
 - `source_policy`, `gap_policy`, `redaction_policy`
 - `format_decisions[]`
 - `open_design_tasks[]`
@@ -58,9 +64,10 @@ description: Convert approved page content into a render-ready formal deliverabl
 每个 `material_unit` 至少包含：
 
 - `unit_id`, `source_page_no`, `unit_type`, `headline`
-- `layout_or_structure`
+- `layout_or_structure`（必含 `presentation_style_ref` 引用 active capability 呈现形式子节中的具体 token）
 - `finalized_content`
 - `visual_object`
+- `evidence_trace`
 - `source_display`
 - `gap_display`
 - `speaker_note_seed`
@@ -76,4 +83,5 @@ description: Convert approved page content into a render-ready formal deliverabl
 - 丢失来源、口径、关键限定条件或阻断缺口；
 - 只有格式建议，没有正式材料单元；
 - 未真实渲染却声称 completed；
-- 同一产物混入两种或三种载体结构。
+- 同一产物混入两种或三种载体结构；
+- 使用模拟数据填充图表/表格（违反数据真实性规则）。

@@ -80,7 +80,8 @@ def _first_balanced_object(text: str) -> str | None:
 def validate(data: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
     """Minimal JSON-schema validator covering the subset this project uses.
 
-    Supported keywords: type, required, properties, items, enum, const.
+    Supported keywords: type, required, properties, items, enum, const,
+    minItems, maxItems, minLength, maxLength.
     Unknown keywords are ignored (lenient by design). Returns a list of human
     readable error strings; empty list means valid. No external dependency, so
     the harness stays pure-stdlib.
@@ -109,10 +110,33 @@ def validate(data: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
                     errors.extend(validate(data[key], subschema, f"{path}.{key}"))
 
     if expected_type == "array" or isinstance(data, list):
+        if isinstance(data, list):
+            min_items = schema.get("minItems")
+            max_items = schema.get("maxItems")
+            if isinstance(min_items, int) and len(data) < min_items:
+                errors.append(
+                    f"{path}: must contain at least {min_items} item(s), got {len(data)}"
+                )
+            if isinstance(max_items, int) and len(data) > max_items:
+                errors.append(
+                    f"{path}: must contain at most {max_items} item(s), got {len(data)}"
+                )
         item_schema = schema.get("items")
         if isinstance(data, list) and isinstance(item_schema, dict):
             for index, item in enumerate(data):
                 errors.extend(validate(item, item_schema, f"{path}[{index}]"))
+
+    if expected_type == "string" and isinstance(data, str):
+        min_length = schema.get("minLength")
+        max_length = schema.get("maxLength")
+        if isinstance(min_length, int) and len(data) < min_length:
+            errors.append(
+                f"{path}: length must be at least {min_length}, got {len(data)}"
+            )
+        if isinstance(max_length, int) and len(data) > max_length:
+            errors.append(
+                f"{path}: length must be at most {max_length}, got {len(data)}"
+            )
 
     return errors
 

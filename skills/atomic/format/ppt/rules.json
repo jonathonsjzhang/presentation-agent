@@ -22,7 +22,15 @@
       "phase": ["generation", "review"],
       "level": "P0",
       "property": "unit_type",
-      "instruction": "按 page 生成一页一结论的内容。PPT 密度策略：优先用表格/矩阵承载多实体对比数据（一表省十行 bullet），留出空间给一段判断性文字；不用三段并列 prose 代替一张对比表。每页 1 个主视觉（图表/矩阵/表格）+ 2-4 条 insight bullet + 脚注 caveat/source。"
+      "instruction": "按 page 生成一页一结论的内容。PPT 密度策略：优先用表格/矩阵承载多实体对比数据，不用三段并列 prose 代替一张对比表。每页围绕 1 个分析构图组织信息；该构图可包含主图、矩阵、拆解、quote 与 caveat 等多个联动视图，但都必须服务同一 takeaway。"
+    },
+    {
+      "id": "FMT-PPT-PF-G02",
+      "applies_to": ["page_filling"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "information_density",
+      "instruction": "每页必须包含至少一个视觉元素（图表/表格/形状/矩阵），禁止纯文字页。正文页信息密度要求：主视觉区域占正文区约 70%，来源和注释标注在页面底部。"
     },
     {
       "id": "FMT-PPT-FM-G01",
@@ -30,7 +38,7 @@
       "phase": ["generation", "review"],
       "level": "P0",
       "property": "format_contract",
-      "instruction": "只生成 PPT slide：format=ppt，material_units[].unit_type=slide，render_plan 使用 mck_ppt_shape_native；每个正文页包含行动标题、主视觉或明确缺口、来源脚注，禁止加载 DOCX/HTML 执行流程。",
+      "instruction": "只生成 PPT slide：format=ppt，material_units[].unit_type=slide，render_plan 使用 mck_ppt_shape_native；每个正文页包含行动标题、主视觉或明确缺口、来源脚注，禁止加载 DOCX/HTML 执行流程。封面后第一页必须是 Execution Summary（核心发现摘要）。",
       "context_requirements": ["pages", "draft_material", "global_sources", "global_data_gaps"]
     },
     {
@@ -40,6 +48,22 @@
       "level": "P0",
       "property": "renderer_readiness",
       "instruction": "图表页提供可渲染 chart_spec；缺数据时改用安全版式并记录 open_design_tasks，不得伪造 completed render_result。"
+    },
+    {
+      "id": "FMT-PPT-FM-G03",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "data_authenticity",
+      "instruction": "所有图表数据（柱数值、折线坐标、表格单元格）必须从 source_refs[] 引用的原始文档中真实提取，禁止使用模拟数据或示例数据。提取后应在 material_unit 中记录数据来源位置（如 filename.pdf §3.2 Table 2）。若原始文档中无对应数据，必须在 gap_display.visible_note 中声明数据缺失。"
+    },
+    {
+      "id": "FMT-PPT-FM-G04",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "layout_quality",
+      "instruction": "文本溢出预防：标题不超过 40 字；表格单元格启用 word_wrap，内容不超过 50 字符/单元格；insight 要点不超过 5 条，每条不超过 80 字符。布局约束：使用安全区（距边界 ≥ 0.5 英寸）；形状之间保持 ≥ 0.1 英寸间距防止重叠。"
     },
     {
       "id": "FMT-PPT-QA-G01",

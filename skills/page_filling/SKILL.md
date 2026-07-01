@@ -11,12 +11,13 @@ description: Expand an approved storyline into evidence-grounded content units, 
 
 ## Workflow
 
-0. 确认每页的 `page_type` / `role_in_story`，参照 `references/page_archetypes.md` 中该页型的内容范式与「够厚」的期望。
-1. 对每个 storyline unit 锁定 question、takeaway、evidence refs 与 role。
-2. 写 headline、proof chain 和高密度 content blocks。数据型页面期望量化证据落到「数值 + 对比基线 + 口径」三要素。
-3. 将可视化关系写成结构化 visual plan；数据不足时明确占位和补数任务。图表 brief 必须说明它要证明什么，不能只写「做柱状图」。
-4. 继承 sources、confidence、caveat 和 gaps。影响结论强度的 caveat 必须保留且不能被反向改写。
-5. 检查单元间重复、密度、可读性及下游格式化所需字段。
+0. 审计输入可用性：确认 granular 数字、对比实体、用户研究和口径确实进入当前上下文；只有 preview 时不得补写事实。
+1. 为每页选择 schema 允许的 `page_type`，按运行时已注入的 page archetype reference 确认必备证据角色。
+2. 对每个 storyline unit 锁定 question、takeaway、evidence refs 与 role；若一页包含多个独立结论或关键页型缺失，写入 `storyline_change_requests`。
+3. 写 headline、proof chain 和 content blocks。数据型页面将证据落到具体数值、基线/拆解、指标口径、对象范围和 `source_ref`。
+4. 将可视化关系写成 `visual_plan.visual_layers`；一个分析构图可以包含多个联动视图，但每个视图都要服务同一 takeaway。
+5. 继承 sources、confidence、caveat 和 gaps。影响结论强度的 caveat 必须可见，不能被反向改写。
+6. 把关键数字、矩阵、用户原声和 caveat 写入 `format_handoff_notes.must_render_evidence`；检查跨页重复和遗漏。
 
 ## Invariants
 
@@ -24,14 +25,15 @@ description: Expand an approved storyline into evidence-grounded content units, 
 - 正文中的数字、事实和因果都可追溯。
 - 图表 brief 不得假设不存在的数据。
 - 不重排 storyline，不把 gap 藏进脚注。
+- 需要拆页、补方法论页或回退补数时，显式请求 Manager 调整 storyline，不静默删证据。
 - 颗粒度、密度和载体表现只服从 active capabilities。
-- **量化结论必须落到「数值 + 对比基线 + 口径」三要素**（数据型页面期望，非数据页豁免）。
+- **量化结论必须包含数值、指标口径、对象范围和来源；涉及领先/提升时还必须有对比基线**。
 - **定性证据（用户原声/访谈引用）只服务机制说明或例证，不单独支撑量化结论**。
 - **关键数据与 caveat 不可只停留在 JSON 深层字段，必须进入 format_handoff 的上屏意图**。
 
 ## Output
 
-严格输出 `page_content.v2`（v1 超集），包含 pages、global_sources、global_data_gaps、open_questions、draft_material、format_handoff_summary 和必要的状态建议。数据型页面补 `evidence_steps[].quant`，对比型页面补 `comparison_matrix`，有用户研究则补 `qualitative_evidence`，每页标 `claim_strength`。
+严格输出 `page_content.v2`，包含 pages、global_sources、global_data_gaps、open_questions、storyline_change_requests、draft_material 和 format_handoff_summary。每页必须标 `page_type` 与 `claim_strength`；数据页填写可追溯 quant，对比页填写 comparison matrix，有用户研究时填写 qualitative evidence，并给出 visual layers 与 must-render evidence。
 
 ## Failure conditions
 
@@ -41,11 +43,8 @@ description: Expand an approved storyline into evidence-grounded content units, 
 - 混入未激活载体的结构规则；
 - 量化结论只有概括表述（如「留存率显著更高」），缺乏具体数值和基线（数据页）；
 - 对比型页面写成多段并列描述，未落到实体 × 维度矩阵（对比页）。
+- 为满足页数限制而删除关键方法论、矩阵、反方或 caveat，却没有发出 storyline change request。
 
-## 何时查阅 references（按需读，不要全量加载）
+## Bundled references
 
-- 不确定一页该放哪些证据层次 → 读 `references/information_sufficiency.md`
-- 要把零散证据串成论证 → 读 `references/argument_chain.md`
-- 不确定这一页型该长什么样 / 该多厚 → 读 `references/page_archetypes.md`
-- 写完后自检是否踩了高频坑 → 读 `references/gotchas.md`
-- 想看人工稿 vs AI 稿的差距对照 → 读 `examples/retention_manual_vs_ai.md`
+Runtime 会依据 `reference_manifest.json` 注入页型、信息充分性、论证链和 gotchas。不要假设自己能读取未注入的本地文件。案例文件仅供人工维护与 eval 使用，不作为当前任务的数据来源。
