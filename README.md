@@ -189,7 +189,9 @@ Stop checker 只判断是否可以停止并进入 human review，不等同于完
 - Stop check 负责判断 P0 是否已经清除；
 - Human review 负责最终判断材料能不能用。
 
-这能避免系统假装“全自动判断主观质量”，也符合汇报材料生产中高质量判断必须有人参与的现实。
+这能避免系统假装"全自动判断主观质量"，也符合汇报材料生产中高质量判断必须有人参与的现实。
+
+> **注意**：Manager 编排路径（宿主自执行模式）下的 `StopChecker` 仅做确定性判定（P0 数量、schema 匹配），不做独立 LLM sanity check。这是因为宿主自执行模式下只有一个模型可用，LLM 级别的合理性扫描已在 review 阶段的 `_compose_review_instruction` 中由宿主模型完成。Legacy `LoopRunner` 路径（harness 自持多个 LLM client）仍使用带独立 LLM 的 `StopChecker`。两种路径的安全边界等价，差异仅在于 sanity check 的执行位置。
 
 ### 4.4 E2E Eval Harness
 

@@ -50,6 +50,7 @@ git clone "${PRESENTATION_AGENT_REPO_URL:-https://github.com/jonathonsjzhang/pre
 cd "$HOME/PresentationAgent/repo"
 python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" init-workspace
 python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" doctor
+python -m presentation_agent.cli --root "$HOME/PresentationAgent/repo" derive-agents
 ```
 
 如果 repo 已存在：
@@ -104,6 +105,7 @@ cd "$HOME/PresentationAgent/repo"
 git pull
 python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" init-workspace
 python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" doctor
+python -m presentation_agent.cli --root "$HOME/PresentationAgent/repo" derive-agents
 ```
 
 注意：

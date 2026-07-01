@@ -10,8 +10,7 @@
       "qa_preparation",
       "speaker_script"
     ],
-    "legacy_fallback": true,
-    "context_mode": "projected"
+    "legacy_fallback": true
   },
   "dimensions": {
     "audience": [

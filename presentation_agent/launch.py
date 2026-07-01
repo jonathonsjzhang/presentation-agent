@@ -4,15 +4,12 @@ from __future__ import annotations
 
 Three hosts — Claude Code (subagent), WorkBuddy (skill), Codex (prompt) — all
 need to do the same thing: take a user's spoken request, turn it into a
-`raw_brief.v1`, and kick off the legacy direct six-Worker Pipeline. Rather than
-re-implement that plumbing in each host wrapper (which would drift), every
-wrapper calls this one entry point. New interactive report runs use
-`ManagerOrchestrator`; this wrapper remains for direct pipeline compatibility.
+`raw_brief.v1`, and kick off a report run. As of v0.2 the default path is
+Manager-orchestrated; set ``use_manager=False`` for legacy direct Pipeline.
 
 Design choices baked in here:
-  - default provider is "cli" (decision 1A): the harness borrows whichever
-    coding-agent CLI the host configured in configs/llm.json, so "谁发起用谁的
-    模型" holds without the wrapper passing tokens.
+  - default provider is "cli" (decision 1A) when using legacy Pipeline; Manager
+    path is host-self-execution and does not use a provider.
   - brief normalization is forgiving: accepts a dict, a JSON string, or a path,
     fills sane defaults, and fails loudly only on the few truly-required fields.
   - stepwise by default (human-in-the-loop); hosts pass auto=True for dry runs.
@@ -25,7 +22,6 @@ from typing import Any, Optional, Union
 from presentation_agent.capabilities.profile import normalize_report_profile
 from presentation_agent.io import write_json
 from presentation_agent.models import now_iso
-from presentation_agent.pipeline import Pipeline
 
 BriefInput = Union[str, Path, dict]
 
@@ -141,23 +137,32 @@ def _as_str_list(value: Any) -> list[str]:
 def launch_report(
     brief: BriefInput,
     root: Union[str, Path] = ".",
-    provider: Optional[str] = "cli",
+    *,
+    use_manager: bool = True,
+    provider: Optional[str] = None,
     auto: bool = False,
     out: Optional[Union[str, Path]] = None,
+    spawn_adapter: Optional[str] = None,
     init_only: bool = False,
 ) -> dict[str, Any]:
-    """Normalize a brief, persist it, and run the report pipeline.
+    """Normalize a brief, persist it, and kick off a report run.
 
-    This is THE function every host wrapper calls. Returns the pipeline summary
-    plus the path to the normalized brief so the host can show the user what was
-    actually run and where the artifacts landed.
+    This is THE function every host wrapper calls. Returns run metadata so the
+    host can show the user what was run and where the artifacts landed.
 
-    provider defaults to "cli" per decision 1A; pass "mock" for offline dry runs
-    or any provider key defined in configs/llm.json.
+    **Manager path** (``use_manager=True``, default since v0.2):
+        Initializes a ManagerOrchestrator run, writes the brief, and returns
+        the first instruction (Manager planning).  The host then drives the
+        run step-by-step via the ``report next → submit → approve/feedback``
+        protocol — no provider needed (host self-execution).
 
-    When init_only=True, only writes the brief and creates stage 1's run_dir
-    without running any agent. The host is expected to drive the pipeline
-    step-by-step via `cli step` commands.
+    **Legacy Pipeline** (``use_manager=False``):
+        Runs the direct six-Worker Pipeline via LoopRunner.  Requires a
+        ``provider`` (defaults to ``"cli"`` when omitted).  Kept for
+        compatibility and headless debugging.
+
+    When ``init_only=True`` (legacy only), only writes the brief and creates
+    stage 1's run_dir without running any agent.
     """
     root_path = Path(root).resolve()
     normalized = normalize_brief(brief, root_path)
@@ -168,6 +173,28 @@ def launch_report(
 
     brief_path = out_root / "raw_brief.json"
     write_json(brief_path, normalized)
+
+    # ---- Manager path (default) ---------------------------------------------
+    if use_manager:
+        if init_only:
+            raise BriefError("init_only 仅支持 Legacy Pipeline 路径")
+        from presentation_agent.manager import ManagerOrchestrator
+
+        orchestrator = ManagerOrchestrator(
+            root_path, out_root, spawn_adapter=spawn_adapter
+        )
+        instruction = orchestrator.initialize_run(brief_path)
+        return {
+            "run_id": orchestrator.run_dir.name,
+            "run_dir": str(out_root),
+            "brief_path": str(brief_path),
+            "mode": "manager_controlled",
+            "spawn_adapter": orchestrator.workers.spawn_adapter.kind,
+            "instruction": instruction,
+        }
+
+    # ---- Legacy Pipeline (deprecated since v0.2) ----------------------------
+    used_provider = provider or "cli"
 
     if init_only:
         from presentation_agent.step import PipelineStepper
@@ -180,11 +207,13 @@ def launch_report(
             "stage_1_dir": stage1["stage_dir"],
         }
 
-    pipeline = Pipeline(root_path, provider_override=provider)
+    from presentation_agent.pipeline import Pipeline
+
+    pipeline = Pipeline(root_path, provider_override=used_provider)
     summary = pipeline.run(brief_path, run_dir=out_root, auto=auto)
 
     return {
         "brief_path": str(brief_path),
-        "provider": provider or "(config default)",
+        "provider": used_provider,
         **summary,
     }
