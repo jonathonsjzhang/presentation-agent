@@ -33,7 +33,7 @@
       "severity": "P0",
       "dimension": "information_structure",
       "criterion": "封面后第一页必须是 Execution Summary（核心发现摘要）。",
-      "check": "第一正文页是否包含汇总核心发现的 summary 布局；如果没有，是否在 format_decisions 中有合理理由。",
+      "check": "第一正文页是否包含汇总核心发现的 summary/executive_summary 布局；如果没有，是否在 format_decisions 中有合理理由。",
       "fix": "在封面后插入 execution_summary 页面，汇总 3-5 条核心发现。"
     },
     {
@@ -42,17 +42,53 @@
       "severity": "P0",
       "dimension": "data_authenticity",
       "criterion": "所有图表数据必须从原始文档提取，禁止使用模拟数据。",
-      "check": "检查 chart_spec.data_ref 或 table_data 是否可追溯到 source_refs[]。",
-      "fix": "从原始文档中提取真实数据替换模拟数据；若数据不可获得，标记 quality_status=partial。"
+      "check": "检查 chart_spec.data_ref 或 table_data 是否可追溯到 source_refs[]；是否存在无来源的数值数据。",
+      "fix": "从原始文档中提取真实数据替换模拟数据；若数据不可获得，标记 quality_status=partial 并声明数据缺失。"
     },
     {
       "id": "FMT-PPT-FM-004",
       "applies_to": ["format"],
       "severity": "P0",
       "dimension": "visual_density",
-      "criterion": "每页必须包含至少一个视觉元素（图表/表格/形状），禁止纯文字页。",
-      "check": "逐页检查 material_units[].visual_object 中是否有 chart_spec/table_data/shape_spec。",
-      "fix": "为纯文字页添加图表/表格/矩阵等视觉元素。"
+      "criterion": "PPT 每页必须包含至少一个视觉元素（图表/表格/形状），禁止纯文字页。",
+      "check": "逐页检查 material_units[].visual_object 中是否有 chart_spec/table_data/shape_spec；是否存在纯文字 layout 页。",
+      "fix": "为纯文字页添加图表/表格/矩阵等视觉元素，或将纯文字内容合并到相邻页面。"
+    },
+    {
+      "id": "FMT-PPT-FM-005",
+      "applies_to": ["format"],
+      "severity": "P0",
+      "dimension": "exec_summary_structure",
+      "criterion": "Execution Summary 应使用分层论点树结构，而非并列卡片。",
+      "check": "封面后第一页是否为编号发现+缩进子发现的论点树格式；是否存在 3 张以上并列同级卡片。",
+      "fix": "改为分层结构：发现1（主论点）→ 发现1.1/1.2（子发现）递进排列。"
+    },
+    {
+      "id": "FMT-PPT-FM-006",
+      "applies_to": ["format"],
+      "severity": "P0",
+      "dimension": "layout_diversity",
+      "criterion": "禁止所有页面使用同一版式，按内容类型从 MckEngine 72 种布局中选择匹配。",
+      "check": "检查连续 3 页以上是否使用相同 layout_type；检查 format_decisions[].layout_rationale 是否记录了 layout_type 和选择理由。",
+      "fix": "参考 layout-catalog.md 的 6 个分类重新匹配布局。"
+    },
+    {
+      "id": "FMT-PPT-FM-007",
+      "applies_to": ["format"],
+      "severity": "P1",
+      "dimension": "discovery_variety",
+      "criterion": "发现结论应以多种形式融入页面，不固定右侧面板。",
+      "check": "是否超过 60% 的页面使用相同发现呈现方式；发现是否可作为标题/标注/引文融入。",
+      "fix": "根据页面内容特点，将发现融入标题、图表标注、引文框或侧边面板，减少固定面板使用比例。"
+    },
+    {
+      "id": "FMT-PPT-FM-008",
+      "applies_to": ["format"],
+      "severity": "P1",
+      "dimension": "layout_content_match",
+      "criterion": "每个页面选择的 layout_type 应与内容类型匹配。",
+      "check": "检查 material_units[].layout_or_structure.layout_type 是否存在于 MckEngine 72 种布局列表中；检查 layout_type 是否匹配内容的数据特征（对比数据→图表类、定性→叙事类、流程→时间类）。",
+      "fix": "将 layout_type 替换为与内容数据特征匹配的 MckEngine 布局。参考 layout-catalog.md 的 13 个分类进行匹配。"
     }
   ]
 }

@@ -75,6 +75,30 @@
       "fix": "恢复可见 caveat，并校准标题和建议强度。"
     },
     {
+      "id": "FMT-PPT-001",
+      "severity": "P0",
+      "dimension": "executive_summary",
+      "criterion": "封面后第一页必须是 Execution Summary。",
+      "check": "检查第二页是否为 executive_summary layout。",
+      "fix": "在封面后插入 Executive Summary 页。"
+    },
+    {
+      "id": "FMT-PPT-002",
+      "severity": "P0",
+      "dimension": "data_authenticity",
+      "criterion": "所有图表数据必须从原始文档提取，禁止使用模拟数据。",
+      "check": "检查 chart_spec.data_ref 或 table_data 是否可追溯到 source_refs[]。",
+      "fix": "从原始文档中提取真实数据；若不可获得，标记 quality_status=partial。"
+    },
+    {
+      "id": "FMT-PPT-003",
+      "severity": "P0",
+      "dimension": "visual_density",
+      "criterion": "PPT 每页必须包含至少一个视觉元素，禁止纯文字页。",
+      "check": "逐页检查 material_units[].visual_object 中是否有 chart_spec/table_data/shape_spec。",
+      "fix": "为纯文字页添加图表/表格/矩阵等视觉元素。"
+    },
+    {
       "id": "FMT-NO-AMPLIFICATION",
       "severity": "P0",
       "dimension": "recommendation_scope",

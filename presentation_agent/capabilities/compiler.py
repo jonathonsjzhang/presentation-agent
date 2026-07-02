@@ -36,9 +36,11 @@ def compile_skill_package(
         )
         core_instructions = legacy.instructions.strip()
         if spec.id == "format":
-            core_instructions = core_instructions.split(
-                "## Format capabilities", 1
-            )[0].rstrip()
+            for marker in (
+                "## Format capabilities",
+                "===== BUNDLED REFERENCES",
+            ):
+                core_instructions = core_instructions.split(marker, 1)[0].rstrip()
         instruction_sections = [core_instructions]
         rubrics = list(legacy.rubrics)
         tools: list[str] = []
