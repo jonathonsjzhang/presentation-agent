@@ -1,9 +1,53 @@
 {
-  "version": "reference-manifest.v1",
-  "max_chars": 14000,
-  "generation": [
-    "references/presentation_spec.md",
-    "references/mck_api_reference.md",
-    "references/mck_engine_catalog.md"
-  ]
+  "version": "v3.12",
+  "skill": "format",
+  "compiler_injection": {
+    "rules": [
+      {
+        "trigger": "format.skill 激活时",
+        "inject": [
+          "SKILL.md (Role / Input / Workflow / Invariants / Output / Capabilities / 跨载体协同 / Failure)",
+          "references/layouts.md (§P-1 5 类实证 layout)",
+          "references/components.md (§P-2 9 类组件)",
+          "references/style.md (§P-3 配色/字体/间距/网格)",
+          "references/charts.md (§P-4 6 类图表)",
+          "references/data_extraction.md (§P-5 数据真实性)"
+        ],
+        "exclude_from_ppt_carrier": [
+          "references/document_spec.md",
+          "references/html_spec.md"
+        ]
+      },
+      {
+        "trigger": "output_format = document",
+        "inject_extra": ["references/document_spec.md"]
+      },
+      {
+        "trigger": "output_format = html",
+        "inject_extra": ["references/html_spec.md"]
+      }
+    ]
+  },
+  "shared_assets": {
+    "schemas": [
+      "schemas/page_content.v3.json",
+      "schemas/formatted_material.v2.json"
+    ],
+    "evals": [
+      "evals/evals.json",
+      "evals/rubrics.json"
+    ]
+  },
+  "deprecation": {
+    "v3_layout_types_deprecated": [
+      "title_slide", "action_title", "key_takeaway", "pyramid", "funnel",
+      "bar_chart_horizontal", "scatter_plot", "heatmap_table", "user_voice",
+      "action_items", "closing_slide", "cube", "quadrant_3group", "lollipop"
+    ],
+    "v3_active_layout_types": [
+      "cover", "executive_summary", "analysis_dashboard",
+      "methodology_or_strategy", "priority_matrix"
+    ],
+    "rationale": "v3 罗列 20+ 类 layout 但 renderer 从未实际调用；v0.9.1 仅用 5 类就达到最高质量。v3 收敛 layout 库，避免漂移。"
+  }
 }
