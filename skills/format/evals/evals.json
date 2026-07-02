@@ -1,23 +1,60 @@
 {
   "skill_name": "format",
+  "version": "v3",
   "evals": [
     {
       "id": 1,
-      "prompt": "把一份董事会深度分析的 page_content 转成 10 页以内可编辑 PPT；必须保留 downside、来源脚注和缺数占位，不要生成 DOCX/HTML 结构。",
-      "expected_output": "formatted_material.v1 with format=ppt, slide units, shape-native render plan, source/gap preservation, and no document/html harness leakage.",
-      "files": []
+      "name": "v0.9.1 复现（PPT 最高质量）",
+      "prompt": "用 v3 的 format.skill 重新渲染 case1（AI 产品用户留存分析）。要求达到或超过 v0.9.1 的视觉质量。",
+      "expected_output": "formatted_material.v2 with format=ppt, 16 pages, layout_type 全部收敛到 v3 的 5 类实证 layout，python-pptx 渲染无 placeholder。",
+      "acceptance": [
+        "slide_count ∈ {14, 15, 16}",
+        "layout_type 全部在 5 类实证 layout 范围内",
+        "每页含至少 1 个 visual_object（chart/table/shape）",
+        "QA 报告 passed=true，无 placeholder 命中"
+      ]
     },
     {
       "id": 2,
-      "prompt": "把业务团队的月度业务进展材料整理成可独立阅读的正式 Word 报告，先写 Executive Summary，再按偏差、原因、动作和支持请求展开。",
-      "expected_output": "formatted_material.v1 with format=document, document_section units, Executive Summary first, bullet-first evidence, and docx renderer handoff only.",
-      "files": []
+      "name": "layout 收敛检查",
+      "prompt": "提交一份含 v3 旧 layout_type 的 page_content（用 title_slide / action_title / bar_chart_horizontal / quadrant_3group）。",
+      "expected_output": "format worker 应在 format_decisions 中记录 v3 旧版名 → v3 当前 5 类的映射，并将所有 material_unit 切换到 v3 5 类 layout。",
+      "acceptance": [
+        "format_decisions 包含 deprecation_mapping 字段",
+        "所有 material_unit.unit_type ∈ {cover, executive_summary, analysis_dashboard, methodology_or_strategy, priority_matrix}",
+        "无 v3 旧名残留"
+      ]
     },
     {
       "id": 3,
-      "prompt": "把一份外部快速同步材料做成自包含 HTML，首屏给结论，证据可展开，清除内部行动指令和敏感来源。",
-      "expected_output": "formatted_material.v1 with format=html, html_module units, navigation/evidence expansion, redaction, and html renderer handoff only.",
-      "files": []
+      "name": "数据真实性强制",
+      "prompt": "提交一份 chart 数据来自模拟（无 source_refs 追溯）的 page_content。",
+      "expected_output": "format worker 应在 visual_object.data_source_extraction 字段留空 + quality_status=partial + open_design_tasks 记录'需补充原始数据'。",
+      "acceptance": [
+        "material_unit.quality_status='partial'",
+        "open_design_tasks 至少 1 条关于数据真实性",
+        "render_plan.asset_requirements 标记 'data_audit_required=true'"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Document 能力（v3 阶段占位）",
+      "prompt": "尝试用 v3 的 format.document 能力。",
+      "expected_output": "v3 当前阶段 format.document 未实测。format worker 应在 format_decisions 记录 'format.document 暂未实测，推荐走 format.ppt'。",
+      "acceptance": [
+        "format_decisions 包含 'recommend_ppt' 字段",
+        "不强行调用 format.document"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "HTML 能力（v3 阶段占位）",
+      "prompt": "尝试用 v3 的 format.html 能力。",
+      "expected_output": "v3 当前阶段 format.html 未实测。format worker 应在 format_decisions 记录 'format.html 暂未实测，推荐走 format.ppt'。",
+      "acceptance": [
+        "format_decisions 包含 'recommend_ppt' 字段",
+        "不强行调用 format.html"
+      ]
     }
   ]
 }
