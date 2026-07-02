@@ -1,0 +1,130 @@
+{
+  "agent_id": "format",
+  "schema": "formatted_material.v2",
+  "topic": "AI 助手用户留存改善机会",
+  "audience": "strategy_lead",
+  "delivery_target": "document",
+  "source_report_ref": "report.v1.valid.json",
+  "source_section_ids": ["S-01", "S-02"],
+  "source_claim_ids": ["C-01", "C-02", "C-03"],
+  "delivery_units": [
+    {
+      "unit_id": "DU-01",
+      "unit_type": "document_section",
+      "headline": "成果保存与回访共同出现，但因果仍待验证",
+      "content": {
+        "primary_text": "冻结样本中，成果保存组第 7 日回访率为 34%，仅单轮问答组为 18%；该差异是优先级信号，不构成因果证明。",
+        "supporting_points": ["非随机分组可能包含用户原始意愿的自选择。"],
+        "tables": []
+      },
+      "source_section_ids": ["S-01"],
+      "source_claim_ids": ["C-01"],
+      "source_evidence_refs": ["E-Q-01", "E-Q-02"],
+      "caveats": ["非随机分组，不能直接推断因果。"],
+      "visual_asset_refs": ["VA-01"],
+      "transformation": "compressed"
+    },
+    {
+      "unit_id": "DU-02",
+      "unit_type": "document_section",
+      "headline": "可复用成果提供了值得优先验证的回访理由",
+      "content": {
+        "primary_text": "访谈为成果复用机制提供方向性解释，因此建议优先验证成果保存与复用路径，并把提醒作为对照因素。",
+        "supporting_points": ["访谈只用于机制探索。", "实验需控制初始意愿。"],
+        "tables": []
+      },
+      "source_section_ids": ["S-02"],
+      "source_claim_ids": ["C-02", "C-03"],
+      "source_evidence_refs": ["E-I-01", "E-Q-02"],
+      "caveats": ["访谈样本只用于机制探索。"],
+      "visual_asset_refs": [],
+      "transformation": "preserved"
+    }
+  ],
+  "visual_assets": [
+    {
+      "asset_id": "VA-01",
+      "asset_type": "chart",
+      "title": "成果保存组的第 7 日回访率更高",
+      "reader_takeaway": "组间差异值得优先验证，但不等于因果。",
+      "data": {
+        "categories": ["保存成果", "仅单轮问答"],
+        "values": [34, 18],
+        "unit": "%"
+      },
+      "source_section_ids": ["S-01"],
+      "source_claim_ids": ["C-01"],
+      "source_evidence_refs": ["E-Q-01"],
+      "source_note": "来源：冻结匿名化行为数据快照；非随机分组。",
+      "caveats": ["非随机分组"],
+      "render_status": "planned"
+    }
+  ],
+  "compression_decisions": [
+    {
+      "decision_id": "CD-01",
+      "source_refs": ["S-01", "B-01", "B-02"],
+      "action": "compress",
+      "rationale": "把重复的口径说明合并到图注与 caveat callout。",
+      "meaning_preserved": true
+    }
+  ],
+  "omitted_content_register": [
+    {
+      "source_ref": "A-01",
+      "content_summary": "完整分组口径与样本限制",
+      "reason": "正文保留关键 caveat，详细口径移至附录。",
+      "risk": "low",
+      "recoverable_location": "document_appendix_A-01"
+    }
+  ],
+  "caveat_preservation": [
+    {
+      "source_caveat": "非随机分组，不能直接推断因果。",
+      "source_ref": "C-01",
+      "destination_unit_ids": ["DU-01"],
+      "status": "preserved"
+    },
+    {
+      "source_caveat": "访谈样本只用于机制探索。",
+      "source_ref": "C-02",
+      "destination_unit_ids": ["DU-02"],
+      "status": "preserved"
+    }
+  ],
+  "artifact_manifest": {
+    "target": "document",
+    "deliverables": [
+      {
+        "file_type": "docx",
+        "intended_path": "report_formatted.docx",
+        "status": "planned"
+      }
+    ]
+  },
+  "render_plan": {
+    "renderer": "docx_renderer",
+    "unit_order": ["DU-01", "DU-02"],
+    "asset_order": ["VA-01"],
+    "qa_steps": ["render_docx", "inspect_all_pages", "verify_source_and_caveat_display"]
+  },
+  "render_result": {
+    "status": "planned",
+    "target": "document",
+    "output_path": "report_formatted.docx",
+    "unit_count": 2,
+    "warnings": []
+  },
+  "quality_checks": [
+    {
+      "check": "source_mapping_complete",
+      "status": "pass",
+      "notes": "每个交付单元均映射到 report section 与 claim。"
+    },
+    {
+      "check": "visual_render",
+      "status": "pending",
+      "notes": "WP1 只冻结契约；真实渲染由 WP5 实现。"
+    }
+  ]
+}

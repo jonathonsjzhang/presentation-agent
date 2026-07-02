@@ -19,6 +19,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional, Union
 
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.capabilities.profile import normalize_report_profile
 from presentation_agent.io import write_json
 from presentation_agent.models import now_iso
@@ -75,7 +76,11 @@ def _coerce_to_dict(brief: BriefInput, root: Path) -> dict[str, Any]:
     raise BriefError(f"不支持的 brief 类型：{type(brief)!r}")
 
 
-def normalize_brief(brief: BriefInput, root: Path) -> dict[str, Any]:
+def normalize_brief(
+    brief: BriefInput,
+    root: Path,
+    contract_profile: str = LEGACY_CONTRACT_PROFILE,
+) -> dict[str, Any]:
     """Turn any accepted brief form into a valid raw_brief.v1 dict.
 
     Fills defaults, stamps the schema tag, and validates the few required
@@ -96,6 +101,19 @@ def normalize_brief(brief: BriefInput, root: Path) -> dict[str, Any]:
 
     normalized["materials"] = _normalize_materials(normalized.get("materials"))
     normalized["constraints"] = _as_str_list(normalized.get("constraints"))
+    if contract_profile == "v0_3":
+        targets = normalized.get("delivery_targets") or ["document"]
+        if isinstance(targets, str):
+            targets = [targets]
+        allowed = {"document", "ppt", "html"}
+        requested_targets = [
+            str(item) for item in targets if str(item) in allowed
+        ]
+        normalized["requested_followup_targets"] = [
+            item for item in requested_targets if item != "document"
+        ]
+        normalized["delivery_targets"] = ["document"]
+        normalized["output_format"] = "document"
     profile = normalize_report_profile(
         normalized,
         root=root,
@@ -116,13 +134,14 @@ def _normalize_materials(materials: Any) -> list[dict[str, Any]]:
         if isinstance(item, str):
             out.append({"claim": item, "evidence": [], "so_what": ""})
         elif isinstance(item, dict):
-            out.append(
-                {
-                    "claim": str(item.get("claim", "")).strip(),
-                    "evidence": _as_str_list(item.get("evidence")),
-                    "so_what": str(item.get("so_what", "")).strip(),
-                }
-            )
+            normalized_item = dict(item)
+            if "claim" in item:
+                normalized_item["claim"] = str(item.get("claim", "")).strip()
+            if "evidence" in item:
+                normalized_item["evidence"] = _as_str_list(item.get("evidence"))
+            if "so_what" in item:
+                normalized_item["so_what"] = str(item.get("so_what", "")).strip()
+            out.append(normalized_item)
     return out
 
 
@@ -144,6 +163,7 @@ def launch_report(
     out: Optional[Union[str, Path]] = None,
     spawn_adapter: Optional[str] = None,
     init_only: bool = False,
+    contract_profile: str = LEGACY_CONTRACT_PROFILE,
 ) -> dict[str, Any]:
     """Normalize a brief, persist it, and kick off a report run.
 
@@ -165,7 +185,7 @@ def launch_report(
     stage 1's run_dir without running any agent.
     """
     root_path = Path(root).resolve()
-    normalized = normalize_brief(brief, root_path)
+    normalized = normalize_brief(brief, root_path, contract_profile)
 
     run_id = f"report-{now_iso().replace(':', '').replace('+', 'Z')}"
     out_root = Path(out).resolve() if out else (root_path / "artifacts" / run_id)
@@ -181,7 +201,10 @@ def launch_report(
         from presentation_agent.manager import ManagerOrchestrator
 
         orchestrator = ManagerOrchestrator(
-            root_path, out_root, spawn_adapter=spawn_adapter
+            root_path,
+            out_root,
+            spawn_adapter=spawn_adapter,
+            contract_profile=contract_profile,
         )
         instruction = orchestrator.initialize_run(brief_path)
         return {
@@ -189,6 +212,7 @@ def launch_report(
             "run_dir": str(out_root),
             "brief_path": str(brief_path),
             "mode": "manager_controlled",
+            "contract_profile": contract_profile,
             "spawn_adapter": orchestrator.workers.spawn_adapter.kind,
             "instruction": instruction,
         }

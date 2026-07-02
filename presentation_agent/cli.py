@@ -54,6 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     report_start = report_subs.add_parser("start", help="Start a report run and return first instruction.")
     report_start.add_argument("--brief-file", required=True, help="raw_brief JSON file path.")
+    report_start.add_argument(
+        "--contract-profile",
+        choices=["legacy.v0_2", "v0_3"],
+        default="legacy.v0_2",
+        help="Runtime contract profile. v0_3 enables the document-first four-stage chain.",
+    )
     _add_spawn_adapter_option(report_start)
 
     report_next = report_subs.add_parser("next", help="Return the current report instruction.")
@@ -101,7 +107,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Raw material path. Repeat this option for multiple files.",
     )
-    eval_start.add_argument("--rubric", default="v0.2", help="Frozen E2E rubric version.")
+    eval_start.add_argument(
+        "--rubric",
+        default="v0.2",
+        help="v0.2, report-v0.3, or translation-v0.3.",
+    )
     eval_start.add_argument("--out", help="Optional evaluation run directory.")
     eval_start.add_argument(
         "--no-render",
@@ -145,6 +155,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="raw_brief JSON: a file path, or an inline JSON string the host assembled.",
     )
     launch.add_argument("--out", help="Optional output directory.")
+    launch.add_argument(
+        "--contract-profile",
+        choices=["legacy.v0_2", "v0_3"],
+        default="legacy.v0_2",
+        help="Runtime contract profile.",
+    )
     launch.add_argument("--auto", action="store_true", help="Run all stages back to back.")
     launch.add_argument(
         "--provider",
@@ -362,6 +378,7 @@ def main() -> None:
                 auto=args.auto,
                 out=Path(args.out).resolve() if args.out else None,
                 init_only=getattr(args, "init_only", False),
+                contract_profile=args.contract_profile,
             )
         except BriefError as exc:
             print(f"brief error: {exc}")
@@ -371,6 +388,12 @@ def main() -> None:
             print(f"pipeline dir: {result['output_dir']}")
             print(f"stage 1 dir: {result['stage_1_dir']}")
             print("pipeline initialized. Use step commands to drive each stage.")
+            return
+        if result.get("mode") == "manager_controlled":
+            print(f"brief: {result['brief_path']}")
+            print(f"contract profile: {result.get('contract_profile', 'legacy.v0_2')}")
+            print(f"run dir: {result['run_dir']}")
+            print(json.dumps(result["instruction"], ensure_ascii=False, indent=2))
             return
         print(f"brief: {result['brief_path']}")
         print(f"provider: {result['provider']}")
@@ -654,7 +677,11 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
         run_id = f"report-{now_iso().replace(':', '').replace('+', 'Z')}"
         run_dir = workspace.runs_dir / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
-        normalized = normalize_brief(str(Path(args.brief_file).expanduser().resolve()), root)
+        normalized = normalize_brief(
+            str(Path(args.brief_file).expanduser().resolve()),
+            root,
+            args.contract_profile,
+        )
         brief_path = run_dir / "raw_brief.json"
         write_json(brief_path, normalized)
         manager = ManagerOrchestrator(
@@ -662,6 +689,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             run_dir,
             data_root=workspace.data_dir,
             spawn_adapter=args.spawn_adapter,
+            contract_profile=args.contract_profile,
         )
         prepared = manager.initialize_run(brief_path)
         _print_json({
@@ -726,7 +754,12 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
                 stage_dir = manager.current_worker_dir(state)
                 if stage_dir is None:
                     raise StepError("Manager state 缺少当前 Worker task_dir")
-                runner = StepRunner(root, stage_dir, data_root=workspace.data_dir)
+                runner = StepRunner(
+                    root,
+                    stage_dir,
+                    data_root=workspace.data_dir,
+                    contract_profile=state.get("contract_profile"),
+                )
                 if args.output_file:
                     _copy_report_output(runner, Path(args.output_file).expanduser().resolve())
                 worker_result = runner.commit()

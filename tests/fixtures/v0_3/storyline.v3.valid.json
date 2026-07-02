@@ -1,0 +1,167 @@
+{
+  "agent_id": "storyline",
+  "schema": "storyline.v3",
+  "topic": "AI 助手用户留存改善机会",
+  "audience": "strategy_lead",
+  "report_type": "deep_dive",
+  "executive_summary": {
+    "context": "当前新用户首周回访不足，需要在价值闭环与提醒触达之间确定优先验证顺序。",
+    "core_answer": "优先验证成果形成与复用闭环，同时用对照实验排除自选择。",
+    "key_findings": [
+      {
+        "statement": "成果保存组的第 7 日回访率在冻结样本中更高。",
+        "finding_refs": ["F-01"]
+      },
+      {
+        "statement": "访谈提示可复用成果可能是回访机制，但只具解释性。",
+        "finding_refs": ["F-02"]
+      }
+    ],
+    "implications": [
+      {
+        "statement": "首个实验应围绕成果保存后的复用路径，而不是直接增加提醒频次。",
+        "finding_refs": ["F-01", "F-02"]
+      },
+      {
+        "statement": "实验设计必须控制初始意愿，并把提醒作为对照因素。",
+        "finding_refs": ["F-01"]
+      }
+    ],
+    "expected_action": {
+      "statement": "确认两周价值闭环实验与补数计划。",
+      "finding_refs": ["F-01", "F-02"]
+    }
+  },
+  "message_pyramid": {
+    "governing_question": "下一阶段应优先验证哪类留存抓手？",
+    "apex": {
+      "statement": "优先验证成果形成与复用闭环，同时用对照实验排除自选择。",
+      "finding_refs": ["F-01", "F-02"]
+    },
+    "supporting_messages": [
+      {
+        "message_id": "M-01",
+        "statement": "行为差异表明成果保存与回访共同出现，但尚不能证明因果。",
+        "relationship_to_apex": "提供优先级证据并限定结论强度。",
+        "finding_refs": ["F-01"],
+        "evidence_refs": ["E-Q-01", "E-Q-02"]
+      },
+      {
+        "message_id": "M-02",
+        "statement": "访谈为成果复用机制提供方向性解释。",
+        "relationship_to_apex": "解释为何该行为可能带来持续价值。",
+        "finding_refs": ["F-02"],
+        "evidence_refs": ["E-I-01"]
+      }
+    ]
+  },
+  "narrative_sequence": [
+    {
+      "section_id": "S-01",
+      "purpose": "建立优先验证价值闭环的证据基础与边界。",
+      "depends_on": [],
+      "transition": "从行为差异进入可能机制。"
+    },
+    {
+      "section_id": "S-02",
+      "purpose": "解释价值复用机制并提出可证伪实验。",
+      "depends_on": ["S-01"],
+      "transition": "从机制判断进入决策与补数。"
+    }
+  ],
+  "report_outline": {
+    "sections": [
+      {
+        "section_id": "S-01",
+        "heading": "成果保存与回访共同出现，但因果仍待验证",
+        "section_question": "现有行为数据能够支持多强的判断？",
+        "section_thesis": "冻结样本存在明显组间差异，但自选择使其只能作为优先级信号。",
+        "content_units": [
+          {
+            "content_unit_id": "CU-01",
+            "purpose": "evidence",
+            "statement": "成果保存组与单轮问答组第 7 日回访率分别为 34% 与 18%。",
+            "finding_refs": ["F-01"],
+            "evidence_refs": ["E-Q-01"],
+            "caveats": ["冻结样本为非随机分组。"]
+          },
+          {
+            "content_unit_id": "CU-02",
+            "purpose": "counterargument",
+            "statement": "高意愿用户可能同时更愿意保存成果，自选择尚未排除。",
+            "finding_refs": ["F-01"],
+            "evidence_refs": ["E-Q-02"],
+            "caveats": []
+          }
+        ],
+        "finding_refs": ["F-01"],
+        "evidence_refs": ["E-Q-01", "E-Q-02"],
+        "counterarguments": ["高意愿用户可能更愿意保存成果。"],
+        "caveats": ["冻结样本不支持直接因果推断。"],
+        "transition_from": "",
+        "transition_to": "需要用访谈与实验定义可能机制。"
+      },
+      {
+        "section_id": "S-02",
+        "heading": "可复用成果提供了值得优先验证的回访理由",
+        "section_question": "什么机制可能解释该行为差异？",
+        "section_thesis": "访谈提示成果复用形成持续价值，但需随机实验与补样验证。",
+        "content_units": [
+          {
+            "content_unit_id": "CU-03",
+            "purpose": "interpretation",
+            "statement": "留存用户把历史成果视为下次使用的起点。",
+            "finding_refs": ["F-02"],
+            "evidence_refs": ["E-I-01"],
+            "caveats": ["访谈样本仅用于机制探索。"]
+          },
+          {
+            "content_unit_id": "CU-04",
+            "purpose": "decision",
+            "statement": "实验应同时控制初始意愿并设置提醒对照。",
+            "finding_refs": ["F-01", "F-02"],
+            "evidence_refs": ["E-Q-01", "E-Q-02", "E-I-01"],
+            "caveats": ["实验结果出来前不得宣称成果复用导致留存提升。"]
+          }
+        ],
+        "finding_refs": ["F-01", "F-02"],
+        "evidence_refs": ["E-I-01", "E-Q-02"],
+        "counterarguments": ["提醒不足也可能解释部分未回访。"],
+        "caveats": ["访谈样本仅用于机制探索。"],
+        "transition_from": "从相关性进入机制解释。",
+        "transition_to": "收束为实验选择与补数要求。"
+      }
+    ]
+  },
+  "appendix_plan": [
+    {
+      "appendix_id": "A-01",
+      "title": "分组口径与样本限制",
+      "purpose": "保留回访率计算口径和自选择风险。",
+      "source_refs": ["E-Q-01", "E-Q-02"]
+    }
+  ],
+  "alignment_audit": {
+    "executive_summary_matches_apex": true,
+    "all_supporting_messages_traceable": true,
+    "all_sections_traceable": true,
+    "finding_coverage": [
+      {
+        "finding_id": "F-01",
+        "disposition": "main_story",
+        "locations": ["executive_summary", "M-01", "S-01", "S-02"],
+        "rationale": "量化差异是优先级判断和实验设计的主要依据。"
+      },
+      {
+        "finding_id": "F-02",
+        "disposition": "main_story",
+        "locations": ["executive_summary", "M-02", "S-02"],
+        "rationale": "定性发现用于解释可能机制并限定结论强度。"
+      }
+    ],
+    "unsupported_claims": [],
+    "notes": ["未新增 Analysis 之外的关键判断。"]
+  },
+  "upstream_revision_requests": [],
+  "open_questions": ["成果保存后的具体回访路径是否可被准确埋点？"]
+}

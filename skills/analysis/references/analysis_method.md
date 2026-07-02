@@ -1,0 +1,72 @@
+# Analysis method
+
+## Finding 的最小推理链
+
+一个合格 finding 应能被还原为：
+
+```text
+evidence observation
+  → bounded inference
+  → finding statement
+  → so what
+  → decision relevance
+```
+
+`statement` 说“看到了什么判断”，`so_what` 说“这改变了什么认识”，`decision_relevance` 说“这对哪项选择有什么作用”。三者不得只是同一句话的改写。
+
+## Finding type
+
+- `fact`：材料直接给出的、口径明确的单点事实。
+- `pattern`：同一口径下反复出现的分布、趋势或共现。
+- `comparison`：两个或多个可比群体、时期或方案的差异。
+- `mechanism`：解释现象如何发生；通常需要多源支持，或降强度为机制线索。
+- `implication`：由前述发现推导出的业务含义，不等同于行动方案。
+- `hypothesis`：证据不足但值得验证的可能解释。
+
+## 反证与替代解释
+
+`counter_evidence` 必须记录 Catalog 中真实存在、会挑战 finding 的证据。它包括方向相反的观察、边界条件、异常群体和方法限制。
+
+`alternative_explanations` 是同一现象的竞争性解释。至少优先检查：
+
+- 自选择或样本选择；
+- 指标口径、分群或时间窗变化；
+- 第三变量与共同原因；
+- 反向因果；
+- 访谈招募、回忆或表达偏差；
+- 外部事件、渠道和产品版本差异。
+
+不要为了“显得全面”虚构反证。没有可引用反证时使用空数组，同时把真正未知的竞争性解释保留为 plausible，必要时形成 data gap。
+
+## Confidence 校准
+
+Confidence 评价的是当前 finding 在声明边界内的可信度，不是写作者的主观确信。
+
+### High
+
+- 来源和口径清楚，关键 source units 已覆盖；
+- 多个独立证据方向一致，或识别设计足以支持声明强度；
+- 关键反证与替代解释已被材料实质性削弱；
+- 没有影响核心判断的 unresolved unit。
+
+### Medium
+
+- 主要方向有证据，但样本、口径、时间窗或方法存在限制；
+- 有合理替代解释尚未完全排除；
+- 适合支持优先级或进一步验证，不适合宣称确定因果。
+
+### Low
+
+- 主要依赖少量访谈、单一来源、弱代理指标或不完整 coverage；
+- 关键替代解释未检验；
+- 更适合作为 hypothesis、机制线索或补数方向。
+
+出现影响核心判断的 unresolved unit 时，不得给 high；若缺失使判断本身不可成立，应阻塞，而不是只把 confidence 调低。
+
+## 定性与定量边界
+
+- 定量差异只有在口径可比时才能形成 comparison。
+- “显著”只在材料提供相应统计检验时使用。
+- 访谈原话保持 attribution，不改写为总体事实。
+- 定性材料适合解释机制、发现语言与生成假设；总体比例和效果大小需要相应定量证据。
+- 相关性或共同出现最多支持 association；没有识别设计时不写“导致”“驱动”“带来”。

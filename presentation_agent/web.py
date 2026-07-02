@@ -664,7 +664,12 @@ class WebApp:
         stage_dir = self._current_stage_dir(run_dir)
         if stage_dir is None or not (stage_dir / "run_state.json").exists():
             raise BadRequest("当前阶段尚未初始化")
-        return StepRunner(self.root, stage_dir)
+        manager_state = read_json(run_dir / "manager_state.json", default={})
+        return StepRunner(
+            self.root,
+            stage_dir,
+            contract_profile=manager_state.get("contract_profile"),
+        )
 
     def _safe_pipeline_status(self, stepper: PipelineStepper) -> dict[str, Any]:
         ps = stepper.pipeline_status()
@@ -682,7 +687,12 @@ class WebApp:
         if stage_dir is None:
             return {"current_step": "done"}
         try:
-            runner = StepRunner(self.root, stage_dir)
+            manager_state = read_json(run_dir / "manager_state.json", default={})
+            runner = StepRunner(
+                self.root,
+                stage_dir,
+                contract_profile=manager_state.get("contract_profile"),
+            )
             status = runner.status()
         except (StepError, KeyError, FileNotFoundError):
             return {"current_step": "uninitialized"}

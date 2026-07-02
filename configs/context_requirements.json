@@ -1,5 +1,80 @@
 {
   "version": "context-requirements.v1",
+  "contract_profiles": {
+    "v0_3": {
+      "status": "frozen",
+      "activation": "deferred_to_wp8_context_runtime",
+      "projection_policy": "namespace_upstream_artifacts_and_inline_only_declared_fields",
+      "workers": {
+        "analysis": {
+          "required_fields": [
+            "report_charter",
+            "analysis_objective",
+            "acceptance_criteria"
+          ],
+          "conditional_full_fields": [
+            "raw_materials",
+            "evidence_catalog"
+          ],
+          "output_schema": "analysis.v1"
+        },
+        "storyline": {
+          "upstream_schema": "analysis.v1",
+          "required_fields": [
+            "analysis_questions",
+            "findings",
+            "viewpoint_candidates",
+            "decision_tensions",
+            "assumptions",
+            "data_gaps",
+            "discussion_points",
+            "open_questions"
+          ],
+          "excluded_fields": [
+            "raw_materials"
+          ],
+          "output_schema": "storyline.v3"
+        },
+        "report": {
+          "upstream_schema": "storyline.v3",
+          "required_fields": [
+            "executive_summary",
+            "message_pyramid",
+            "narrative_sequence",
+            "report_outline",
+            "appendix_plan",
+            "open_questions"
+          ],
+          "output_schema": "report.v1"
+        },
+        "format": {
+          "upstream_schema": "report.v1",
+          "required_fields": [
+            "report_metadata",
+            "executive_summary",
+            "sections",
+            "claims",
+            "source_registry",
+            "claim_evidence_map",
+            "assumptions",
+            "data_gaps",
+            "risks_and_counterarguments",
+            "recommendations",
+            "format_handoff"
+          ],
+          "task_fields": [
+            "delivery_target"
+          ],
+          "excluded_fields": [
+            "raw_materials",
+            "storyline.pages",
+            "page_content"
+          ],
+          "output_schema": "formatted_material.v2"
+        }
+      }
+    }
+  },
   "max_inline_chars_per_field": 12000,
   "preview_items": 3,
   "field_inline_limits": {

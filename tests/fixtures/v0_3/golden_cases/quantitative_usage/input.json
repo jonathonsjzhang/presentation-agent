@@ -1,0 +1,31 @@
+{
+  "case_id": "quantitative_usage",
+  "topic": "成果保存行为与第 7 日回访的关系",
+  "audience": "strategy_lead",
+  "report_type": "deep_dive",
+  "delivery_targets": ["document"],
+  "decision_goal": "判断成果保存是否值得进入优先验证清单。",
+  "expected_action": "批准受控实验设计。",
+  "material_type": "table_snapshot",
+  "metric_definition": "第 7 日回访率=注册后第 7 个自然日内产生有效会话的用户数/该行为组新用户数",
+  "time_window": "冻结示例周期",
+  "rows": [
+    {
+      "behavior_group": "saved_output",
+      "new_users": 500,
+      "day_7_returned_users": 170,
+      "day_7_return_rate": 0.34
+    },
+    {
+      "behavior_group": "single_turn_only",
+      "new_users": 500,
+      "day_7_returned_users": 90,
+      "day_7_return_rate": 0.18
+    }
+  ],
+  "known_limitations": [
+    "行为组并非随机分配",
+    "未控制用户初始意愿与任务复杂度",
+    "只可用于描述性比较，不能直接推断因果"
+  ]
+}

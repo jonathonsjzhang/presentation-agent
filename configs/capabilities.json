@@ -1,5 +1,50 @@
 {
   "version": "capability-registry.v1",
+  "contract_profiles": {
+    "v0_3": {
+      "status": "frozen",
+      "activation": "deferred_to_wp2_wp7",
+      "workers": [
+        "analysis",
+        "storyline",
+        "report",
+        "format"
+      ],
+      "profile_dimensions": [
+        "audience",
+        "report_type",
+        "delivery_target"
+      ],
+      "default_delivery_targets": [
+        "document"
+      ],
+      "delivery_targets": [
+        "document",
+        "ppt",
+        "html"
+      ],
+      "delivery_target_aliases": {
+        "文档": "document",
+        "word": "document",
+        "docx": "document",
+        "幻灯片": "ppt",
+        "pptx": "ppt",
+        "网页": "html"
+      },
+      "format_selection": "exactly_one_delivery_target_capability_per_task",
+      "legacy_output_format_mapping": {
+        "document": [
+          "document"
+        ],
+        "ppt": [
+          "ppt"
+        ],
+        "html": [
+          "html"
+        ]
+      }
+    }
+  },
   "runtime": {
     "enabled": true,
     "pilot_agents": [

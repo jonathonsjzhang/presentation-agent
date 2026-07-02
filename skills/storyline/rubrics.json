@@ -1,0 +1,132 @@
+{
+  "version": "v1",
+  "agent_id": "storyline",
+  "rubrics": [
+    {
+      "id": "ST-CONTRACT-001",
+      "severity": "P0",
+      "dimension": "storyline_v3_contract",
+      "criterion": "产物必须是单个严格符合 storyline.v3 的对象，并在同一 artifact 中包含 Executive Summary、message pyramid、narrative sequence、section/content-unit outline、alignment audit 和 upstream revision requests。",
+      "check": "执行 schema 校验并检查所有根字段同轮存在。",
+      "fix": "按 storyline.v3 一次性重建完整 artifact。",
+      "machine_check": {
+        "rules": [
+          {"kind": "field_present", "path": "executive_summary", "label": "Executive Summary"},
+          {"kind": "field_present", "path": "message_pyramid", "label": "message pyramid"},
+          {"kind": "field_present", "path": "narrative_sequence", "label": "narrative sequence"},
+          {"kind": "field_present", "path": "report_outline.sections", "label": "report sections"},
+          {"kind": "field_present", "path": "alignment_audit", "label": "alignment audit"},
+          {"kind": "forbidden_pattern", "paths": [""], "patterns": ["\"pages\"\\s*:", "\"page_no\"\\s*:", "\"slides?\"\\s*:"], "label": "page/slide contract"}
+        ]
+      }
+    },
+    {
+      "id": "ST-STRUCTURE-001",
+      "severity": "P0",
+      "dimension": "section_content_units",
+      "criterion": "Storyline 只能按 sections 与嵌套 content_units 组织，不得使用 pages 或视觉布局对象。",
+      "check": "逐节检查 section_question、section_thesis、content_units、finding/evidence refs 和 transitions。",
+      "fix": "把页面结构改写为章节及原子内容单元。",
+      "machine_check": {
+        "each": "report_outline.sections",
+        "rules": [
+          {"kind": "field_present", "path": "section_question", "label": "section question"},
+          {"kind": "field_present", "path": "section_thesis", "label": "section thesis"},
+          {"kind": "array_len", "path": "content_units", "min": 1, "label": "content units"},
+          {"kind": "array_len", "path": "finding_refs", "min": 1, "label": "section finding refs"}
+        ]
+      }
+    },
+    {
+      "id": "ST-TRACE-001",
+      "severity": "P0",
+      "dimension": "finding_traceability",
+      "criterion": "所有核心观点必须引用 analysis.v1 中真实存在的 finding_id；不得把 Raw Materials 或 viewpoint ID 当作 finding authority。",
+      "check": "汇总 ES key findings/implications/action、apex、supporting messages、sections 和 content units 的 finding_refs，与 Analysis findings 做集合校验。",
+      "fix": "删除无依据观点、修正引用，或请求 Analysis 补充 finding。",
+      "machine_check": {
+        "each": "message_pyramid.supporting_messages",
+        "rules": [
+          {"kind": "array_len", "path": "finding_refs", "min": 1, "label": "supporting message finding refs"}
+        ]
+      }
+    },
+    {
+      "id": "ST-EVIDENCE-001",
+      "severity": "P0",
+      "dimension": "evidence_traceability",
+      "criterion": "每个 evidence_ref 必须存在于所引 findings 的 supporting evidence、counter evidence 或 alternative explanation evidence refs 中。",
+      "check": "按 finding_refs 建立允许 evidence 集合，逐条校验 supporting messages、sections、content units 与 appendix。",
+      "fix": "修正或删除虚构 evidence ref；证据缺失则创建 upstream revision request。"
+    },
+    {
+      "id": "ST-ALIGN-001",
+      "severity": "P0",
+      "dimension": "es_pyramid_outline_alignment",
+      "criterion": "Executive Summary core answer 与 apex 必须是同一命题；每条 supporting message 必须落实到至少一个 section，且 section thesis/content units 不得超出 pyramid 与 findings。",
+      "check": "执行 ES ↔ apex ↔ supporting messages ↔ outline 四向读取，并核对 finding refs 和限定词。",
+      "fix": "围绕同一 core answer 同步改写四个视图，不得只局部修补。"
+    },
+    {
+      "id": "ST-SEQUENCE-001",
+      "severity": "P0",
+      "dimension": "narrative_sequence_integrity",
+      "criterion": "narrative sequence 与 outline section IDs 必须一一对应，depends_on 只能引用更早出现的 section。",
+      "check": "比较两组 section IDs 的完整集合、唯一性、顺序和依赖方向。",
+      "fix": "补齐、去重或重排 sequence/sections，并修复前向依赖。"
+    },
+    {
+      "id": "ST-COVERAGE-001",
+      "severity": "P0",
+      "dimension": "analysis_finding_coverage",
+      "criterion": "每个 Analysis finding 必须在 alignment_audit.finding_coverage 中恰好登记一次，明确 main_story、appendix 或 omitted 及理由。",
+      "check": "将 coverage finding_id 与 Analysis findings 做精确集合比较，检查重复项和空理由。",
+      "fix": "补齐 disposition；重要 finding 不得无理由省略。",
+      "machine_check": {
+        "rules": [
+          {"kind": "array_len", "path": "alignment_audit.finding_coverage", "min": 1, "label": "finding coverage"}
+        ]
+      }
+    },
+    {
+      "id": "ST-CALIBRATION-001",
+      "severity": "P0",
+      "dimension": "claim_calibration",
+      "criterion": "不得升级 finding 的置信度、因果强度、适用范围或行动成熟度；低置信度 finding 只能支撑探索性机制或待验证方向。",
+      "check": "对照 confidence、finding_type、counter evidence、alternative explanations、so_what 和 data gaps 检查全部判断措辞。",
+      "fix": "恢复 Analysis 允许的结论强度并保留 caveat；若塔尖因此不成立，退回 Analysis。"
+    },
+    {
+      "id": "ST-UPSTREAM-001",
+      "severity": "P0",
+      "dimension": "upstream_revision",
+      "criterion": "blocking data gap/unresolved unit、核心证据缺失、关键 finding 冲突或决策语境不明时，必须生成对应 upstream_revision_requests；影响塔尖者 blocking_level 必须为 blocking。",
+      "check": "对照 material readiness、evidence execution、data gaps、findings 冲突和 decision tensions 检查请求完整性。",
+      "fix": "新增准确的 request_type、finding_refs、reason 和 blocking_level；不得用虚构结论绕过。"
+    },
+    {
+      "id": "ST-PYRAMID-001",
+      "severity": "P1",
+      "dimension": "message_pyramid_quality",
+      "criterion": "supporting messages 应处于相近抽象层级，并直接支撑、解释、限定或反驳 apex，不能只是 findings 的目录。",
+      "check": "逐条追问 relationship_to_apex 是否必要且不重复。",
+      "fix": "合并重复分支、删除孤立信息或补清支撑关系。"
+    },
+    {
+      "id": "ST-FLOW-001",
+      "severity": "P1",
+      "dimension": "narrative_flow",
+      "criterion": "章节顺序应来自论证依赖、受众认知和决策张力，相邻章节具有明确递进或转折，不套固定 story arc。",
+      "check": "只读 section thesis 与 transitions，判断能否自然回答 governing question。",
+      "fix": "按真实依赖重排并重写 transition。"
+    },
+    {
+      "id": "ST-BOUNDARY-001",
+      "severity": "P1",
+      "dimension": "worker_boundary",
+      "criterion": "产物不得重新分析 Raw Materials、写完整正文、设计图表或指定页面布局，也不得新增 KPI、owner、预算、timeline 或效果承诺。",
+      "check": "扫描 content units、action、appendix 和 open questions 是否越过 Storyline 边界。",
+      "fix": "删除正文与视觉/执行设计，只保留论证结构；分析缺口退回上游。"
+    }
+  ]
+}

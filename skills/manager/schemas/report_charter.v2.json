@@ -1,0 +1,128 @@
+{
+  "schema": "report_charter.v2",
+  "description": "v0.3 文档优先任务契约。一个 charter 可声明多个交付目标，但默认且首要目标为 document。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "topic",
+    "audience",
+    "report_type",
+    "delivery_targets",
+    "decision_goal",
+    "expected_action",
+    "analysis_objective",
+    "scope",
+    "out_of_scope",
+    "constraints",
+    "success_criteria",
+    "recommendation_granularity",
+    "unsupported_specificity_policy",
+    "material_inventory",
+    "existing_artifacts",
+    "analysis_acceptance_criteria",
+    "extension_policy",
+    "global_state_seed",
+    "blocking_questions",
+    "assumptions"
+  ],
+  "properties": {
+    "schema": { "const": "report_charter.v2" },
+    "topic": { "type": "string", "minLength": 1 },
+    "audience": {
+      "type": "string",
+      "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"]
+    },
+    "report_type": {
+      "type": "string",
+      "enum": ["deep_dive", "business_progress", "quick_sync"]
+    },
+    "delivery_targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "enum": ["document", "ppt", "html"] },
+      "default": ["document"]
+    },
+    "decision_goal": { "type": "string", "minLength": 1 },
+    "expected_action": { "type": "string", "minLength": 1 },
+    "analysis_objective": { "type": "string", "minLength": 1 },
+    "scope": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "out_of_scope": { "type": "array", "items": { "type": "string" } },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "success_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "recommendation_granularity": {
+      "type": "string",
+      "enum": ["strategic_direction", "strategic_choice", "execution_plan"]
+    },
+    "unsupported_specificity_policy": {
+      "type": "string",
+      "enum": ["forbid", "source_backed_only", "allow"]
+    },
+    "material_inventory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["material_id", "name", "media_type", "locator", "availability"],
+        "properties": {
+          "material_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "media_type": {
+            "type": "string",
+            "enum": ["text", "json", "docx", "pdf", "xlsx", "csv", "pptx", "image", "other"]
+          },
+          "locator": { "type": "string", "minLength": 1 },
+          "availability": {
+            "type": "string",
+            "enum": ["available", "local_only", "missing", "restricted"]
+          },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "existing_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["artifact_type", "schema", "locator"],
+        "properties": {
+          "artifact_type": { "type": "string" },
+          "schema": { "type": "string" },
+          "locator": { "type": "string" }
+        }
+      }
+    },
+    "analysis_acceptance_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "extension_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format_expansion", "qa_preparation", "speaker_script", "gate"],
+      "properties": {
+        "format_expansion": { "const": "offer_ppt_html_after_document" },
+        "qa_preparation": { "type": "string", "enum": ["optional_after_format", "disabled"] },
+        "speaker_script": { "type": "string", "enum": ["optional_after_format", "disabled"] },
+        "gate": { "const": "after_document_delivery" }
+      }
+    },
+    "global_state_seed": { "type": "object" },
+    "blocking_questions": { "type": "array", "items": { "type": "string" } },
+    "assumptions": { "type": "array", "items": { "type": "string" } },
+    "legacy_output_format": {
+      "type": "string",
+      "enum": ["document", "ppt", "html"],
+      "description": "只读迁移字段；新任务以 delivery_targets 为准。"
+    }
+  }
+}

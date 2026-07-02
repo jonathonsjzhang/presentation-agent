@@ -1,0 +1,315 @@
+{
+  "schema": "report.v1",
+  "description": "Report Worker 的内容契约：可独立阅读的完整分析报告语义结构，以及内容版 DOCX 的交付状态。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent_id",
+    "schema",
+    "report_metadata",
+    "executive_summary",
+    "sections",
+    "claims",
+    "findings",
+    "source_registry",
+    "claim_evidence_map",
+    "methodology",
+    "assumptions",
+    "data_gaps",
+    "risks_and_counterarguments",
+    "recommendations",
+    "appendices",
+    "content_deliverable",
+    "format_handoff",
+    "quality_checks"
+  ],
+  "properties": {
+    "agent_id": { "const": "report" },
+    "schema": { "const": "report.v1" },
+    "report_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report_id", "title", "topic", "audience", "report_type", "language", "version"],
+      "properties": {
+        "report_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "topic": { "type": "string", "minLength": 1 },
+        "audience": {
+          "type": "string",
+          "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"]
+        },
+        "report_type": {
+          "type": "string",
+          "enum": ["deep_dive", "business_progress", "quick_sync"]
+        },
+        "language": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "executive_summary": {
+      "type": "object",
+      "required": ["context", "core_answer", "key_findings", "implications", "expected_action"],
+      "properties": {
+        "context": { "type": "string", "minLength": 1 },
+        "core_answer": { "type": "string", "minLength": 1 },
+        "key_findings": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "implications": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "expected_action": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "section_id",
+          "heading",
+          "section_thesis",
+          "narrative_blocks",
+          "tables",
+          "figure_specs",
+          "section_conclusion",
+          "transition",
+          "claim_ids",
+          "finding_refs"
+        ],
+        "properties": {
+          "section_id": { "type": "string", "minLength": 1 },
+          "heading": { "type": "string", "minLength": 1 },
+          "section_thesis": { "type": "string", "minLength": 1 },
+          "narrative_blocks": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["block_id", "block_type", "content", "claim_ids", "evidence_refs"],
+              "properties": {
+                "block_id": { "type": "string", "minLength": 1 },
+                "block_type": {
+                  "type": "string",
+                  "enum": [
+                    "paragraph",
+                    "bullet_group",
+                    "quote",
+                    "table",
+                    "figure_placeholder",
+                    "callout",
+                    "method_note",
+                    "caveat"
+                  ]
+                },
+                "content": { "type": "string" },
+                "items": { "type": "array", "items": { "type": "string" } },
+                "claim_ids": { "type": "array", "items": { "type": "string" } },
+                "evidence_refs": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["table_id", "title", "columns", "rows", "source_refs", "notes"],
+              "properties": {
+                "table_id": { "type": "string" },
+                "title": { "type": "string" },
+                "columns": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+                "rows": { "type": "array", "items": { "type": "array" } },
+                "source_refs": { "type": "array", "items": { "type": "string" } },
+                "notes": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          },
+          "figure_specs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "figure_id",
+                "title",
+                "figure_type",
+                "data",
+                "reader_takeaway",
+                "source_refs",
+                "caveats"
+              ],
+              "properties": {
+                "figure_id": { "type": "string" },
+                "title": { "type": "string" },
+                "figure_type": { "type": "string" },
+                "data": { "type": "object" },
+                "reader_takeaway": { "type": "string" },
+                "source_refs": { "type": "array", "items": { "type": "string" } },
+                "caveats": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          },
+          "section_conclusion": { "type": "string", "minLength": 1 },
+          "transition": { "type": "string" },
+          "claim_ids": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "statement", "claim_type", "strength", "finding_refs", "caveats"],
+        "properties": {
+          "claim_id": { "type": "string" },
+          "statement": { "type": "string" },
+          "claim_type": {
+            "type": "string",
+            "enum": ["fact", "finding", "implication", "recommendation", "hypothesis"]
+          },
+          "strength": { "type": "string", "enum": ["high", "medium", "low"] },
+          "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "caveats": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "statement", "source_analysis_ref"],
+        "properties": {
+          "finding_id": { "type": "string" },
+          "statement": { "type": "string" },
+          "source_analysis_ref": { "type": "string" }
+        }
+      }
+    },
+    "source_registry": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["source_id", "citation", "locator", "source_type"],
+        "properties": {
+          "source_id": { "type": "string" },
+          "citation": { "type": "string" },
+          "locator": { "type": "string" },
+          "source_type": { "type": "string" }
+        }
+      }
+    },
+    "claim_evidence_map": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "evidence_refs", "source_ids", "support_type"],
+        "properties": {
+          "claim_id": { "type": "string" },
+          "evidence_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "source_ids": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "support_type": {
+            "type": "string",
+            "enum": ["direct_support", "comparison", "mechanism", "context", "caveat"]
+          }
+        }
+      }
+    },
+    "methodology": {
+      "type": "object",
+      "required": ["approach", "scope", "definitions", "limitations"],
+      "properties": {
+        "approach": { "type": "string" },
+        "scope": { "type": "string" },
+        "definitions": { "type": "array", "items": { "type": "string" } },
+        "limitations": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "assumptions": { "type": "array", "items": { "type": "string" } },
+    "data_gaps": { "type": "array", "items": { "type": "string" } },
+    "risks_and_counterarguments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["risk_or_counterargument", "response", "residual_uncertainty"],
+        "properties": {
+          "risk_or_counterargument": { "type": "string" },
+          "response": { "type": "string" },
+          "residual_uncertainty": { "type": "string" }
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["recommendation_id", "statement", "rationale", "claim_ids", "conditions"],
+        "properties": {
+          "recommendation_id": { "type": "string" },
+          "statement": { "type": "string" },
+          "rationale": { "type": "string" },
+          "claim_ids": { "type": "array", "items": { "type": "string" } },
+          "conditions": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "appendices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["appendix_id", "title", "content_refs"],
+        "properties": {
+          "appendix_id": { "type": "string" },
+          "title": { "type": "string" },
+          "content_refs": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "content_deliverable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "intended_path", "status"],
+      "properties": {
+        "target": { "const": "document" },
+        "intended_path": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "enum": ["planned", "rendered", "error"] },
+        "error": { "type": "string" }
+      }
+    },
+    "format_handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_report_ref",
+        "protected_claim_ids",
+        "protected_caveats",
+        "visual_opportunities",
+        "allowed_transformations",
+        "forbidden_transformations"
+      ],
+      "properties": {
+        "source_report_ref": { "type": "string" },
+        "protected_claim_ids": { "type": "array", "items": { "type": "string" } },
+        "protected_caveats": { "type": "array", "items": { "type": "string" } },
+        "visual_opportunities": { "type": "array", "items": { "type": "string" } },
+        "allowed_transformations": { "type": "array", "items": { "type": "string" } },
+        "forbidden_transformations": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "quality_checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["check", "status", "notes"],
+        "properties": {
+          "check": { "type": "string" },
+          "status": { "type": "string", "enum": ["pass", "warning", "fail"] },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}

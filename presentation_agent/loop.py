@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
+from presentation_agent.agent_profiles import load_agent_profile
 from presentation_agent.input_loader import load_agent_input
 from presentation_agent.capabilities.compiler import compile_skill_package
 from presentation_agent.io import read_json, write_json
@@ -19,17 +20,26 @@ from presentation_agent.skills.registry import get_skill
 
 
 class LoopRunner:
-    def __init__(self, root: Path, provider_override: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        provider_override: Optional[str] = None,
+        contract_profile: Optional[str] = None,
+    ) -> None:
         self.root = root
         self.provider_override = provider_override
-        self.config = read_json(self.root / "configs" / "agents.json")
-        self.specs = self._load_specs()
+        self.agent_profile = load_agent_profile(root, contract_profile)
+        self.contract_profile = self.agent_profile.contract_profile
+        self.config = self.agent_profile.config
+        self.specs = self.agent_profile.specs
         self.generate_llm = build_llm_client(root, purpose="generate", provider_override=provider_override)
         self.review_llm = build_llm_client(root, purpose="review", provider_override=provider_override)
         self.reviewer = ArtifactReviewer(llm=self.review_llm)
         self.stop_checker = StopChecker(llm=self.review_llm)
 
     def list_agents(self) -> list[AgentSpec]:
+        if self.contract_profile == "v0_3":
+            return list(self.agent_profile.ordered_specs)
         return sorted(self.specs.values(), key=lambda spec: spec.stage)
 
     def run(self, agent_id: str, input_path: Path, run_dir: Optional[Path] = None) -> dict[str, Any]:
@@ -220,9 +230,6 @@ class LoopRunner:
         self._write_run_state(run_state_path, run_state, "human_review", "Waiting for human decision")
         return result
 
-    def _load_specs(self) -> dict[str, AgentSpec]:
-        return {item["id"]: AgentSpec.from_dict(item) for item in self.config["agents"]}
-
     def _multi_candidate_config(self, spec: AgentSpec) -> Optional[dict[str, Any]]:
         """Return the multi_candidate config if enabled for this agent, else None.
 
@@ -388,6 +395,7 @@ class LoopRunner:
     ) -> dict[str, Any]:
         return {
             "run_id": run_id,
+            "contract_profile": self.contract_profile,
             "agent_id": spec.id,
             "agent_name": spec.name,
             "status": "running",

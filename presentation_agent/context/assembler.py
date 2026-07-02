@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 from presentation_agent.io import read_json
 
@@ -10,10 +10,25 @@ from presentation_agent.io import read_json
 class ContextAssembler:
     """Build namespaced, traceable Worker inputs from Manager artifact refs."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, contract_profile: Optional[str] = None) -> None:
         self.root = root
         config = read_json(root / "configs" / "context_requirements.json", default={})
-        self.requirements = dict(config.get("workers", {}))
+        self.contract_profile = contract_profile or "legacy.v0_2"
+        profile = (
+            config.get("contract_profiles", {}).get(self.contract_profile, {})
+            if self.contract_profile != "legacy.v0_2"
+            else {}
+        )
+        profile_workers = dict(profile.get("workers", {}))
+        if profile_workers:
+            self.requirements = {
+                worker: list(dict(spec).get("required_fields", []))
+                + list(dict(spec).get("conditional_full_fields", []))
+                + list(dict(spec).get("task_fields", []))
+                for worker, spec in profile_workers.items()
+            }
+        else:
+            self.requirements = dict(config.get("workers", {}))
         self.signal_fields = list(config.get("signal_fields", []))
         self.max_inline_chars = int(
             config.get("max_inline_chars_per_field", 12000)
@@ -34,6 +49,16 @@ class ContextAssembler:
                 config.get("full_input_required_fields", {})
             ).items()
         }
+        if profile_workers:
+            self.full_input_required_fields.update(
+                {
+                    worker: {
+                        str(field)
+                        for field in dict(spec).get("conditional_full_fields", [])
+                    }
+                    for worker, spec in profile_workers.items()
+                }
+            )
 
     def assemble(
         self,
@@ -46,6 +71,7 @@ class ContextAssembler:
         raw_brief_path: Path | None = None,
     ) -> dict[str, Any]:
         required = set(self.requirements.get(worker_id, []))
+        artifact_rows = list(artifacts)
         inputs: dict[str, Any] = {}
         upstream_signal: dict[str, Any] = {}
         material_refs: list[dict[str, Any]] = []
@@ -74,7 +100,7 @@ class ContextAssembler:
                 }
             )
 
-        for index, (path, data) in enumerate(artifacts, start=1):
+        for index, (path, data) in enumerate(artifact_rows, start=1):
             source_id = self._unique_source_id(
                 self._source_id(path, data, index), inputs
             )
@@ -128,8 +154,9 @@ class ContextAssembler:
             if field in full_required
         ]
 
-        return {
+        result = {
             "schema": "worker_context.v1",
+            "contract_profile": self.contract_profile,
             "report_charter": report_charter,
             "manager_task": manager_task,
             "raw_brief": projected_brief,
@@ -142,6 +169,68 @@ class ContextAssembler:
                 "projection_records": projection_records,
             },
         }
+        if self.contract_profile == "v0_3":
+            self._add_v03_canonical_inputs(
+                result,
+                worker_id=worker_id,
+                raw_brief=raw_brief,
+                artifacts=artifact_rows,
+                manager_task=manager_task,
+            )
+        return result
+
+    @staticmethod
+    def _add_v03_canonical_inputs(
+        result: dict[str, Any],
+        *,
+        worker_id: str,
+        raw_brief: dict[str, Any],
+        artifacts: Iterable[tuple[Path, dict[str, Any]]],
+        manager_task: dict[str, Any],
+    ) -> None:
+        rows = list(artifacts)
+        schema_aliases = {
+            "evidence_catalog.v1": "evidence_catalog",
+            "analysis.v1": "analysis",
+            "storyline.v3": "storyline",
+            "report.v1": "report",
+        }
+        for _, data in rows:
+            alias = schema_aliases.get(str(data.get("schema") or ""))
+            if alias:
+                result[alias] = data
+        if worker_id == "analysis":
+            materials = (
+                raw_brief.get("raw_materials")
+                or raw_brief.get("materials")
+            )
+            if not materials and raw_brief.get("source_units"):
+                materials = [
+                    {
+                        "material_type": raw_brief.get("material_type", "source_units"),
+                        "source_units": raw_brief.get("source_units"),
+                        "known_limitations": raw_brief.get("known_limitations", []),
+                    }
+                ]
+            if not materials and raw_brief.get("rows"):
+                materials = [
+                    {
+                        "material_type": raw_brief.get("material_type", "table"),
+                        "metric_definition": raw_brief.get("metric_definition", ""),
+                        "time_window": raw_brief.get("time_window", ""),
+                        "rows": raw_brief.get("rows"),
+                        "known_limitations": raw_brief.get("known_limitations", []),
+                    }
+                ]
+            if materials:
+                result["raw_materials"] = materials
+        if worker_id == "format":
+            target = (
+                manager_task.get("delivery_target")
+                or manager_task.get("context", {}).get("delivery_target")
+                or "document"
+            )
+            result["delivery_target"] = target
 
     @staticmethod
     def _source_id(path: Path, data: dict[str, Any], index: int) -> str:
