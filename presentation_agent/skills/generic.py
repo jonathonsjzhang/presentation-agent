@@ -194,6 +194,12 @@ class GenericSkill:
             "## Manager 任务单",
             self._json_block(input_data.get("manager_task", {})),
         ]
+        readiness = input_data.get("input_readiness", {})
+        if readiness:
+            blocks.extend([
+                "## 输入完整性门禁",
+                self._json_block(readiness),
+            ])
         raw_brief = input_data.get("raw_brief", {})
         if raw_brief:
             blocks.extend([

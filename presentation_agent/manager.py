@@ -84,6 +84,9 @@ class ManagerAgentRuntime:
             "- out_of_scope: string[]",
             "- constraints: string[]",
             "- success_criteria: string[]",
+            "- recommendation_granularity: strategic_direction / strategic_choice / execution_plan",
+            "- unsupported_specificity_policy: forbid / source_backed_only / allow",
+            "- evidence_inventory_policy: full_catalog_for_deep_dive / full_catalog / lightweight_prepass",
             "- global_state_seed: object",
             "- blocking_questions: string[]",
             "",
@@ -91,7 +94,7 @@ class ManagerAgentRuntime:
             "- plan_id: string",
             "- tasks: object[]  每项必填: task_id, agent_id, objective, dependencies, status",
             "  - task_id: string  (如 t1, t2, task-argument_synthesis)",
-            "  - agent_id: string  (argument_synthesis / storyline_design / page_filling / format / qa_preparation / speaker_script)",
+            "  - agent_id: string  (evidence_harvester / argument_synthesis / storyline_design / page_filling / format / qa_preparation / speaker_script)",
             "  - objective: string  单句描述本任务要产出什么",
             "  - dependencies: string[]  依赖的 task_id 列表, 无依赖则为 []",
             "  - status: string  枚举值 planned / dispatched / completed / accepted / revision_required / skipped",
@@ -159,6 +162,13 @@ class ManagerAgentRuntime:
                     errors.extend(validate(value, self._schema(schema_name), f"$.{key}"))
             if action != "dispatch":
                 errors.append("$.action: planning must produce dispatch; runtime applies the plan human gate")
+            charter = decision.get("report_charter")
+            plan = decision.get("execution_plan")
+            packet = decision.get("task_packet")
+            if isinstance(charter, dict) and isinstance(packet, dict):
+                errors.extend(self._policy_inheritance_errors(charter, packet))
+            if isinstance(charter, dict) and isinstance(plan, dict):
+                errors.extend(self._evidence_route_errors(charter, plan, packet))
         else:
             report = decision.get("acceptance_report")
             if not isinstance(report, dict):
@@ -173,12 +183,73 @@ class ManagerAgentRuntime:
                     errors.append(f"$: {action} decision missing object 'task_packet'")
                 else:
                     errors.extend(validate(packet, self._schema("task_packet.v1"), "$.task_packet"))
+                    charter = read_json(
+                        self.run_dir / "report_charter.json", default={}
+                    )
+                    if isinstance(charter, dict):
+                        errors.extend(self._policy_inheritance_errors(charter, packet))
             if action == "complete" and phase != "acceptance":
                 errors.append("$.action: complete is only valid during acceptance")
 
         if errors:
             raise StepError("Manager decision 校验失败:\n- " + "\n- ".join(errors))
         return decision
+
+    @staticmethod
+    def _policy_inheritance_errors(
+        charter: dict[str, Any], packet: dict[str, Any]
+    ) -> list[str]:
+        errors: list[str] = []
+        for key in (
+            "recommendation_granularity",
+            "unsupported_specificity_policy",
+            "evidence_inventory_policy",
+        ):
+            expected = charter.get(key)
+            actual = packet.get(key)
+            if actual != expected:
+                errors.append(
+                    f"$.task_packet.{key}: expected inherited value "
+                    f"{expected!r}, got {actual!r}"
+                )
+        return errors
+
+    @staticmethod
+    def _evidence_route_errors(
+        charter: dict[str, Any],
+        plan: dict[str, Any],
+        packet: Any,
+    ) -> list[str]:
+        if (
+            charter.get("report_type") != "deep_dive"
+            or charter.get("evidence_inventory_policy")
+            != "full_catalog_for_deep_dive"
+        ):
+            return []
+        tasks = plan.get("tasks", [])
+        agent_ids = [
+            str(item.get("agent_id") or "")
+            for item in tasks
+            if isinstance(item, dict)
+        ]
+        errors: list[str] = []
+        if "evidence_harvester" not in agent_ids:
+            errors.append(
+                "$.execution_plan.tasks: deep_dive with full catalog policy "
+                "must include evidence_harvester"
+            )
+        if "argument_synthesis" in agent_ids and "evidence_harvester" in agent_ids:
+            if agent_ids.index("evidence_harvester") > agent_ids.index("argument_synthesis"):
+                errors.append(
+                    "$.execution_plan.tasks: evidence_harvester must precede "
+                    "argument_synthesis"
+                )
+        if isinstance(packet, dict) and packet.get("agent_id") != "evidence_harvester":
+            errors.append(
+                "$.task_packet.agent_id: deep_dive full catalog plan must "
+                "dispatch evidence_harvester first"
+            )
+        return errors
 
     def output_path(self, phase: str) -> Path:
         return self.handoff_dir / f"output_{phase}.json"
@@ -206,7 +277,9 @@ class WorkerExecutor:
         self.spawn_adapter = build_spawn_adapter(root, override=spawn_adapter)
         config = read_json(root / "configs" / "agents.json", default={})
         self.context_assembler = ContextAssembler(root)
-        active = set(config.get("pipeline", {}).get("stages", []))
+        pipeline_config = config.get("pipeline", {})
+        active = set(pipeline_config.get("stages", []))
+        active.update(pipeline_config.get("optional_workers", []))
         self.specs = {
             item["id"]: AgentSpec.from_dict(item)
             for item in config.get("agents", [])
@@ -281,6 +354,7 @@ class WorkerExecutor:
                     for source_id, source in worker_input.get("inputs", {}).items()
                 },
                 "material_refs": worker_input.get("material_refs", []),
+                "input_readiness": worker_input.get("input_readiness", {}),
             },
         )
         run_state = {
@@ -462,10 +536,20 @@ class ManagerOrchestrator:
                 missing.append("output_format（交付格式，如 ppt/html/docx）")
             # Available workers for user to choose from
             available_workers = [
-                "argument_synthesis", "storyline_design", "page_filling",
-                "format", "qa_preparation", "speaker_script"
+                "evidence_harvester", "argument_synthesis",
+                "storyline_design", "page_filling", "format",
+                "qa_preparation", "speaker_script"
             ]
-            selected_workers = brief.get("selected_workers") or available_workers
+            selected_workers = brief.get("selected_workers")
+            if not selected_workers:
+                selected_workers = (
+                    available_workers
+                    if brief.get("report_type", "deep_dive") == "deep_dive"
+                    else [
+                        worker for worker in available_workers
+                        if worker != "evidence_harvester"
+                    ]
+                )
             user_message = self._format_brief_confirmation(brief, selected_workers)
             state["current_actor"] = "human"
             state["human_gate"] = "brief"
@@ -547,6 +631,30 @@ class ManagerOrchestrator:
                 raise StepError(f"Manager action={action} 要求 acceptance verdict=accept")
             if action == "revise" and verdict != "revise":
                 raise StepError("Manager action=revise 要求 acceptance verdict=revise")
+            worker_result = state.get("worker_result") or {}
+            artifact = worker_result.get("artifact") or {}
+            revision_requests = artifact.get("upstream_revision_requests", [])
+            blocking_requests = [
+                item
+                for item in revision_requests
+                if isinstance(item, dict)
+                and item.get("blocking_level") == "blocking"
+            ]
+            cross_issues = (
+                worker_result.get("cross_stage_review", {}).get("issues", [])
+            )
+            blocking_cross_issues = [
+                item
+                for item in cross_issues
+                if isinstance(item, dict) and item.get("severity") == "P0"
+            ]
+            if action in ("dispatch", "complete") and (
+                blocking_requests or blocking_cross_issues
+            ):
+                raise StepError(
+                    "当前 Worker 存在 blocking 上游返工请求或跨阶段 P0，"
+                    "Manager 必须 action=revise 并派发相应上游 Worker"
+                )
         self._archive_decision(decision)
         self._append_decision(
             str(decision.get("action")),
@@ -984,6 +1092,7 @@ class ManagerOrchestrator:
         routes = {
             "deep_dive": {
                 "default": [
+                    "evidence_harvester",
                     "argument_synthesis",
                     "storyline_design",
                     "page_filling",
@@ -1000,7 +1109,7 @@ class ManagerOrchestrator:
                     "page_filling",
                     "format",
                 ],
-                "optional": ["qa_preparation", "speaker_script"],
+                "optional": ["evidence_harvester", "qa_preparation", "speaker_script"],
             },
             "quick_sync": {
                 "default": [
@@ -1009,7 +1118,7 @@ class ManagerOrchestrator:
                     "page_filling",
                     "format",
                 ],
-                "optional": [],
+                "optional": ["evidence_harvester"],
                 "skip_by_default": ["qa_preparation", "speaker_script"],
             },
         }

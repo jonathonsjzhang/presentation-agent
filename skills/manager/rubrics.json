@@ -34,6 +34,20 @@
       "dimension": "跨阶段一致性",
       "check": "下游不得弱化已接受结论、丢失证据边界或偏离 expected_action。",
       "improvement": "返工当前 Worker，必要时回到上游重新规划。"
+    },
+    {
+      "id": "MGR-P0-004",
+      "severity": "P0",
+      "dimension": "证据调度",
+      "check": "deep_dive、多源材料或包含访谈/问卷时，计划是否在 argument 前安排 evidence_harvester，或明确说明 lightweight prepass 已足够。",
+      "fix": "增加 evidence_harvester 任务，并让 argument 依赖 evidence_catalog artifact。"
+    },
+    {
+      "id": "MGR-P0-005",
+      "severity": "P0",
+      "dimension": "建议粒度",
+      "check": "report charter 与所有 task packet 是否传播 recommendation_granularity 和 unsupported_specificity_policy。",
+      "fix": "补齐项目级建议粒度，并在跨阶段验收中拦截 timeline、KPI、owner、预算和路线图。"
     }
   ]
 }

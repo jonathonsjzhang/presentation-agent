@@ -14,6 +14,7 @@
     "title_read_test",
     "pages",
     "appendix_plan",
+    "upstream_revision_requests",
     "open_questions"
   ],
   "properties": {
@@ -216,6 +217,40 @@
       }
     },
     "appendix_plan": { "type": "array" },
+    "upstream_revision_requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "request_type",
+          "source_argument_refs",
+          "reason",
+          "suggested_change",
+          "blocking_level"
+        ],
+        "properties": {
+          "request_type": {
+            "type": "string",
+            "enum": [
+              "overclaim",
+              "unsupported_causality",
+              "missing_evidence",
+              "recommendation_too_specific"
+            ]
+          },
+          "source_argument_refs": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "reason": { "type": "string" },
+          "suggested_change": { "type": "string" },
+          "blocking_level": {
+            "type": "string",
+            "enum": ["advisory", "blocking"]
+          }
+        }
+      }
+    },
     "open_questions": { "type": "array" },
     "state_revisions": {
       "type": "object",

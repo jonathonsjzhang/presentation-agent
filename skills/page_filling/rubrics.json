@@ -27,6 +27,30 @@
     },
     {"id": "PAGE-LOGIC-001", "severity": "P1", "dimension": "argument_chain", "criterion": "每条证据需说明 supports 什么，evidence_steps 间非纯并列。", "check": "检查 evidence_steps[].supports 和 relation 是否有意义。", "fix": "补 relation 或 inference。"},
     {"id": "PAGE-INFER-001", "severity": "P1", "dimension": "claim_calibration", "criterion": "page_takeaway 不强于 claim_strength 与证据能支持的强度。", "check": "比对 takeaway 措辞 vs claim_strength（fact/finding/implication/recommendation/hypothesis）。", "fix": "降结论强度或补证据。"},
+    {
+      "id": "PAGE-NO-AMPLIFICATION",
+      "severity": "P0",
+      "dimension": "recommendation_scope",
+      "criterion": "Page Filling 不得新增上游不存在的 timeline、KPI、owner、预算、组织调整、里程碑或路线图。",
+      "check": "检查 title、page_takeaway、content_blocks、visual_plan 和 format_handoff_notes。",
+      "fix": "删除执行化细节，恢复上游战略方向粒度。",
+      "machine_check": {
+        "each": "pages",
+        "rules": [
+          {
+            "kind": "forbidden_pattern",
+            "paths": ["title", "page_takeaway", "content_blocks", "visual_plan"],
+            "patterns": [
+              "(未来|在)?\\s*\\d+\\s*[-–~至]\\s*\\d+\\s*(周|月|季度|年)(内)?\\s*(完成|推进|实现|上线|评估|落地)",
+              "\\bQ[1-4]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "\\bH[12]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "路线图|甘特图|里程碑|KPI|负责人|成立.{0,8}(团队|小组)"
+            ],
+            "label": "page execution amplification"
+          }
+        ]
+      }
+    },
     {"id": "PAGE-CAVEAT-001", "severity": "P0", "dimension": "caveat_protection", "criterion": "影响结论强度的 caveat 必须页面可见，不得被反向改写成行动建议。", "check": "核对 data_gaps/caveat 是否被吞或反转。", "fix": "恢复 caveat。"},
     {
       "id": "PAGE-COMPARE-001",

@@ -36,6 +36,7 @@ description: Convert approved page content into a render-ready formal deliverabl
 
 - 不改变 core thesis、故事线顺序、结论强度或证据含义。
 - 不新增无来源事实，不隐藏 low confidence、caveat 或 blocking gap。
+- 不把上游战略方向丰富为 timeline、KPI、owner、预算、组织调整、里程碑、路线图或时间轴；上游未明确提供时，禁止选择 timeline layout。
 - 每个正式单元只服务一个主要 takeaway，并有明确的信息层级。
 - sources、confidence、data gaps 和 open tasks 必须进入正式内容或交付清单。
 - Agent 只描述 render intent；`render_result=rendered` 只能由真实 renderer 回填。

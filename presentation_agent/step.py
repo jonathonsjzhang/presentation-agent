@@ -173,6 +173,7 @@ class StepRunner:
     def _prepare_gen(self, state: dict[str, Any]) -> dict[str, Any]:
         context = self._build_context()
         input_data = self._load_input(state)
+        self._assert_input_ready(input_data)
         self._apply_memory_routing(context, input_data, state)
 
         round_idx = state.get("round_index", 0)
@@ -585,6 +586,22 @@ class StepRunner:
             return load_agent_input(Path(input_path_str), self.spec)
         return {}
 
+    @staticmethod
+    def _assert_input_ready(input_data: dict[str, Any]) -> None:
+        readiness = input_data.get("input_readiness", {})
+        if not isinstance(readiness, dict) or readiness.get("status") != "blocked":
+            return
+        issues = readiness.get("blocking_issues", [])
+        summary = "; ".join(
+            f"{item.get('source_id')}:{item.get('field')}"
+            for item in issues
+            if isinstance(item, dict)
+        )
+        raise StepError(
+            "输入完整性门禁阻断：需要完整材料的字段仅提供了 preview"
+            + (f" ({summary})" if summary else "")
+        )
+
     def _scoped_global_reads(self) -> dict[str, Any]:
         reads = self.spec.state_contract.get("global_reads", [])
         return {key: self.full_global_state[key] for key in reads if key in self.full_global_state}
@@ -789,7 +806,8 @@ class StepRunner:
                 "",
                 "检查上游 artifact 的关键信号是否在当前 artifact 中被正确地继承或演化：",
                 "- **矛盾**：当前 artifact 的结论、预设受众、方向是否与上游的明确信号正面冲突？",
-                "- **退化**：上游的尖锐判断在当前 artifact 中是否被模糊化、稀释或退回中性描述？",
+                "- **强度漂移**：当前 artifact 是否无依据升级，或无理由弱化上游判断？",
+                "- **上游越界处置**：若上游判断超过证据边界，当前 artifact 是否提交 revision request，而不是静默继承或静默改写？",
                 "- **缺失继承**：上游明确提出的约束（受众类型、页数上限、目标 action）是否被忽略？",
                 "",
                 "如果发现上述任一问题，以 rubric_id=UPSTREAM-SIG-001、dimension=上游信号 "
@@ -810,15 +828,7 @@ class StepRunner:
     @staticmethod
     def _signal_snapshot(upstream: dict[str, Any]) -> dict[str, Any]:
         """Extract the signal-relevant fields from an upstream artifact."""
-        projected = upstream.get("upstream_signal")
-        if isinstance(projected, dict):
-            return projected
-        heavy = {"material_units", "pages", "evidence_bank", "style_guidance", "raw_text",
-                  "reference_patterns", "historical_reference_materials", "input_inventory"}
-        return {
-            k: v for k, v in upstream.items()
-            if k not in heavy and v not in ("", [], {}, None)
-        }
+        return ArtifactReviewer._signal_snapshot(upstream)
 
     def _write_human_review(self, artifact: dict[str, Any], review: dict[str, Any]) -> None:
         lines = [

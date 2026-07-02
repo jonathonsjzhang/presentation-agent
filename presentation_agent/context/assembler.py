@@ -28,6 +28,12 @@ class ContextAssembler:
                 config.get("field_inline_limits", {})
             ).items()
         }
+        self.full_input_required_fields = {
+            str(worker): {str(field) for field in fields}
+            for worker, fields in dict(
+                config.get("full_input_required_fields", {})
+            ).items()
+        }
 
     def assemble(
         self,
@@ -43,6 +49,7 @@ class ContextAssembler:
         inputs: dict[str, Any] = {}
         upstream_signal: dict[str, Any] = {}
         material_refs: list[dict[str, Any]] = []
+        projection_records: list[dict[str, Any]] = []
         projected_brief, brief_projected_fields = self._inline_projection(
             raw_brief, required, worker_id=worker_id
         )
@@ -57,6 +64,13 @@ class ContextAssembler:
                     "omitted_fields": omitted_brief_fields,
                     "projected_fields": brief_projected_fields,
                     "instruction": "Read the raw brief only if the task needs omitted detail.",
+                }
+            )
+        if brief_projected_fields:
+            projection_records.append(
+                {
+                    "source_id": "raw_brief",
+                    "projected_fields": brief_projected_fields,
                 }
             )
 
@@ -94,6 +108,25 @@ class ContextAssembler:
                         "instruction": "Read the referenced artifact only if the task needs omitted detail.",
                     }
                 )
+            if projected_fields:
+                projection_records.append(
+                    {
+                        "source_id": source_id,
+                        "projected_fields": projected_fields,
+                    }
+                )
+
+        full_required = self.full_input_required_fields.get(worker_id, set())
+        blocking_issues = [
+            {
+                "source_id": row["source_id"],
+                "field": field,
+                "reason": "field requires full material but only a preview was projected",
+            }
+            for row in projection_records
+            for field in row["projected_fields"]
+            if field in full_required
+        ]
 
         return {
             "schema": "worker_context.v1",
@@ -103,6 +136,11 @@ class ContextAssembler:
             "inputs": inputs,
             "material_refs": material_refs,
             "upstream_signal": upstream_signal,
+            "input_readiness": {
+                "status": "blocked" if blocking_issues else "ready",
+                "blocking_issues": blocking_issues,
+                "projection_records": projection_records,
+            },
         }
 
     @staticmethod

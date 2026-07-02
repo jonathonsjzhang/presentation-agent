@@ -11,6 +11,7 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
 
 专业 Worker 包括：
 
+- `evidence_harvester`：完整盘点原始证据，建立可追溯 Evidence Catalog；deep_dive、多源材料或含访谈/问卷时优先使用。
 - `argument_synthesis`：核心问题、结论、论点和证据链。
 - `storyline_design`：故事线、页面顺序和标题体系。
 - `page_filling`：逐页内容、图表 brief 和来源标注。
@@ -48,6 +49,9 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
    - 汇报对象归一为 `board / exec_office / strategy_lead / business_team / external`。
    - 汇报性质归一为 `deep_dive / business_progress / quick_sync`。
    - 材料格式归一为 `document / ppt / html`。
+   - `recommendation_granularity` 默认设为 `strategic_direction`；只有用户明确要求执行规划时才可提升。
+   - `unsupported_specificity_policy` 默认设为 `forbid`。
+   - deep_dive 默认将 `evidence_inventory_policy` 设为 `full_catalog_for_deep_dive`，其余任务按材料复杂度选择 `full_catalog` 或 `lightweight_prepass`。
 3. 判断输入是否足够。如果缺失关键信息（topic、audience、output_format、decision_goal、materials 路径等），产出 `blocking_questions` 并设置 `action=ask_human`，由用户补充后再继续。
 4. `run_mode` 的取值：
    - `"full_auto"`：全程不中断，所有 Worker 依次执行，只在最终交付时请用户确认
@@ -57,7 +61,9 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
 5. 生成 `execution_plan`。默认使用六个 Worker，但按以下优先级裁剪：
    - 如果用户在 brief 中指定了 `selected_workers`（如 `["argument_synthesis", "storyline_design", "format"]`），**只生成这些 Worker 的任务**
    - 如果未指定，按任务需要跳过不必要任务（如纯数字分析汇报可跳过 speaker_script）
-   - `deep_dive` 默认保留完整链路；`business_progress` 强调目标/实际、偏差、风险和支持请求；`quick_sync` 默认跳过 Q&A 与逐字稿，除非用户明确需要
+   - `deep_dive`、多源材料、访谈/问卷或大量定性研究默认在 argument 前派发 `evidence_harvester`
+   - `business_progress` 强调目标/实际、偏差、风险和支持请求；材料复杂时可增加 `evidence_harvester`
+   - `quick_sync` 默认跳过 Evidence Harvester、Q&A 与逐字稿；长材料或多模态未盘点时仍应增加 Evidence Harvester
 6. 为首个 Worker 生成 `task_packet`。
 7. 输出 `action=dispatch`。runtime 会先把 charter 和计划交给用户确认，再真正派发。
 
@@ -99,6 +105,7 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
 - 3-8 条具体 `acceptance_criteria`；
 - `dependencies`；
 - `memory_dimensions`；
+- 从 report charter 原样继承的 `recommendation_granularity`、`unsupported_specificity_policy` 和 `evidence_inventory_policy`；
 - 可选只读 `report_profile` 与 `capability_expectations`；runtime 会重新解析并校验，不直接信任能力路径；
 - 返工时填写 `revision_of` 和 `revision_feedback`。
 
@@ -112,6 +119,8 @@ description: Define, plan, delegate, accept, rework, and complete an internet-st
 4. 是否为下游提供足够而不过量的输入。
 5. 是否出现结论退化、范围漂移、重复劳动或遗漏。
 6. 是否达到本任务明确的 acceptance criteria。
+7. 所有 Worker 是否遵守 recommendation granularity：战略分析默认不得新增 timeline、KPI、owner、预算、组织调整或执行路线图。
+8. evidence inventory policy 要求完整目录时，argument 是否以 `evidence_catalog.v1` 为输入；没有完整目录不得验收。
 
 ## Memory
 

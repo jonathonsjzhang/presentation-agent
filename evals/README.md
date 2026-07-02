@@ -8,6 +8,9 @@
 evals/
 ├── rubrics/
 │   └── e2e_material_v0.2.json
+├── regression/
+│   ├── strategy_quality_v1.json
+│   └── ds_quality_golden.v1.json
 ├── schemas/
 │   └── e2e_judgement.v1.json
 └── README.md

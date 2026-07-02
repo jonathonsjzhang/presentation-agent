@@ -37,6 +37,18 @@ class LoopRunner:
         max_rounds = self._max_revision_rounds(spec)
         skill = get_skill(spec.skill, llm=self.generate_llm)
         input_data = load_agent_input(input_path, spec)
+        readiness = input_data.get("input_readiness", {})
+        if isinstance(readiness, dict) and readiness.get("status") == "blocked":
+            issues = readiness.get("blocking_issues", [])
+            summary = "; ".join(
+                f"{item.get('source_id')}:{item.get('field')}"
+                for item in issues
+                if isinstance(item, dict)
+            )
+            raise RuntimeError(
+                "input readiness blocked: full evidence fields were projected"
+                + (f" ({summary})" if summary else "")
+            )
 
         run_id = f"{spec.id}-{now_iso().replace(':', '').replace('+', 'Z')}-{uuid4().hex[:8]}"
         output_dir = run_dir or (self.root / "artifacts" / run_id)

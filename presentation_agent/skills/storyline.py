@@ -174,6 +174,7 @@ class StorylineDesignSkill:
             "style_guidance": context.get("style_guidance", []),
             "pages": pages,
             "appendix_plan": input_data.get("appendix_plan", []),
+            "upstream_revision_requests": [],
             "open_questions": input_data.get("open_questions", []),
         }
 

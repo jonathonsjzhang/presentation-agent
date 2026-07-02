@@ -191,7 +191,9 @@ def _agent_ids(repo_root: Path) -> list[str]:
     config = read_json(repo_root / "configs" / "agents.json", default={})
     if not isinstance(config, dict):
         return []
-    active = config.get("pipeline", {}).get("stages", [])
+    pipeline = config.get("pipeline", {})
+    active = list(pipeline.get("stages", []))
+    active.extend(pipeline.get("optional_workers", []))
     ids = ["manager"] if config.get("control_plane") else []
     ids.extend(str(agent_id) for agent_id in active if agent_id)
     if not ids:

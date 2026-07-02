@@ -97,6 +97,30 @@
       "criterion": "PPT 每页必须包含至少一个视觉元素，禁止纯文字页。",
       "check": "逐页检查 material_units[].visual_object 中是否有 chart_spec/table_data/shape_spec。",
       "fix": "为纯文字页添加图表/表格/矩阵等视觉元素。"
+    },
+    {
+      "id": "FMT-NO-AMPLIFICATION",
+      "severity": "P0",
+      "dimension": "recommendation_scope",
+      "criterion": "Format 不得新增上游不存在的 timeline、KPI、owner、预算、组织调整、里程碑或路线图。",
+      "check": "检查 headline、finalized_content、visual_object、layout_type 和 render plan。",
+      "fix": "删除执行化细节；上游未提供时间计划时不得使用 timeline layout。",
+      "machine_check": {
+        "each": "material_units",
+        "rules": [
+          {
+            "kind": "forbidden_pattern",
+            "paths": ["headline", "finalized_content", "visual_object"],
+            "patterns": [
+              "(未来|在)?\\s*\\d+\\s*[-–~至]\\s*\\d+\\s*(周|月|季度|年)(内)?\\s*(完成|推进|实现|上线|评估|落地)",
+              "\\bQ[1-4]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "\\bH[12]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "路线图|甘特图|里程碑|KPI|负责人|成立.{0,8}(团队|小组)"
+            ],
+            "label": "format execution amplification"
+          }
+        ]
+      }
     }
   ]
 }

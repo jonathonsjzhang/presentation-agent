@@ -5,6 +5,100 @@
     {"id": "ARG-CORE-001", "severity": "P0", "dimension": "decision_answer", "criterion": "core thesis 必须直接回答 decision goal。", "check": "检查核心问题、thesis、expected action 是否形成闭环。", "fix": "收敛为一个可决策判断。"},
     {"id": "ARG-CORE-002", "severity": "P0", "dimension": "evidence_integrity", "criterion": "所有关键主张必须绑定真实 evidence 或显式 gap。", "check": "逐条核对 evidence refs、confidence 和来源。", "fix": "补证据、降强度或标记未知。"},
     {"id": "ARG-CORE-003", "severity": "P1", "dimension": "argument_structure", "criterion": "关键论点共同证明 thesis 且避免重叠。", "check": "检查论点是否 MECE、是否只是背景分类。", "fix": "重构论点与推理桥。"},
-    {"id": "ARG-CORE-004", "severity": "P1", "dimension": "counterargument", "criterion": "重要反例、替代解释和风险得到处理。", "check": "检查 risks_and_counterarguments。", "fix": "补充反方及其对结论的影响。"}
+    {"id": "ARG-CORE-004", "severity": "P1", "dimension": "counterargument", "criterion": "重要反例、替代解释和风险得到处理。", "check": "检查 risks_and_counterarguments。", "fix": "补充反方及其对结论的影响。"},
+    {
+      "id": "ARG-EVIDENCE-DISPOSITION",
+      "severity": "P0",
+      "dimension": "evidence_completeness",
+      "criterion": "Evidence Catalog 中每条 evidence item 必须有合法 disposition；selected/counterpoint 必须被 claim 引用。",
+      "check": "核对 evidence_disposition 与 evidence refs，未使用的已有材料不得进入 evidence_gaps。",
+      "fix": "补 disposition、修正 claim refs，或将真正缺失的信息保留在 evidence_gaps。",
+      "machine_check": {
+        "rules": [
+          {
+            "kind": "set_coverage",
+            "source_path": "evidence_bank",
+            "source_key": "id",
+            "target_path": "evidence_disposition",
+            "label": "evidence disposition"
+          },
+          {
+            "kind": "disposition_claim_coverage",
+            "disposition_path": "evidence_disposition",
+            "claims_path": "key_arguments",
+            "label": "selected evidence claim mapping"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ARG-CLAIM-GROUNDING",
+      "severity": "P0",
+      "dimension": "claim_calibration",
+      "criterion": "supported/directional claim 必须有 evidence；相关性和访谈不得生成确定 causal claim。",
+      "check": "逐条检查 claim_type、support_level、evidence_refs、counterevidence_refs 和 boundary_conditions。",
+      "fix": "补证据、降为 hypothesis，或将 causal 改为 explanatory。",
+      "machine_check": {
+        "each": "key_arguments",
+        "rules": [
+          {
+            "kind": "conditional_required",
+            "when_path": "support_level",
+            "when_not": "hypothesis",
+            "path": "evidence_refs",
+            "label": "supported claim evidence refs"
+          },
+          {
+            "kind": "cross_ref_exists",
+            "path": "evidence_refs",
+            "target_path": "evidence_bank",
+            "target_key": "id",
+            "label": "claim evidence refs"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ARG-RECOMMENDATION-SCOPE",
+      "severity": "P0",
+      "dimension": "recommendation_scope",
+      "criterion": "战略分析默认只到 strategic_direction/strategic_choice，不生成材料外执行计划。",
+      "check": "检查 decision_request、expected_action、so_what、urgency_basis 是否出现 timeline、KPI、owner、预算、组织调整或路线图。",
+      "fix": "删除执行细节，只保留做/不做、优先级、聚焦对象和战略取舍。",
+      "machine_check": {
+        "rules": [
+          {
+            "kind": "enum_max_level",
+            "path": "executive_summary.decision_request.specificity_level",
+            "values": ["strategic_direction", "strategic_choice", "execution_plan"],
+            "max": "strategic_choice",
+            "label": "recommendation specificity"
+          },
+          {
+            "kind": "forbidden_pattern",
+            "paths": [
+              "core_thesis",
+              "expected_action",
+              "executive_summary.decision_relevance",
+              "executive_summary.decision_request.recommended_direction"
+            ],
+            "patterns": [
+              "(未来|在)?\\s*\\d+\\s*[-–~至]\\s*\\d+\\s*(周|月|季度|年)(内)?\\s*(完成|推进|实现|上线|评估|落地)",
+              "\\bQ[1-4]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "\\bH[12]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "路线图|甘特图|里程碑|KPI|负责人|成立.{0,8}(团队|小组)"
+            ],
+            "label": "unsupported execution detail"
+          },
+          {
+            "kind": "conditional_required",
+            "when_path": "executive_summary.urgency_basis",
+            "when_not": null,
+            "path": "executive_summary.urgency_basis.source_refs",
+            "label": "urgency source refs"
+          }
+        ]
+      }
+    }
   ]
 }
