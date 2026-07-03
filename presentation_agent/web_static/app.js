@@ -704,12 +704,10 @@ function kindLabel(kind) {
 function fallbackOverview() {
   const stages = [
     ["manager", "汇报项目 Manager", "manager_context.v1", "manager_decision.v1", "定义任务、规划、派发 Worker、验收与返工"],
-    ["argument_synthesis", "核心论点提炼", "manager_task.v1", "argument_synthesis.v1", "形成 Executive Summary 和预期推动的 action"],
-    ["storyline_design", "storyline 设计", "argument_synthesis.v1", "storyline.v1", "设计每页标题、关键问题、证据和 so what"],
-    ["page_filling", "单页内容填充", "storyline.v1", "page_content.v2", "把故事线展开成证据充分、可追溯的页面内容"],
-    ["format", "format", "page_content.v2", "formatted_material.v1", "生成 PPT、HTML 或文档形式的正式材料"],
-    ["qa_preparation", "Q&A 梳理", "formatted_material.v1", "qa_pack.v1", "梳理可能追问、回答策略和需补充信息"],
-    ["speaker_script", "逐字稿", "qa_pack.v1", "speaker_script.v1", "生成逐页对应、可排练的完整讲稿"],
+    ["analysis", "分析", "report_charter.v2", "analysis.v1", "形成发现、so what、反证、替代解释和置信度"],
+    ["storyline", "故事线", "analysis.v1", "storyline.v3", "形成 Executive Summary、message pyramid 与章节结构"],
+    ["report", "报告产出", "storyline.v3", "report.v1", "生成完整、可独立阅读的战略分析报告"],
+    ["format", "可视化", "report.v1", "formatted_material.v2", "默认生成精装文档，再按用户选择转译 PPT / HTML"],
   ];
   return {
     pipeline: {

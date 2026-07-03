@@ -58,6 +58,130 @@ SpawnRole = Literal["worker", "reviewer"]
 SpawnMode = Literal["foreground", "background"]
 
 
+def prepare_evidence_subtask(
+    *,
+    root: Path,
+    analysis_dir: Path,
+    data_root: Path,
+    raw_materials: list[Any],
+    analysis_input: dict[str, Any],
+) -> dict[str, Any]:
+    """Create the real Evidence worker package below an Analysis task.
+
+    This deliberately does not use Manager or PipelineStepper.  Evidence stays
+    an auditable internal subtask while reusing its existing skill and schema.
+    """
+
+    from presentation_agent.models import now_iso
+    from presentation_agent.step import StepRunner
+
+    subtask_dir = analysis_dir / "subtasks" / "evidence_harvester"
+    subtask_dir.mkdir(parents=True, exist_ok=True)
+    input_path = subtask_dir / "input.json"
+    if not input_path.exists():
+        write_json(
+            input_path,
+            {
+                "schema": "manager_task.v1",
+                "raw_materials": raw_materials,
+                "report_charter": analysis_input.get("report_charter", analysis_input),
+                "evidence_scope": analysis_input.get("analysis_objective", ""),
+            },
+        )
+    run_state_path = subtask_dir / "run_state.json"
+    if not run_state_path.exists():
+        write_json(
+            run_state_path,
+            {
+                "run_id": f"evidence-{now_iso().replace(':', '')}",
+                "contract_profile": "legacy.v0_2",
+                "agent_id": "evidence_harvester",
+                "agent_name": "证据完整盘点",
+                "stage": 0,
+                "status": "init",
+                "current_step": "init",
+                "round_index": 0,
+                "input_path": str(input_path),
+                "output_dir": str(subtask_dir),
+                "p0_open": [],
+                "p1_open": [],
+                "produced_artifacts": [],
+                "history": [],
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+            },
+        )
+    runner = StepRunner(
+        root, subtask_dir, data_root=data_root, contract_profile="legacy.v0_2"
+    )
+    state = read_json(run_state_path, default={})
+    if state.get("current_step") == "init":
+        prepared = runner.prepare()
+    elif state.get("current_step") == "awaiting_gen_output":
+        prepared = {
+            "step": "evidence",
+            "instruction_path": str(subtask_dir / "handoff" / "instruction_gen.md"),
+            "output_path": str(subtask_dir / "handoff" / "output_gen.json"),
+        }
+    else:
+        raise StepError(
+            f"Evidence 子任务处于不可恢复状态: {state.get('current_step')}"
+        )
+    prepared.update(
+        {
+            "step": "evidence",
+            "agent_id": "evidence_harvester",
+            "subtask": True,
+            "subtask_dir": str(subtask_dir),
+            "input_path": str(input_path),
+        }
+    )
+    return prepared
+
+
+def commit_evidence_subtask(
+    *,
+    root: Path,
+    subtask_dir: Path,
+    data_root: Path,
+) -> dict[str, Any]:
+    """Schema-gate one Evidence generation without an internal retry."""
+
+    from presentation_agent.agent_profiles import load_agent_profile
+    from presentation_agent.capabilities.compiler import compile_skill_package
+    from presentation_agent.review import ArtifactReviewer
+
+    output_path = subtask_dir / "handoff" / "output_gen.json"
+    if not output_path.exists():
+        raise StepError(f"Evidence 输出不存在: {output_path}")
+    try:
+        catalog = extract_json(output_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise StepError(f"Evidence 输出不是合法 JSON: {exc}") from exc
+    profile = load_agent_profile(root, "legacy.v0_2")
+    spec = profile.specs["evidence_harvester"]
+    input_data = read_json(subtask_dir / "input.json", default={})
+    package = compile_skill_package(root, spec, input_data)
+    objections = ArtifactReviewer(llm=None)._schema_gate(
+        spec, catalog, package.to_dict()
+    )
+    review = {"reviewer": "schema_gate", "objections": [o.to_dict() for o in objections]}
+    write_json(subtask_dir / "review.json", review)
+    if any(o.severity == "P0" for o in objections):
+        raise StepError("Evidence Catalog schema gate 未通过；本轮不会自动重试")
+    write_json(subtask_dir / "evidence_catalog.json", catalog)
+    state_path = subtask_dir / "run_state.json"
+    state = read_json(state_path, default={})
+    state["status"] = "completed"
+    state["current_step"] = "done"
+    state["produced_artifacts"] = [
+        str(subtask_dir / "evidence_catalog.json"),
+        str(subtask_dir / "review.json"),
+    ]
+    write_json(state_path, state)
+    return catalog
+
+
 @dataclass
 class SpawnRequest:
     """A self-contained spawn request assembled by the Manager control plane.
@@ -74,6 +198,24 @@ class SpawnRequest:
     output_path: Path
     input_path: Path
     mode: SpawnMode = "foreground"
+
+    def __post_init__(self) -> None:
+        """Keep Analysis' internal Evidence spawn confined to its subtask."""
+
+        evidence_dir = next(
+            (
+                parent
+                for parent in (self.instruction_path, *self.instruction_path.parents)
+                if parent.name == "evidence_harvester"
+                and parent.parent.name == "subtasks"
+            ),
+            None,
+        )
+        if evidence_dir is None:
+            return
+        self.task_dir = evidence_dir
+        self.agent_id = "evidence_harvester"
+        self.input_path = evidence_dir / "input.json"
 
 
 @dataclass

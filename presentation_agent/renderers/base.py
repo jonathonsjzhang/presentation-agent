@@ -95,6 +95,7 @@ def render_material(
     file_stem: str = "deliverable",
     expected_format: Optional[str] = None,
     selected_capabilities: Optional[list[str]] = None,
+    source_report: Optional[dict[str, Any]] = None,
 ) -> RenderResult:
     """Render a formatted_material.v1-shaped dict into a real file.
 
@@ -104,6 +105,16 @@ def render_material(
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if material.get("schema") == "formatted_material.v2":
+        return _render_v2(
+            material,
+            out_dir,
+            file_stem=file_stem,
+            expected_format=expected_format,
+            selected_capabilities=selected_capabilities,
+            source_report=source_report,
+        )
 
     raw_fmt = material.get("format") or material.get("output_format")
     try:
@@ -158,3 +169,127 @@ def render_material(
     return RenderResult(
         status="error", fmt=backend, fidelity=fidelity, detail=f"unknown format {raw_fmt}"
     )
+
+
+def _render_v2(
+    material: dict[str, Any],
+    out_dir: Path,
+    *,
+    file_stem: str,
+    expected_format: Optional[str],
+    selected_capabilities: Optional[list[str]],
+    source_report: Optional[dict[str, Any]],
+) -> RenderResult:
+    target = str(material.get("delivery_target") or "").lower()
+    try:
+        backend = resolve_output_format(expected_format or target)
+    except ValueError as exc:
+        return RenderResult(
+            status="error",
+            fmt=target or "unknown",
+            fidelity="formatted",
+            detail=str(exc),
+        )
+    if backend != target:
+        return RenderResult(
+            status="error",
+            fmt=backend,
+            fidelity="formatted",
+            detail=f"delivery_target mismatch: expected={backend}, artifact={target}",
+        )
+    expected_capability = _FORMAT_CAPABILITIES[backend]
+    if selected_capabilities and expected_capability not in selected_capabilities:
+        return RenderResult(
+            status="error",
+            fmt=backend,
+            fidelity="formatted",
+            detail=(
+                f"renderer requires {expected_capability}; "
+                f"selected={selected_capabilities}"
+            ),
+        )
+    if not isinstance(source_report, dict) or source_report.get("schema") != "report.v1":
+        return RenderResult(
+            status="error",
+            fmt=backend,
+            fidelity="formatted",
+            detail="formatted_material.v2 renderer requires source report.v1",
+        )
+    if not material.get("delivery_units"):
+        return RenderResult(
+            status="no_units",
+            fmt=backend,
+            fidelity="formatted",
+        )
+    if backend == "document":
+        from presentation_agent.renderers.formatted_document_v2 import (
+            render_formatted_document_v2,
+        )
+
+        return render_formatted_document_v2(
+            material,
+            source_report,
+            out_dir,
+            file_stem=file_stem,
+        )
+    adapted = _adapt_v2_to_v1(material, backend)
+    if backend == "ppt":
+        from presentation_agent.renderers.ppt import render_ppt
+
+        return render_ppt(
+            adapted, out_dir, fidelity="final", file_stem=file_stem
+        )
+    if backend == "html":
+        from presentation_agent.renderers.html import render_html
+
+        return render_html(
+            adapted, out_dir, fidelity="final", file_stem=file_stem
+        )
+    return RenderResult(
+        status="error", fmt=backend, fidelity="formatted", detail="unknown target"
+    )
+
+
+def _adapt_v2_to_v1(
+    material: dict[str, Any],
+    backend: str,
+) -> dict[str, Any]:
+    """Losslessly project v2 delivery units onto the mature visual backends."""
+
+    assets = {
+        str(item.get("asset_id")): item
+        for item in material.get("visual_assets", [])
+        if isinstance(item, dict)
+    }
+    units: list[dict[str, Any]] = []
+    for index, unit in enumerate(material.get("delivery_units", []), 1):
+        content = unit.get("content") if isinstance(unit.get("content"), dict) else {}
+        asset_refs = unit.get("visual_asset_refs") or []
+        visual = assets.get(str(asset_refs[0]), {}) if asset_refs else {}
+        layout = "executive_summary" if index == 1 else "content"
+        if visual.get("asset_type") == "chart":
+            layout = "bar_chart"
+        units.append(
+            {
+                "unit_id": unit.get("unit_id") or f"DU-{index:02d}",
+                "headline": unit.get("headline") or content.get("primary_text") or "",
+                "layout_or_structure": {"layout_type": layout},
+                "finalized_content": {
+                    "primary_text": content.get("primary_text", ""),
+                    "supporting_points": content.get("supporting_points", []),
+                    "tables": content.get("tables", []),
+                },
+                "visual_object": visual,
+                "source_display": "；".join(
+                    str(item) for item in unit.get("source_evidence_refs", [])
+                ),
+                "caveats": unit.get("caveats", []),
+            }
+        )
+    return {
+        "schema": "formatted_material.v1",
+        "format": backend,
+        "topic": material.get("topic", ""),
+        "audience": material.get("audience", ""),
+        "material_units": units,
+    }

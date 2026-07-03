@@ -1,0 +1,58 @@
+{
+  "schema": "report_charter.v2",
+  "topic": "AI 助手用户留存改善机会",
+  "audience": "strategy_lead",
+  "report_type": "deep_dive",
+  "delivery_targets": ["document"],
+  "decision_goal": "判断应优先改善新用户价值确认还是回访机制。",
+  "expected_action": "确认下一阶段优先验证的留存抓手与补数计划。",
+  "analysis_objective": "综合行为数据与访谈，识别留存差异、潜在机制和竞争性解释。",
+  "scope": ["新用户首 7 日行为", "核心功能使用", "回访触发"],
+  "out_of_scope": ["完整产品路线图", "未经验证的收入预测"],
+  "constraints": ["访谈只用于机制解释，不外推总体比例"],
+  "success_criteria": [
+    "关键判断均可追溯到证据",
+    "反证、替代解释与数据缺口透明",
+    "报告可独立阅读"
+  ],
+  "recommendation_granularity": "strategic_choice",
+  "unsupported_specificity_policy": "source_backed_only",
+  "material_inventory": [
+    {
+      "material_id": "mat-behavior",
+      "name": "新用户行为切片",
+      "media_type": "xlsx",
+      "locator": "golden_cases/quantitative_usage/input.json",
+      "availability": "available",
+      "notes": "冻结的匿名化表格快照"
+    },
+    {
+      "material_id": "mat-interviews",
+      "name": "流失与留存用户访谈摘录",
+      "media_type": "text",
+      "locator": "golden_cases/qualitative_interviews/input.json",
+      "availability": "available",
+      "notes": "冻结的匿名化访谈快照"
+    }
+  ],
+  "existing_artifacts": [],
+  "analysis_acceptance_criteria": [
+    "至少形成两个可比较的观点候选",
+    "每个 finding 均包含 supporting evidence、confidence 和 so what",
+    "Evidence 调用原因与覆盖情况可审计"
+  ],
+  "extension_policy": {
+    "format_expansion": "offer_ppt_html_after_document",
+    "qa_preparation": "optional_after_format",
+    "speaker_script": "optional_after_format",
+    "gate": "after_document_delivery"
+  },
+  "global_state_seed": {
+    "audience_profile": {
+      "role": "strategy_lead",
+      "attention": "优先级与证据边界"
+    }
+  },
+  "blocking_questions": [],
+  "assumptions": ["留存口径以注册后第 7 日回访为准"]
+}

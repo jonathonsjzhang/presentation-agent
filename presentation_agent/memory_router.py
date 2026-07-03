@@ -34,13 +34,19 @@ class MemoryRouter:
 
     ROUTES: list[tuple[str, str, tuple[str, ...], str]] = [
         ("manager", "调度", ("manager", "流程", "调度", "阶段", "顺序", "先给", "摘要", "确认", "返工", "回到上游", "以后都", "每次都", "验收", "放过", "通过"), "任务定义、调度或验收反馈"),
-        ("argument_synthesis", "结论", ("论点", "结论", "action", "行动", "证据强度", "判断", "假设", "塔尖"), "核心论点或证据反馈"),
-        ("storyline_design", "结构", ("标题", "leadline", "故事线", "storyline", "结构", "一页一问", "so what", "主线"), "故事线或标题反馈"),
-        ("page_filling", "页内叙事", ("页面", "单页", "图表", "信息密度", "来源标注", "口径", "dummy", "chart"), "单页内容或图表反馈"),
+        ("analysis", "分析", ("发现", "finding", "证据强度", "数据分析", "反证", "替代解释", "置信度", "假设", "口径"), "分析发现、证据强度或解释反馈"),
+        ("storyline", "结构", ("论点", "结论", "标题", "leadline", "故事线", "storyline", "结构", "塔尖", "主线", "executive summary"), "故事线、核心主张或结构反馈"),
+        ("report", "报告内容", ("正文", "章节", "段落", "论证链", "来源标注", "引用", "报告", "claim", "caveat"), "报告正文、论证或来源反馈"),
         ("format", "可读性", ("版式", "格式", "ppt", "html", "docx", "视觉", "可读性", "排版", "模板"), "载体格式或可读性反馈"),
+        # Legacy owners remain addressable while historical memories migrate.
+        ("argument_synthesis", "结论", ("论点", "结论", "action", "行动", "证据强度", "判断", "假设", "塔尖"), "legacy 核心论点反馈"),
+        ("storyline_design", "结构", ("标题", "leadline", "故事线", "storyline", "结构", "一页一问", "so what", "主线"), "legacy 故事线反馈"),
+        ("page_filling", "页内叙事", ("页面", "单页", "图表", "信息密度", "来源标注", "dummy", "chart"), "legacy 单页内容反馈"),
         ("qa_preparation", "风险", ("追问", "q&a", "qa", "风险", "回答", "质疑", "挑战问题"), "Q&A 或风险反馈"),
         ("speaker_script", "表达", ("逐字稿", "话术", "演讲", "节奏", "口播", "讲稿", "表达"), "讲稿或表达反馈"),
     ]
+    NEW_WORKERS = {"analysis", "storyline", "report"}
+    LEGACY_WORKERS = {"argument_synthesis", "storyline_design", "page_filling"}
 
     def __init__(self, root: Path, data_root: Optional[Path] = None) -> None:
         self.root = root
@@ -56,7 +62,9 @@ class MemoryRouter:
     ) -> MemoryRoute:
         normalized = text.lower()
         best: Optional[MemoryRoute] = None
-        for agent_id, dimension, keywords, reason in self.ROUTES:
+        for agent_id, dimension, keywords, reason in self._route_rows(
+            current_agent_id, active_capabilities
+        ):
             hits = sum(1 for keyword in keywords if keyword.lower() in normalized)
             if not hits:
                 continue
@@ -97,7 +105,9 @@ class MemoryRouter:
     ) -> list[MemoryRoute]:
         normalized = text.lower()
         matches: dict[str, MemoryRoute] = {}
-        for agent_id, dimension, keywords, reason in self.ROUTES:
+        for agent_id, dimension, keywords, reason in self._route_rows(
+            current_agent_id, active_capabilities
+        ):
             hits = sum(1 for keyword in keywords if keyword.lower() in normalized)
             if not hits:
                 continue
@@ -119,6 +129,25 @@ class MemoryRouter:
                 active_capabilities=active_capabilities,
             )]
         return sorted(matches.values(), key=lambda item: item.confidence, reverse=True)
+
+    @classmethod
+    def _route_rows(
+        cls,
+        current_agent_id: Optional[str],
+        active_capabilities: Optional[list[str]],
+    ) -> list[tuple[str, str, tuple[str, ...], str]]:
+        """Select one owner generation so feedback is never double-written.
+
+        Runs using a v0.3 worker (or its core capability) route to new owners.
+        Context-free and legacy runs retain the old owners during migration.
+        """
+        active = set(active_capabilities or [])
+        use_new = (
+            current_agent_id in cls.NEW_WORKERS
+            or bool(active.intersection({f"core.{item}" for item in cls.NEW_WORKERS}))
+        )
+        excluded = cls.LEGACY_WORKERS if use_new else cls.NEW_WORKERS
+        return [row for row in cls.ROUTES if row[0] not in excluded]
 
     def route_from_run_state(
         self,

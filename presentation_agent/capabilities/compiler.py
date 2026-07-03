@@ -22,10 +22,11 @@ def compile_skill_package(
     legacy_fallback: bool = True,
 ) -> SkillPackage:
     registry = CapabilityRegistry(root)
-    legacy = load_skill_package(root, spec.id)
+    legacy = load_skill_package(root, spec.skill)
     if not registry.enabled_for(spec.id):
         return legacy
 
+    canonical_format = _is_report_v1_format(spec, input_data)
     try:
         profile = normalize_report_profile(input_data, root=root)
         selection = resolve_capabilities(spec.id, profile)
@@ -34,7 +35,9 @@ def compile_skill_package(
             ("report_type", profile.report_type),
             ("format", profile.output_format),
         )
-        core_instructions = legacy.instructions.strip()
+        core_instructions = _core_instructions(
+            legacy.instructions, canonical_format=canonical_format
+        )
         if spec.id == "format":
             for marker in (
                 "## Format capabilities",
@@ -42,7 +45,7 @@ def compile_skill_package(
             ):
                 core_instructions = core_instructions.split(marker, 1)[0].rstrip()
         instruction_sections = [core_instructions]
-        rubrics = list(legacy.rubrics)
+        rubrics = _core_rubrics(legacy.rubrics, canonical_format=canonical_format)
         tools: list[str] = []
         context_requirements: list[str] = []
         atomic_specs = []
@@ -59,6 +62,8 @@ def compile_skill_package(
             matching_rules = [
                 rule for rule in package["rules"] if _applies(rule, spec.id)
             ]
+            if canonical_format and kind == "format":
+                matching_rules = [_canonical_format_rule(profile.delivery_target)]
             lines = [str(rule.get("instruction", "")).strip() for rule in matching_rules]
             lines = [line for line in lines if line]
             if lines:
@@ -117,9 +122,86 @@ def compile_skill_package(
             legacy=False,
         )
     except (CapabilityError, OSError, ValueError, KeyError):
+        # A v0.3 Format task must never be handed to the page_content legacy
+        # prompt. Contract errors are surfaced to the caller instead.
+        if canonical_format:
+            raise
         if legacy_fallback and registry.runtime.get("legacy_fallback", True):
             return legacy
         raise
+
+
+def _is_report_v1_format(spec: AgentSpec, input_data: dict[str, Any]) -> bool:
+    report = input_data.get("report")
+    schema = report.get("schema") if isinstance(report, dict) else input_data.get("schema")
+    return spec.id == "format" and (
+        spec.input_schema == "report.v1" or schema == "report.v1"
+    )
+
+
+def _core_instructions(instructions: str, *, canonical_format: bool) -> str:
+    marker = "## Legacy v0.2 compatibility"
+    canonical, separator, legacy = instructions.partition(marker)
+    if canonical_format:
+        return canonical.rstrip()
+    if separator:
+        return f"# Format Core Skill\n\n{marker}\n{legacy}".strip()
+    return instructions.strip()
+
+
+def _core_rubrics(
+    rubrics: list[Any], *, canonical_format: bool
+) -> list[Any]:
+    if not canonical_format:
+        return list(rubrics)
+    allowed = {
+        "FMT-CORE-001",
+        "FMT-CORE-002",
+        "FMT-CORE-003",
+        "FMT-CORE-004",
+        "FMT-CAVEAT-001",
+        "FMT-NO-AMPLIFICATION",
+    }
+    return [
+        rubric
+        for rubric in rubrics
+        if not isinstance(rubric, dict) or rubric.get("id") in allowed
+    ]
+
+
+def _canonical_format_rule(delivery_target: str) -> dict[str, Any]:
+    unit_types = {
+        "document": "document_section",
+        "ppt": "slide",
+        "html": "html_module",
+    }
+    renderers = {
+        "document": "docx_renderer",
+        "ppt": "ppt_renderer",
+        "html": "html_renderer",
+    }
+    return {
+        "id": f"FMT-V03-{delivery_target.upper()}",
+        "applies_to": ["format"],
+        "phase": ["generation", "review"],
+        "level": "P0",
+        "property": "delivery_target_contract",
+        "instruction": (
+            f"只转译为 delivery_target={delivery_target}；"
+            f"delivery_units[].unit_type={unit_types[delivery_target]}，"
+            f"render_plan.renderer={renderers[delivery_target]}。"
+            "只生成 planned render intent，不调用 renderer，"
+            "并维护 report section/claim/evidence mapping、压缩、省略和 caveat 记录。"
+        ),
+        "context_requirements": [
+            "report_metadata",
+            "sections",
+            "claims",
+            "claim_evidence_map",
+            "format_handoff",
+            "delivery_target",
+        ],
+    }
 
 
 def _applies(item: dict[str, Any], agent_id: str) -> bool:

@@ -1,0 +1,233 @@
+{
+  "agent_id": "report",
+  "schema": "report.v1",
+  "report_metadata": {
+    "report_id": "retention-deep-dive-v0_3",
+    "title": "AI 助手用户留存改善机会",
+    "topic": "AI 助手用户留存改善机会",
+    "audience": "strategy_lead",
+    "report_type": "deep_dive",
+    "language": "zh-CN",
+    "version": "1.0"
+  },
+  "executive_summary": {
+    "context": "当前新用户首周回访不足，需要在价值闭环与提醒触达之间确定优先验证顺序。",
+    "core_answer": "现有证据更支持优先验证成果形成与复用闭环，但应通过实验排除用户原始意愿造成的自选择。",
+    "key_findings": [
+      "成果保存组的第 7 日回访率在冻结样本中高于单轮问答组。",
+      "访谈提示可复用成果可能构成回访理由，但不能外推比例。"
+    ],
+    "implications": [
+      "首个实验应围绕成果保存后的复用路径。",
+      "实验必须控制初始意愿并设置提醒对照。"
+    ],
+    "expected_action": "确认两周价值闭环实验与补数计划。"
+  },
+  "sections": [
+    {
+      "section_id": "S-01",
+      "heading": "成果保存与回访共同出现，但因果仍待验证",
+      "section_thesis": "冻结样本存在明显组间差异，但自选择使其只能作为优先级信号。",
+      "narrative_blocks": [
+        {
+          "block_id": "B-01",
+          "block_type": "paragraph",
+          "content": "在统一的第 7 日回访口径下，完成成果保存的新用户回访率为 34%，只完成单轮问答的新用户为 18%。这 16 个百分点的差异说明成果保存与回访共同出现，但由于分组并非随机，不能直接解释为保存功能带来的因果提升。",
+          "claim_ids": ["C-01"],
+          "evidence_refs": ["E-Q-01", "E-Q-02"]
+        },
+        {
+          "block_id": "B-02",
+          "block_type": "caveat",
+          "content": "高意愿用户可能同时更愿意保存成果，因此实验需控制初始意愿。",
+          "claim_ids": ["C-01"],
+          "evidence_refs": ["E-Q-02"]
+        }
+      ],
+      "tables": [
+        {
+          "table_id": "T-01",
+          "title": "不同行为组第 7 日回访率",
+          "columns": ["行为组", "第 7 日回访率"],
+          "rows": [["保存成果", "34%"], ["仅单轮问答", "18%"]],
+          "source_refs": ["SRC-01"],
+          "notes": ["冻结匿名样本；非随机分组。"]
+        }
+      ],
+      "figure_specs": [
+        {
+          "figure_id": "FIG-01",
+          "title": "成果保存组的第 7 日回访率更高",
+          "figure_type": "grouped_bar",
+          "data": {
+            "categories": ["保存成果", "仅单轮问答"],
+            "values": [34, 18],
+            "unit": "%"
+          },
+          "reader_takeaway": "行为差异值得优先验证，但不等于因果。",
+          "source_refs": ["SRC-01"],
+          "caveats": ["非随机分组"]
+        }
+      ],
+      "section_conclusion": "成果保存是更强的优先级信号，但需要机制证据和随机实验。",
+      "transition": "下一节用访谈界定可能机制，并把判断转化为可证伪实验。",
+      "claim_ids": ["C-01"],
+      "finding_refs": ["F-01"]
+    },
+    {
+      "section_id": "S-02",
+      "heading": "可复用成果提供了值得优先验证的回访理由",
+      "section_thesis": "访谈提示成果复用形成持续价值，但需随机实验与补样验证。",
+      "narrative_blocks": [
+        {
+          "block_id": "B-03",
+          "block_type": "paragraph",
+          "content": "两位留存用户把历史成果视为后续任务的起点，一位流失用户则把产品理解为一次性问答工具。这组材料不能代表总体用户，却为行为差异提供了可验证的机制：用户只有在形成可继续使用的成果后，才拥有明确的回访理由。",
+          "claim_ids": ["C-02"],
+          "evidence_refs": ["E-I-01"]
+        },
+        {
+          "block_id": "B-04",
+          "block_type": "callout",
+          "content": "建议以成果保存与复用路径为主实验，以提醒触达为对照因素。",
+          "claim_ids": ["C-03"],
+          "evidence_refs": ["E-Q-01", "E-I-01"]
+        }
+      ],
+      "tables": [],
+      "figure_specs": [],
+      "section_conclusion": "价值闭环是当前更值得优先验证的机制，而非已被证明的答案。",
+      "transition": "据此进入实验选择、指标与补数要求。",
+      "claim_ids": ["C-02", "C-03"],
+      "finding_refs": ["F-01", "F-02"]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "C-01",
+      "statement": "成果保存与更高的第 7 日回访在冻结样本中共同出现。",
+      "claim_type": "finding",
+      "strength": "medium",
+      "finding_refs": ["F-01"],
+      "caveats": ["非随机分组，不能直接推断因果。"]
+    },
+    {
+      "claim_id": "C-02",
+      "statement": "成果复用可能为用户提供持续回访理由。",
+      "claim_type": "hypothesis",
+      "strength": "low",
+      "finding_refs": ["F-02"],
+      "caveats": ["访谈样本只用于机制探索。"]
+    },
+    {
+      "claim_id": "C-03",
+      "statement": "下一阶段应优先验证成果保存与复用闭环。",
+      "claim_type": "recommendation",
+      "strength": "medium",
+      "finding_refs": ["F-01", "F-02"],
+      "caveats": ["需设置初始意愿控制与提醒对照。"]
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "F-01",
+      "statement": "成果保存组第 7 日回访率更高。",
+      "source_analysis_ref": "analysis.v1#F-01"
+    },
+    {
+      "finding_id": "F-02",
+      "statement": "访谈提示成果复用可能形成回访理由。",
+      "source_analysis_ref": "analysis.v1#F-02"
+    }
+  ],
+  "source_registry": [
+    {
+      "source_id": "SRC-01",
+      "citation": "冻结匿名化行为数据快照",
+      "locator": "golden_cases/quantitative_usage/input.json",
+      "source_type": "dataset"
+    },
+    {
+      "source_id": "SRC-02",
+      "citation": "冻结匿名化访谈摘录",
+      "locator": "golden_cases/qualitative_interviews/input.json",
+      "source_type": "interview_notes"
+    }
+  ],
+  "claim_evidence_map": [
+    {
+      "claim_id": "C-01",
+      "evidence_refs": ["E-Q-01", "E-Q-02"],
+      "source_ids": ["SRC-01"],
+      "support_type": "comparison"
+    },
+    {
+      "claim_id": "C-02",
+      "evidence_refs": ["E-I-01"],
+      "source_ids": ["SRC-02"],
+      "support_type": "mechanism"
+    },
+    {
+      "claim_id": "C-03",
+      "evidence_refs": ["E-Q-01", "E-I-01"],
+      "source_ids": ["SRC-01", "SRC-02"],
+      "support_type": "context"
+    }
+  ],
+  "methodology": {
+    "approach": "行为组间描述性比较与访谈机制三角验证。",
+    "scope": "新用户首 7 日与第 7 日回访。",
+    "definitions": ["第 7 日回访：注册后第 7 个自然日内产生有效会话。"],
+    "limitations": ["行为组并非随机", "访谈样本量小"]
+  },
+  "assumptions": ["各来源使用相同回访口径。"],
+  "data_gaps": ["缺少控制初始意愿后的实验结果。"],
+  "risks_and_counterarguments": [
+    {
+      "risk_or_counterargument": "高意愿用户更可能保存成果。",
+      "response": "把初始意愿分层，并在随机入口实验中比较。",
+      "residual_uncertainty": "实验前无法估计净因果效果。"
+    }
+  ],
+  "recommendations": [
+    {
+      "recommendation_id": "R-01",
+      "statement": "优先开展成果保存与复用路径的两周实验。",
+      "rationale": "行为差异与定性机制共同支持其优先级。",
+      "claim_ids": ["C-03"],
+      "conditions": ["设置提醒对照", "控制初始意愿", "统一回访口径"]
+    }
+  ],
+  "appendices": [
+    {
+      "appendix_id": "A-01",
+      "title": "分组口径与样本限制",
+      "content_refs": ["T-01", "SRC-01", "SRC-02"]
+    }
+  ],
+  "content_deliverable": {
+    "target": "document",
+    "intended_path": "report.docx",
+    "status": "planned"
+  },
+  "format_handoff": {
+    "source_report_ref": "report.v1.valid.json",
+    "protected_claim_ids": ["C-01", "C-02", "C-03"],
+    "protected_caveats": ["非随机分组，不能直接推断因果。", "访谈样本只用于机制探索。"],
+    "visual_opportunities": ["将 T-01 重绘为带 caveat 的组间比较图。"],
+    "allowed_transformations": ["重排版式", "在不改变含义的情况下压缩重复表述"],
+    "forbidden_transformations": ["把相关性改写为因果", "删除访谈样本边界"]
+  },
+  "quality_checks": [
+    {
+      "check": "independent_readability",
+      "status": "pass",
+      "notes": "Executive Summary、正文、方法、反方、来源与附录齐全。"
+    },
+    {
+      "check": "claim_traceability",
+      "status": "pass",
+      "notes": "全部 claim 映射到 finding 与 evidence。"
+    }
+  ]
+}

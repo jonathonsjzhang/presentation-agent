@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
+from presentation_agent.agent_profiles import load_agent_profile
+from presentation_agent.analysis import decide_evidence
 from presentation_agent.capabilities.budget import estimate_tokens
 from presentation_agent.capabilities.compiler import compile_skill_package
 from presentation_agent.input_loader import load_agent_input
@@ -64,7 +66,13 @@ class StepRunner:
           [no P0] → done
     """
 
-    def __init__(self, root: Path, run_dir: Path, data_root: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        run_dir: Path,
+        data_root: Optional[Path] = None,
+        contract_profile: Optional[str] = None,
+    ) -> None:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root or (root / "data")
@@ -72,15 +80,30 @@ class StepRunner:
         self.handoff_dir = run_dir / "handoff"
         self.handoff_dir.mkdir(parents=True, exist_ok=True)
 
-        config = read_json(self.root / "configs" / "agents.json")
-        self.specs = {item["id"]: AgentSpec.from_dict(item) for item in config["agents"]}
-        self.max_revision_rounds = int(config.get("pipeline", {}).get("default_max_revision_rounds", 2))
+        self.agent_profile = load_agent_profile(root, contract_profile)
+        self.contract_profile = self.agent_profile.contract_profile
+        self.config = self.agent_profile.config
+        self.specs = self.agent_profile.specs
 
         state = self._load_state()
+        state_profile = state.get("contract_profile")
+        if state_profile and state_profile != self.contract_profile:
+            raise StepError(
+                f"run_state contract_profile={state_profile!r} 与 Runner "
+                f"profile={self.contract_profile!r} 不一致"
+            )
         agent_id = state.get("agent_id")
         if not agent_id:
             raise StepError("run_state.json 缺少 agent_id，该 stage 可能尚未初始化")
+        if agent_id not in self.specs:
+            raise StepError(
+                f"agent {agent_id!r} 不属于 contract profile "
+                f"{self.contract_profile!r}"
+            )
         self.spec = self.specs[agent_id]
+        self.max_revision_rounds = self.spec.max_revision_rounds or int(
+            self.config.get("pipeline", {}).get("default_max_revision_rounds", 2)
+        )
         self.memory = MemoryStore(root, self.spec.id, data_root=self.data_root)
         compiled_path = self.run_dir / "compiled_skill_package.json"
         if compiled_path.exists():
@@ -111,6 +134,7 @@ class StepRunner:
         state = self._load_state()
         return {
             "agent_id": state.get("agent_id"),
+            "contract_profile": self.contract_profile,
             "agent_name": state.get("agent_name"),
             "stage": state.get("stage"),
             "current_step": state.get("current_step"),
@@ -131,6 +155,14 @@ class StepRunner:
 
         if step == "done":
             raise StepError("stage 已完成，无需 prepare")
+        if step == "evidence_completed":
+            return self._prepare_gen(state)
+        if step == "awaiting_evidence_output":
+            subtask_dir = Path(state["evidence_subtask_dir"])
+            raise StepError(
+                "已处于 awaiting_evidence_output，指令文件 "
+                f"{subtask_dir / 'handoff' / 'instruction_gen.md'} 已就绪，请先 commit"
+            )
         if step in ("awaiting_gen_output", "awaiting_review_output", "awaiting_revise_output"):
             instr_path = self._instruction_path_for(step)
             raise StepError(
@@ -138,6 +170,10 @@ class StepRunner:
             )
 
         if step in ("init", "gen_completed"):
+            if step == "init" and self._uses_analysis_evidence_runtime():
+                evidence_step = self._prepare_analysis_evidence(state)
+                if evidence_step is not None:
+                    return evidence_step
             return self._prepare_gen(state)
         if step == "review_completed":
             if state.get("p0_open"):
@@ -151,6 +187,7 @@ class StepRunner:
         step = state.get("current_step")
 
         handlers = {
+            "awaiting_evidence_output": self._commit_analysis_evidence,
             "awaiting_gen_output": self._commit_gen,
             "awaiting_review_output": self._commit_review,
             "awaiting_revise_output": self._commit_revise,
@@ -169,6 +206,114 @@ class StepRunner:
         return {"status": "aborted", "agent_id": self.spec.id}
 
     # ---- internal: prepare --------------------------------------------------
+
+    def _uses_analysis_evidence_runtime(self) -> bool:
+        return self.contract_profile == "v0_3" and self.spec.id == "analysis"
+
+    def _prepare_analysis_evidence(
+        self, state: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Run the deterministic Analysis readiness gate exactly once.
+
+        The dispatch marker is persisted before control returns to the host, so
+        recreating StepRunner after an interruption cannot emit a second spawn.
+        """
+
+        input_data = self._load_input(state)
+        catalog, catalog_ref = self._find_evidence_catalog(input_data)
+        raw_materials = self._find_raw_materials(input_data)
+        decision = decide_evidence(
+            evidence_catalog=catalog,
+            raw_materials=raw_materials,
+            evidence_catalog_ref=catalog_ref,
+        )
+        state["evidence_decision"] = decision.to_dict()
+
+        if not decision.should_invoke:
+            if catalog is not None:
+                self._inject_evidence_catalog(
+                    state, input_data, catalog, catalog_ref or "input:evidence_catalog"
+                )
+            state["current_step"] = "evidence_completed"
+            self._write_state(
+                state, "evidence_decision", f"Evidence: {decision.action.value}"
+            )
+            return None
+
+        from presentation_agent.spawn import prepare_evidence_subtask
+
+        prepared = prepare_evidence_subtask(
+            root=self.root,
+            analysis_dir=self.run_dir,
+            data_root=self.data_root,
+            raw_materials=raw_materials,
+            analysis_input=input_data,
+        )
+        state["evidence_spawn_count"] = 1
+        state["evidence_subtask_dir"] = prepared["subtask_dir"]
+        state["current_step"] = "awaiting_evidence_output"
+        self._write_state(
+            state,
+            "prepare_evidence",
+            "Evidence 子任务已派发；单轮 invocation=1",
+        )
+        return prepared
+
+    def _commit_analysis_evidence(self, state: dict[str, Any]) -> dict[str, Any]:
+        from presentation_agent.spawn import commit_evidence_subtask
+
+        subtask_dir = Path(state["evidence_subtask_dir"])
+        catalog = commit_evidence_subtask(
+            root=self.root,
+            subtask_dir=subtask_dir,
+            data_root=self.data_root,
+        )
+        catalog_ref = str(subtask_dir / "evidence_catalog.json")
+        input_data = self._load_input(state)
+        self._inject_evidence_catalog(state, input_data, catalog, catalog_ref)
+        state["current_step"] = "evidence_completed"
+        state["evidence_catalog_ref"] = catalog_ref
+        self._write_state(
+            state, "commit_evidence", "Evidence Catalog 已校验并注入 Analysis 输入"
+        )
+        return self._prepare_gen(state)
+
+    @staticmethod
+    def _find_evidence_catalog(
+        input_data: dict[str, Any],
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        direct = input_data.get("evidence_catalog")
+        if isinstance(direct, dict):
+            return direct, input_data.get("evidence_catalog_ref")
+        for artifact in input_data.get("existing_artifacts") or []:
+            if not isinstance(artifact, dict):
+                continue
+            candidate = artifact.get("artifact") or artifact.get("content") or artifact
+            if isinstance(candidate, dict) and candidate.get("schema") == "evidence_catalog.v1":
+                return candidate, artifact.get("ref") or artifact.get("path")
+        return None, None
+
+    @staticmethod
+    def _find_raw_materials(input_data: dict[str, Any]) -> list[Any]:
+        # An inventory/ref is metadata, not source content.  Only resolved raw
+        # material payloads trigger Evidence.
+        for key in ("raw_materials", "materials"):
+            value = input_data.get(key)
+            if isinstance(value, list) and value:
+                return value
+        return []
+
+    def _inject_evidence_catalog(
+        self,
+        state: dict[str, Any],
+        input_data: dict[str, Any],
+        catalog: dict[str, Any],
+        catalog_ref: str,
+    ) -> None:
+        input_data["evidence_catalog"] = catalog
+        input_data["evidence_catalog_ref"] = catalog_ref
+        input_path = Path(state["input_path"])
+        write_json(input_path, input_data)
 
     def _prepare_gen(self, state: dict[str, Any]) -> dict[str, Any]:
         context = self._build_context()
@@ -422,7 +567,6 @@ class StepRunner:
         artifact_path = self.run_dir / f"draft_round_{round_idx}.json"
         artifact = read_json(artifact_path)
 
-        write_json(self.run_dir / "artifact.json", artifact)
         review_path_latest = self.run_dir / f"review_round_{round_idx}.json"
         if review_path_latest.exists():
             review_json = read_json(review_path_latest)
@@ -430,16 +574,51 @@ class StepRunner:
             review_json = {"objections": []}
         write_json(self.run_dir / "review.json", review_json)
 
-        state["status"] = "pending_human_review"
+        analysis_blocked = self._analysis_is_blocked(artifact)
+        render_result = self._render_deliverable(artifact)
+        report_render_blocked = (
+            self._uses_report_content_renderer()
+            and not self._report_render_succeeded(render_result)
+        )
+        format_render_blocked = (
+            self._uses_v03_format_renderer()
+            and not self._format_render_succeeded(render_result)
+        )
+        if self._uses_report_content_renderer():
+            self._update_report_content_deliverable(artifact, render_result)
+        if self._uses_v03_format_renderer():
+            self._update_v03_format_render_result(artifact, render_result)
+        # Keep the semantic report.v1 artifact even when DOCX rendering fails;
+        # it is the source of truth for diagnostics and retry.
+        write_json(self.run_dir / "artifact.json", artifact)
+
+        state["status"] = (
+            "blocked"
+            if analysis_blocked or report_render_blocked or format_render_blocked
+            else "pending_human_review"
+        )
         state["current_step"] = "done"
-        state["next_action"] = "await_human_decision"
-        self._write_state(state, "finalize", "stage 完成，等待人工评审")
+        state["next_action"] = (
+            "return_blocking_gap_to_manager"
+            if analysis_blocked
+            else "retry_report_docx_render"
+            if report_render_blocked
+            else "retry_format_render"
+            if format_render_blocked
+            else "await_human_decision"
+        )
+        finalize_note = (
+            "Report DOCX 渲染失败，stage blocked"
+            if report_render_blocked
+            else "Format 正式材料渲染失败，stage blocked"
+            if format_render_blocked
+            else "stage 完成，等待人工评审"
+        )
+        self._write_state(state, "finalize", finalize_note)
 
         global_writes_applied = self._apply_global_writes(artifact)
 
         self._write_human_review(artifact, review_json)
-
-        render_result = self._render_deliverable(artifact)
 
         preview = self._artifact_preview(artifact)
         review_summary = self._review_summary(review_json)
@@ -451,7 +630,7 @@ class StepRunner:
 
         result = {
             "step": "done",
-            "status": "pending_human_review",
+            "status": state["status"],
             "agent_id": self.spec.id,
             "agent_name": self.spec.name,
             "stage": self.spec.stage,
@@ -468,9 +647,120 @@ class StepRunner:
                 result["rendered_files"] = [render_result.output_path]
         return result
 
-    def _render_deliverable(self, artifact: dict[str, Any]):
-        """Render page_filling/format artifacts into real deliverable files.
+    def _analysis_is_blocked(self, artifact: dict[str, Any]) -> bool:
+        if not self._uses_analysis_evidence_runtime():
+            return False
+        readiness = artifact.get("material_readiness") or {}
+        evidence = artifact.get("evidence_execution") or {}
+        return (
+            readiness.get("status") == "blocked"
+            or evidence.get("blocking_impact") == "blocking"
+        )
 
+    def _uses_report_content_renderer(self) -> bool:
+        return self.contract_profile == "v0_3" and self.spec.id == "report"
+
+    def _uses_v03_format_renderer(self) -> bool:
+        return self.contract_profile == "v0_3" and self.spec.id == "format"
+
+    @staticmethod
+    def _report_render_succeeded(render_result: Any) -> bool:
+        return bool(
+            render_result is not None
+            and render_result.status == "rendered"
+            and render_result.output_path
+            and str(render_result.output_path).lower().endswith(".docx")
+        )
+
+    def _update_report_content_deliverable(
+        self, artifact: dict[str, Any], render_result: Any
+    ) -> None:
+        deliverable = artifact.setdefault("content_deliverable", {})
+        expected_path = self.run_dir / "report.docx"
+        deliverable["intended_path"] = (
+            render_result.output_path
+            if self._report_render_succeeded(render_result)
+            else str(expected_path)
+        )
+        if self._report_render_succeeded(render_result):
+            deliverable["status"] = "rendered"
+            deliverable.pop("error", None)
+        else:
+            deliverable["status"] = "error"
+            deliverable["error"] = (
+                render_result.detail
+                if render_result is not None and render_result.detail
+                else "Report DOCX renderer did not return a rendered DOCX file"
+            )
+
+    @staticmethod
+    def _format_render_succeeded(render_result: Any) -> bool:
+        return bool(
+            render_result is not None
+            and render_result.status == "rendered"
+            and render_result.output_path
+        )
+
+    def _update_v03_format_render_result(
+        self, artifact: dict[str, Any], render_result: Any
+    ) -> None:
+        target = str(artifact.get("delivery_target") or "")
+        succeeded = self._format_render_succeeded(render_result)
+        result = artifact.setdefault("render_result", {})
+        result.update(
+            {
+                "status": "rendered" if succeeded else "error",
+                "target": target,
+                "output_path": (
+                    str(render_result.output_path)
+                    if succeeded
+                    else str(result.get("output_path") or "")
+                ),
+                "unit_count": int(
+                    render_result.unit_count
+                    if render_result is not None
+                    else len(artifact.get("delivery_units") or [])
+                ),
+                "warnings": list(
+                    render_result.warnings if render_result is not None else []
+                ),
+            }
+        )
+        manifest = artifact.setdefault(
+            "artifact_manifest", {"target": target, "deliverables": []}
+        )
+        manifest["target"] = target
+        deliverables = manifest.setdefault("deliverables", [])
+        if not deliverables:
+            deliverables.append(
+                {
+                    "file_type": {"document": "docx", "ppt": "pptx", "html": "html"}.get(
+                        target, target
+                    ),
+                    "intended_path": result["output_path"],
+                    "status": "rendered" if succeeded else "error",
+                }
+            )
+        for item in deliverables:
+            item["status"] = "rendered" if succeeded else "error"
+            if succeeded:
+                item["intended_path"] = str(render_result.output_path)
+                item.pop("blocking_reason", None)
+            else:
+                item["blocking_reason"] = (
+                    render_result.detail
+                    if render_result is not None and render_result.detail
+                    else "Format renderer did not produce a deliverable"
+                )
+        for asset in artifact.get("visual_assets") or []:
+            if asset.get("render_status") == "skipped":
+                continue
+            asset["render_status"] = "rendered" if succeeded else "error"
+
+    def _render_deliverable(self, artifact: dict[str, Any]):
+        """Render report or legacy page_filling/format deliverable files.
+
+        - v0.3 report: renders semantic `report.v1` into the content DOCX.
         - page_filling (agent4): renders `artifact["draft_material"]` at draft
           fidelity (wireframe-level PPT/HTML/docx).
         - format (agent5): renders the artifact itself at final fidelity
@@ -480,6 +770,50 @@ class StepRunner:
         render. Missing optional deps never crash: the RenderResult carries a
         `skipped_missing_dep` status instead.
         """
+        if self._uses_report_content_renderer():
+            try:
+                from presentation_agent.renderers.report_docx import (
+                    render_report_docx,
+                )
+
+                return render_report_docx(
+                    artifact,
+                    self.run_dir,
+                    file_stem="report",
+                )
+            except Exception as exc:
+                from presentation_agent.renderers.base import RenderResult
+
+                return RenderResult(
+                    status="error",
+                    fmt="document",
+                    fidelity="content",
+                    detail=str(exc),
+                )
+        if self._uses_v03_format_renderer():
+            try:
+                from presentation_agent.renderers import render_material
+
+                input_data = self._load_input(self._load_state())
+                source_report = self._source_report_from_input(input_data)
+                return render_material(
+                    artifact,
+                    self.run_dir,
+                    fidelity="formatted",
+                    file_stem="report_formatted",
+                    expected_format=str(artifact.get("delivery_target") or ""),
+                    selected_capabilities=self.skill_package.selected_capabilities,
+                    source_report=source_report,
+                )
+            except Exception as exc:
+                from presentation_agent.renderers.base import RenderResult
+
+                return RenderResult(
+                    status="error",
+                    fmt=str(artifact.get("delivery_target") or "unknown"),
+                    fidelity="formatted",
+                    detail=str(exc),
+                )
         if self.spec.id == "page_filling":
             material = artifact.get("draft_material")
             fidelity = "draft"
@@ -524,6 +858,25 @@ class StepRunner:
             return RenderResult(status="error", fmt=fmt, fidelity=fidelity, detail=str(exc))
 
     @staticmethod
+    def _source_report_from_input(input_data: dict[str, Any]) -> dict[str, Any] | None:
+        if input_data.get("schema") == "report.v1":
+            return input_data
+        direct = input_data.get("report")
+        if isinstance(direct, dict) and direct.get("schema") == "report.v1":
+            return direct
+        inputs = input_data.get("inputs")
+        if isinstance(inputs, dict):
+            for value in inputs.values():
+                if not isinstance(value, dict):
+                    continue
+                if value.get("schema") == "report.v1":
+                    return value
+                inline = value.get("inline_fields")
+                if isinstance(inline, dict) and inline.get("schema") == "report.v1":
+                    return inline
+        return None
+
+    @staticmethod
     def _safe_stem(topic: str) -> str:
         import re
 
@@ -548,8 +901,7 @@ class StepRunner:
             self.spec.state_contract.get("generation_memory_dimensions")
             or self.spec.memory_dimensions
         )
-        config = read_json(self.root / "configs" / "agents.json", default={})
-        limit = int(config.get("state_policy", {}).get("memory_retrieval_limit", 6))
+        limit = int(self.config.get("state_policy", {}).get("memory_retrieval_limit", 6))
         retrieved = MemoryRetriever(self.memory).retrieve(
             spec=self.spec,
             input_data=input_data,
@@ -1046,22 +1398,20 @@ class PipelineStepper:
     host via StepRunner.
     """
 
-    def __init__(self, root: Path, run_dir: Path, data_root: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        run_dir: Path,
+        data_root: Optional[Path] = None,
+        contract_profile: Optional[str] = None,
+    ) -> None:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root or (root / "data")
-        config = read_json(self.root / "configs" / "agents.json")
-        self.specs = {item["id"]: AgentSpec.from_dict(item) for item in config["agents"]}
-        self.ordered = PipelineStepper._ordered_specs(config, self.specs)
-
-    @staticmethod
-    def _ordered_specs(config: dict[str, Any], specs: dict[str, AgentSpec]) -> list[AgentSpec]:
-        declared = config.get("pipeline", {}).get("stages")
-        if declared:
-            ordered = [specs[sid] for sid in declared if sid in specs]
-            if ordered:
-                return ordered
-        return sorted(specs.values(), key=lambda s: s.stage)
+        self.agent_profile = load_agent_profile(root, contract_profile)
+        self.contract_profile = self.agent_profile.contract_profile
+        self.specs = self.agent_profile.specs
+        self.ordered = self.agent_profile.ordered_specs
 
     def init_pipeline(self, brief_path: Path) -> dict[str, Any]:
         """Create stage 1 run_dir with input pointing at brief_path."""
@@ -1069,6 +1419,7 @@ class PipelineStepper:
         # write a pipeline-level state file
         pipeline_state = {
             "pipeline_id": self.run_dir.name,
+            "contract_profile": self.contract_profile,
             "current_stage": 1,
             "status": "running",
             "created_at": now_iso(),
@@ -1111,6 +1462,7 @@ class PipelineStepper:
             })
         return {
             "pipeline_id": ps.get("pipeline_id", self.run_dir.name),
+            "contract_profile": ps.get("contract_profile", self.contract_profile),
             "current_stage": ps.get("current_stage", 1),
             "status": ps.get("status"),
             "stages": stages,
@@ -1123,6 +1475,7 @@ class PipelineStepper:
 
         run_state = {
             "run_id": f"{spec.id}-{now_iso().replace(':', '').replace('+', 'Z')}",
+            "contract_profile": self.contract_profile,
             "agent_id": spec.id,
             "agent_name": spec.name,
             "stage": spec.stage,

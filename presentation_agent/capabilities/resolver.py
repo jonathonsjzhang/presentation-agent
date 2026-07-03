@@ -5,6 +5,7 @@ from presentation_agent.capabilities.profile import ReportProfile
 
 
 def resolve_capabilities(agent_id: str, profile: ReportProfile) -> CapabilitySelection:
+    format_capability = f"format.{profile.delivery_target}"
     return CapabilitySelection(
         agent_id=agent_id,
         audience=profile.audience,
@@ -14,6 +15,6 @@ def resolve_capabilities(agent_id: str, profile: ReportProfile) -> CapabilitySel
             f"core.{agent_id}",
             f"audience.{profile.audience}",
             f"report.{profile.report_type}",
-            f"format.{profile.output_format}",
+            format_capability,
         ),
     )

@@ -1,0 +1,16 @@
+{
+  "schema": "e2e_rubric.v1",
+  "version": "v0.3",
+  "name": "v0.3 完整报告 E2E 评测",
+  "scope": "评价从 raw materials 到完整、可独立阅读战略分析报告的质量。",
+  "scale": {"min": 0, "max": 5, "step": 0.5},
+  "release_policy": {"formal_ready_threshold": 4.0, "internal_discussion_threshold": 3.0, "minimum_dimension_score": 3.0, "hard_gate_required": true},
+  "artifact_type": "report",
+  "dimensions": [
+    {"id": "analysis_depth", "name": "分析深度", "judge_role": "content", "weight": 0.25, "description": "发现、so what、反证、替代解释和置信度是否完整"},
+    {"id": "argument_integrity", "name": "论证完整性", "judge_role": "content", "weight": 0.25, "description": "Executive Summary、message pyramid 与章节论证是否一致"},
+    {"id": "evidence_traceability", "name": "证据追溯", "judge_role": "content", "weight": 0.25, "description": "关键主张是否可追溯到 evidence，并保留 caveat"},
+    {"id": "standalone_readability", "name": "独立可读性", "judge_role": "visual", "weight": 0.25, "description": "报告是否完整、严肃且无需幻灯片即可独立阅读", "format_guidance": {"document": "逐页检查标题层级、图表、表格、分页、来源与 caveat。"}}
+  ],
+  "hard_gates": ["no_unsupported_core_claim", "no_missing_blocking_caveat", "report_v1_schema_valid"]
+}

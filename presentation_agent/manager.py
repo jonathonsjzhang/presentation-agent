@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from presentation_agent.capabilities.profile import normalize_report_profile
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE, load_agent_profile
 from presentation_agent.capabilities.registry import CapabilityRegistry
 from presentation_agent.context import ContextAssembler
 from presentation_agent.cross_review import CrossStageReviewer
@@ -32,10 +33,17 @@ MANAGER_MEMORY_DIMENSIONS = [
 class ManagerAgentRuntime:
     """Build and validate host-executed Manager Agent turns."""
 
-    def __init__(self, root: Path, run_dir: Path, data_root: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        run_dir: Path,
+        data_root: Path,
+        contract_profile: str = LEGACY_CONTRACT_PROFILE,
+    ) -> None:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root
+        self.contract_profile = contract_profile
         self.manager_dir = run_dir / "manager"
         self.handoff_dir = self.manager_dir / "handoff"
         self.handoff_dir.mkdir(parents=True, exist_ok=True)
@@ -62,12 +70,33 @@ class ManagerAgentRuntime:
             json.dumps(context, ensure_ascii=False, indent=2),
             "```",
         ]
+        if self.contract_profile == "v0_3":
+            lines.extend([
+                "",
+                "## v0.3 Schema 优先级",
+                "",
+                "下方兼容性“必填字段速查”描述的是 legacy.v0_2，v0.3 必须忽略其中的 "
+                "`output_format`、`evidence_inventory_policy` 与旧 Worker ID，"
+                "严格以本指令末尾 JSON Schema、report_charter.v2 和 task_packet.v2 为准。",
+            ])
         if memory_guidance:
             lines.extend([
                 "",
                 "## 本轮召回的 Manager Memory",
                 "",
                 *[f"- {item}" for item in memory_guidance],
+            ])
+        if self.contract_profile == "v0_3":
+            lines.extend([
+                "",
+                "## v0.3 文档优先约束",
+                "",
+                "- 固定主链：analysis → storyline → report → format。",
+                "- Evidence 不是顶层 Worker；由 Analysis 按确定性规则内部调用。",
+                "- 默认 delivery_targets=[\"document\"]；主链先且只生成 document。",
+                "- document 完成后进入 delivery options gate，再询问是否转译 PPT/HTML，或生成 QA/逐字稿。",
+                "- PPT、HTML、QA 与逐字稿不得进入默认初始计划。",
+                "- planning 使用 report_charter.v2 与 task_packet.v2。",
             ])
         lines.extend([
             "",
@@ -150,10 +179,20 @@ class ManagerAgentRuntime:
 
         action = decision.get("action")
         if phase == "planning":
+            charter_schema = (
+                "report_charter.v2"
+                if self.contract_profile == "v0_3"
+                else "report_charter.v1"
+            )
+            packet_schema = (
+                "task_packet.v2"
+                if self.contract_profile == "v0_3"
+                else "task_packet.v1"
+            )
             for key, schema_name in (
-                ("report_charter", "report_charter.v1"),
+                ("report_charter", charter_schema),
                 ("execution_plan", "execution_plan.v1"),
-                ("task_packet", "task_packet.v1"),
+                ("task_packet", packet_schema),
             ):
                 value = decision.get(key)
                 if not isinstance(value, dict):
@@ -165,10 +204,27 @@ class ManagerAgentRuntime:
             charter = decision.get("report_charter")
             plan = decision.get("execution_plan")
             packet = decision.get("task_packet")
-            if isinstance(charter, dict) and isinstance(packet, dict):
+            if (
+                self.contract_profile != "v0_3"
+                and isinstance(charter, dict)
+                and isinstance(packet, dict)
+            ):
                 errors.extend(self._policy_inheritance_errors(charter, packet))
-            if isinstance(charter, dict) and isinstance(plan, dict):
+            if (
+                self.contract_profile != "v0_3"
+                and isinstance(charter, dict)
+                and isinstance(plan, dict)
+            ):
                 errors.extend(self._evidence_route_errors(charter, plan, packet))
+            if (
+                self.contract_profile == "v0_3"
+                and isinstance(charter, dict)
+                and charter.get("delivery_targets") != ["document"]
+            ):
+                errors.append(
+                    "$.report_charter.delivery_targets: v0.3 initial plan must be "
+                    "['document']; PPT/HTML are offered after document delivery"
+                )
         else:
             report = decision.get("acceptance_report")
             if not isinstance(report, dict):
@@ -182,11 +238,16 @@ class ManagerAgentRuntime:
                 if not isinstance(packet, dict):
                     errors.append(f"$: {action} decision missing object 'task_packet'")
                 else:
-                    errors.extend(validate(packet, self._schema("task_packet.v1"), "$.task_packet"))
+                    packet_schema = (
+                        "task_packet.v2"
+                        if self.contract_profile == "v0_3"
+                        else "task_packet.v1"
+                    )
+                    errors.extend(validate(packet, self._schema(packet_schema), "$.task_packet"))
                     charter = read_json(
                         self.run_dir / "report_charter.json", default={}
                     )
-                    if isinstance(charter, dict):
+                    if isinstance(charter, dict) and self.contract_profile != "v0_3":
                         errors.extend(self._policy_inheritance_errors(charter, packet))
             if action == "complete" and phase != "acceptance":
                 errors.append("$.action: complete is only valid during acceptance")
@@ -270,21 +331,16 @@ class WorkerExecutor:
         run_dir: Path,
         data_root: Path,
         spawn_adapter: Optional[str] = None,
+        contract_profile: str = LEGACY_CONTRACT_PROFILE,
     ) -> None:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root
         self.spawn_adapter = build_spawn_adapter(root, override=spawn_adapter)
-        config = read_json(root / "configs" / "agents.json", default={})
-        self.context_assembler = ContextAssembler(root)
-        pipeline_config = config.get("pipeline", {})
-        active = set(pipeline_config.get("stages", []))
-        active.update(pipeline_config.get("optional_workers", []))
-        self.specs = {
-            item["id"]: AgentSpec.from_dict(item)
-            for item in config.get("agents", [])
-            if item.get("id") in active
-        }
+        self.contract_profile = contract_profile
+        profile = load_agent_profile(root, contract_profile)
+        self.context_assembler = ContextAssembler(root, contract_profile=contract_profile)
+        self.specs = dict(profile.specs)
 
     def capabilities(self) -> list[dict[str, Any]]:
         return [
@@ -379,6 +435,7 @@ class WorkerExecutor:
             "history": [],
             "created_at": now_iso(),
             "updated_at": now_iso(),
+            "contract_profile": self.contract_profile,
         }
         write_json(task_dir / "run_state.json", run_state)
         return {
@@ -394,7 +451,10 @@ class WorkerExecutor:
 
     def prepare(self, task_dir: Path) -> dict[str, Any]:
         instruction = StepRunner(
-            self.root, task_dir, data_root=self.data_root
+            self.root,
+            task_dir,
+            data_root=self.data_root,
+            contract_profile=self.contract_profile,
         ).prepare()
         instruction["actor"] = "worker"
 
@@ -464,6 +524,7 @@ class ManagerOrchestrator:
         run_dir: Path,
         data_root: Optional[Path] = None,
         spawn_adapter: Optional[str] = None,
+        contract_profile: Optional[str] = None,
     ) -> None:
         self.root = root
         self.run_dir = run_dir
@@ -473,7 +534,15 @@ class ManagerOrchestrator:
         self.charter_path = run_dir / "report_charter.json"
         self.decisions_path = run_dir / "manager_decisions.jsonl"
         self.raw_brief_path = run_dir / "raw_brief.json"
-        self.agent = ManagerAgentRuntime(root, run_dir, self.data_root)
+        persisted_state = read_json(self.state_path, default={}) if self.state_path.exists() else {}
+        self.contract_profile = str(
+            contract_profile
+            or persisted_state.get("contract_profile")
+            or LEGACY_CONTRACT_PROFILE
+        )
+        self.agent = ManagerAgentRuntime(
+            root, run_dir, self.data_root, contract_profile=self.contract_profile
+        )
         persisted_adapter = None
         if self.state_path.exists():
             persisted_adapter = read_json(self.state_path, default={}).get("spawn_adapter")
@@ -482,6 +551,7 @@ class ManagerOrchestrator:
             run_dir,
             self.data_root,
             spawn_adapter=spawn_adapter or persisted_adapter,
+            contract_profile=self.contract_profile,
         )
         if self.state_path.exists() and spawn_adapter:
             state = read_json(self.state_path, default={})
@@ -498,6 +568,7 @@ class ManagerOrchestrator:
             "version": "manager_state.v2",
             "run_id": self.run_dir.name,
             "mode": "manager_controlled",
+            "contract_profile": self.contract_profile,
             "status": "running",
             "current_actor": "manager",
             "manager_phase": "brief_confirmation",
@@ -532,14 +603,18 @@ class ManagerOrchestrator:
                 missing.append("topic（汇报主题）")
             if not brief.get("audience"):
                 missing.append("audience（汇报对象）")
-            if not brief.get("output_format"):
+            if self.contract_profile != "v0_3" and not brief.get("output_format"):
                 missing.append("output_format（交付格式，如 ppt/html/docx）")
             # Available workers for user to choose from
-            available_workers = [
-                "evidence_harvester", "argument_synthesis",
-                "storyline_design", "page_filling", "format",
-                "qa_preparation", "speaker_script"
-            ]
+            available_workers = (
+                ["analysis", "storyline", "report", "format"]
+                if self.contract_profile == "v0_3"
+                else [
+                    "evidence_harvester", "argument_synthesis",
+                    "storyline_design", "page_filling", "format",
+                    "qa_preparation", "speaker_script"
+                ]
+            )
             selected_workers = brief.get("selected_workers")
             if not selected_workers:
                 selected_workers = (
@@ -568,7 +643,12 @@ class ManagerOrchestrator:
             task_dir = self.current_worker_dir(state)
             if task_dir is None:
                 raise StepError("Manager state 缺少当前 Worker task_dir")
-            runner = StepRunner(self.root, task_dir, data_root=self.data_root)
+            runner = StepRunner(
+                self.root,
+                task_dir,
+                data_root=self.data_root,
+                contract_profile=self.contract_profile,
+            )
             status = runner.status()
             if str(status.get("current_step", "")).startswith("awaiting_"):
                 instruction = {
@@ -772,6 +852,26 @@ class ManagerOrchestrator:
                 "accepted_artifacts": state.get("accepted_artifacts", []),
                 "present_to_user": decision.get("user_message") or "汇报项目已完成并通过最终确认。",
             }
+        if gate == "delivery_options":
+            state["status"] = "completed"
+            state["current_actor"] = "human"
+            state["human_gate"] = None
+            state["pending_decision"] = None
+            state["completed_at"] = now_iso()
+            self._save_state(state)
+            self._append_decision(
+                "complete",
+                "Document delivery completed; user skipped optional translations and extensions",
+                {},
+            )
+            return {
+                "actor": "manager",
+                "step": "completed",
+                "status": "completed",
+                "run_dir": str(self.run_dir),
+                "accepted_artifacts": state.get("accepted_artifacts", []),
+                "present_to_user": "文档交付已完成；本次未继续转译 PPT/HTML，也未生成 QA list 或逐字稿。",
+            }
         if gate == "decision":
             packet = decision.get("task_packet")
             if isinstance(packet, dict):
@@ -801,6 +901,7 @@ class ManagerOrchestrator:
             "worker_result": "acceptance",
             "decision": "acceptance",
             "final": "acceptance",
+            "delivery_options": "acceptance",
         }
         state["manager_phase"] = _phase_after_feedback.get(gate, "acceptance")
         state["manager_step"] = "init"
@@ -823,7 +924,10 @@ class ManagerOrchestrator:
         task_dir = self.current_worker_dir(state)
         if task_dir and (task_dir / "run_state.json").exists():
             worker_status = StepRunner(
-                self.root, task_dir, data_root=self.data_root
+                self.root,
+                task_dir,
+                data_root=self.data_root,
+                contract_profile=self.contract_profile,
             ).status()
         return {
             "state": state,
@@ -973,8 +1077,25 @@ class ManagerOrchestrator:
             )
         state["current_actor"] = "human"
         state["pending_decision"] = decision
-        state["human_gate"] = "final" if action == "complete" else "decision"
-        state["status"] = "awaiting_final_approval" if action == "complete" else "awaiting_human_decision"
+        if (
+            action == "complete"
+            and self.contract_profile == "v0_3"
+            and isinstance(task, dict)
+            and task.get("agent_id") == "format"
+        ):
+            state["human_gate"] = "delivery_options"
+            state["status"] = "awaiting_delivery_option_selection"
+            decision["user_message"] = (
+                "文档已完成。是否继续转译为 PPT 或 HTML，或生成 QA list / 逐字稿？"
+                "直接批准表示不追加其他产物并完成本次任务。"
+            )
+        else:
+            state["human_gate"] = "final" if action == "complete" else "decision"
+            state["status"] = (
+                "awaiting_final_approval"
+                if action == "complete"
+                else "awaiting_human_decision"
+            )
         self._save_state(state)
         return self._human_gate_result(state)
 
@@ -1046,6 +1167,7 @@ class ManagerOrchestrator:
         registry = CapabilityRegistry(self.root)
         return {
             "schema": "manager_context.v1",
+            "contract_profile": self.contract_profile,
             "phase": phase,
             "event": event,
             "run_id": state.get("run_id"),
@@ -1058,7 +1180,8 @@ class ManagerOrchestrator:
                 "atomic_capability_count": len(registry.inventory()),
             },
             "recommended_routes": self._recommended_routes(
-                profile.get("report_type", "deep_dive")
+                profile.get("report_type", "deep_dive"),
+                contract_profile=self.contract_profile,
             ),
             "compiled_manifests": [
                 {
@@ -1088,7 +1211,21 @@ class ManagerOrchestrator:
         }
 
     @staticmethod
-    def _recommended_routes(report_type: str) -> dict[str, Any]:
+    def _recommended_routes(
+        report_type: str,
+        contract_profile: str = LEGACY_CONTRACT_PROFILE,
+    ) -> dict[str, Any]:
+        if contract_profile == "v0_3":
+            return {
+                "default": ["analysis", "storyline", "report", "format"],
+                "optional_after_document": [
+                    "format(ppt)",
+                    "format(html)",
+                    "qa_preparation",
+                    "speaker_script",
+                ],
+                "internal_subagents": {"analysis": ["evidence_harvester"]},
+            }
         routes = {
             "deep_dive": {
                 "default": [
@@ -1207,6 +1344,7 @@ class ManagerOrchestrator:
         decision_goal = str(brief.get("decision_goal", "（未指定）"))
         report_type = str(brief.get("report_type", "deep_dive"))
         output_format = str(brief.get("output_format", "ppt"))
+        delivery_targets = brief.get("delivery_targets") or []
         constraints = brief.get("constraints") or []
         page_limit = next(
             (c for c in constraints if "页" in str(c)), ""
@@ -1221,6 +1359,9 @@ class ManagerOrchestrator:
             "format": "材料可视化",
             "qa_preparation": "QA 梳理",
             "speaker_script": "逐字稿生成",
+            "analysis": "分析",
+            "storyline": "故事线",
+            "report": "报告产出",
         }
         pipeline = " → ".join(
             f"`{w}` {worker_labels.get(w, w)}" for w in selected_workers
@@ -1235,7 +1376,7 @@ class ManagerOrchestrator:
             f"| **汇报对象** | {audience} |",
             f"| **决策目标** | {decision_goal} |",
             f"| **报告类型** | {report_type} |",
-            f"| **输出格式** | {output_format} |",
+            f"| **输出格式** | {', '.join(delivery_targets) if delivery_targets else output_format} |",
         ]
         if page_limit:
             lines.append(f"| **页数约束** | {page_limit} |")
@@ -1270,6 +1411,7 @@ class ManagerOrchestrator:
             "plan": "请确认 Manager 的任务定义和执行计划。",
             "worker_result": "当前步骤已完成，请查看中间产物。如需继续，确认后进入下一步。",
             "final": "所有任务已完成，请确认最终交付物。",
+            "delivery_options": "文档已完成。请选择是否转译 PPT/HTML 或生成 QA list/逐字稿；直接批准表示结束。",
             "decision": "请确认 Manager 的决策。",
         }.get(gate, "请确认。")
 
@@ -1325,6 +1467,23 @@ class ManagerOrchestrator:
             result["acceptance_report"] = decision.get("acceptance_report")
             result["next_task"] = decision.get("task_packet", {}).get("agent_id")
             result["accepted_artifacts"] = state.get("accepted_artifacts", [])
+            result["next_action"] = "report_approve"
+
+        elif gate == "delivery_options":
+            result["accepted_artifacts"] = state.get("accepted_artifacts", [])
+            raw_brief = read_json(self.raw_brief_path, default={})
+            result["requested_followup_targets"] = (
+                raw_brief.get("requested_followup_targets", [])
+                if isinstance(raw_brief, dict)
+                else []
+            )
+            result["delivery_options"] = [
+                "format:ppt",
+                "format:html",
+                "qa_preparation",
+                "speaker_script",
+                "skip",
+            ]
             result["next_action"] = "report_approve"
 
         elif gate in ("final", "decision"):

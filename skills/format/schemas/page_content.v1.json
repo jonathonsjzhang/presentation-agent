@@ -1,0 +1,72 @@
+{
+  "schema": "page_content.v1",
+  "type": "object",
+  "required": [
+    "agent_id",
+    "schema",
+    "topic",
+    "audience",
+    "report_type",
+    "output_format",
+    "pages",
+    "global_sources",
+    "global_data_gaps",
+    "format_handoff_summary"
+  ],
+  "properties": {
+    "agent_id": { "const": "page_filling" },
+    "schema": { "const": "page_content.v1" },
+    "topic": { "type": "string" },
+    "audience": { "type": "string", "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"] },
+    "report_type": { "type": "string", "enum": ["deep_dive", "business_progress", "quick_sync"] },
+    "output_format": { "type": "string", "enum": ["document", "ppt", "html"] },
+    "storyline_trace": { "type": "object" },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "page_no",
+          "unit_type",
+          "title",
+          "source_storyline_title",
+          "page_type",
+          "page_brief",
+          "page_takeaway",
+          "proof_chain",
+          "content_blocks",
+          "visual_plan",
+          "sources",
+          "data_gaps",
+          "appendix_candidates",
+          "format_handoff_notes"
+        ],
+        "properties": {
+          "page_no": { "type": "integer" },
+          "unit_type": { "type": "string", "enum": ["page", "section", "module"] },
+          "title": { "type": "string" },
+          "source_storyline_title": { "type": "string" },
+          "reason_for_title_change": { "type": "string" },
+          "key_question": { "type": "string" },
+          "role_in_story": { "type": "string" },
+          "tag": { "type": "string" },
+          "page_type": { "type": "string" },
+          "page_brief": { "type": "object" },
+          "page_takeaway": { "type": "string" },
+          "title_support_risk": { "type": "string" },
+          "proof_chain": { "type": "object" },
+          "content_blocks": { "type": "array" },
+          "visual_plan": { "type": "object" },
+          "sources": { "type": "array" },
+          "data_gaps": { "type": "array" },
+          "speaker_notes_seed": { "type": "string" },
+          "appendix_candidates": { "type": "array" },
+          "format_handoff_notes": { "type": "object" }
+        }
+      }
+    },
+    "global_sources": { "type": "array" },
+    "global_data_gaps": { "type": "array" },
+    "format_handoff_summary": { "type": "object" }
+  }
+}

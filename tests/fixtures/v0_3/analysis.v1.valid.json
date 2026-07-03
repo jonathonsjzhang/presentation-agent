@@ -1,0 +1,130 @@
+{
+  "agent_id": "analysis",
+  "schema": "analysis.v1",
+  "topic": "AI 助手用户留存改善机会",
+  "analysis_questions": [
+    "首周哪些行为与第 7 日回访共同出现？",
+    "这些差异更可能来自价值确认还是外部提醒？"
+  ],
+  "material_readiness": {
+    "raw_materials_present": true,
+    "existing_evidence_catalog_present": false,
+    "status": "ready",
+    "material_types": ["xlsx", "interview_notes"],
+    "issues": []
+  },
+  "evidence_catalog_ref": "subtasks/evidence_harvester/evidence_catalog.json",
+  "evidence_execution": {
+    "invoked": true,
+    "invocation_reason": "raw_materials_without_catalog",
+    "coverage_summary": {
+      "total_source_units": 8,
+      "captured_units": 8,
+      "excluded_units": 0,
+      "unresolved_units": 0,
+      "complete": true
+    },
+    "unresolved_units": [],
+    "blocking_impact": "none"
+  },
+  "findings": [
+    {
+      "finding_id": "F-01",
+      "statement": "完成一次可复用成果保存的新用户，其第 7 日回访率高于只完成单轮问答的新用户。",
+      "finding_type": "comparison",
+      "supporting_evidence": [
+        {
+          "evidence_ref": "E-Q-01",
+          "source_unit_ref": "SU-Q-01",
+          "supports": "冻结样本中两组第 7 日回访率分别为 34% 与 18%。"
+        }
+      ],
+      "counter_evidence": [
+        {
+          "evidence_ref": "E-Q-02",
+          "challenge": "高意愿用户可能同时更愿意保存成果，存在自选择。"
+        }
+      ],
+      "alternative_explanations": [
+        {
+          "explanation": "保存行为只是用户原始意愿的代理变量。",
+          "status": "plausible",
+          "evidence_refs": ["E-Q-02"]
+        }
+      ],
+      "confidence": "medium",
+      "so_what": "价值确认可能比单纯增加提醒更值得优先验证，但不能据此直接宣称因果。",
+      "decision_relevance": "支持优先设计成果保存与复用实验。"
+    },
+    {
+      "finding_id": "F-02",
+      "statement": "访谈中，留存用户反复提到可继续使用上次成果；流失用户更常将产品理解为一次性问答工具。",
+      "finding_type": "mechanism",
+      "supporting_evidence": [
+        {
+          "evidence_ref": "E-I-01",
+          "source_unit_ref": "SU-I-01",
+          "supports": "两位留存用户提到历史成果复用，一位流失用户表示没有再次打开的理由。"
+        }
+      ],
+      "counter_evidence": [],
+      "alternative_explanations": [
+        {
+          "explanation": "访谈招募偏差可能放大对成果复用的重视。",
+          "status": "plausible",
+          "evidence_refs": []
+        }
+      ],
+      "confidence": "low",
+      "so_what": "定性材料为价值确认机制提供解释，但不能外推普遍比例。",
+      "decision_relevance": "用于定义实验机制和访谈补样，而非估算总体效果。"
+    }
+  ],
+  "viewpoint_candidates": [
+    {
+      "viewpoint_id": "VP-01",
+      "statement": "优先强化首周成果形成与复用闭环，再评估提醒频次。",
+      "finding_refs": ["F-01", "F-02"],
+      "strength": "recommended",
+      "tradeoffs": ["需要先排除用户原始意愿造成的自选择"]
+    },
+    {
+      "viewpoint_id": "VP-02",
+      "statement": "先扩大提醒触达以验证用户是否只是忘记回访。",
+      "finding_refs": ["F-01"],
+      "strength": "exploratory",
+      "tradeoffs": ["可能提高打开但不改善持续价值"]
+    }
+  ],
+  "decision_tensions": [
+    {
+      "tension": "价值闭环与触达提醒的优先级",
+      "option_a": "先做成果保存与复用实验",
+      "option_b": "先做提醒频次实验",
+      "decision_needed": "选择首个两周实验及其成功指标"
+    }
+  ],
+  "assumptions": ["冻结样本的分组口径在各来源中一致"],
+  "data_gaps": [
+    {
+      "gap": "缺少控制初始意愿后的留存差异",
+      "impact": "无法确认保存行为与留存的因果关系",
+      "needed_input": "随机化入口或倾向得分控制后的实验数据",
+      "blocking_level": "advisory"
+    }
+  ],
+  "discussion_points": ["是否接受先验证价值闭环、后优化提醒的顺序？"],
+  "open_questions": ["成果保存后的具体回访路径是否可被准确埋点？"],
+  "quality_checks": [
+    {
+      "check": "evidence_traceability",
+      "status": "pass",
+      "notes": "全部 finding 均引用冻结 evidence ref。"
+    },
+    {
+      "check": "qualitative_scope",
+      "status": "pass",
+      "notes": "访谈仅用于机制解释，未外推比例。"
+    }
+  ]
+}

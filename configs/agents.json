@@ -1,5 +1,353 @@
 {
   "version": "agent-definition.v2",
+  "active_contract_profile": "legacy.v0_2",
+  "contract_profiles": {
+    "v0_3": {
+      "status": "frozen",
+      "activation": "deferred_to_wp7_manager_runtime",
+      "frozen_at": "2026-07-02",
+      "manager_charter_schema": "report_charter.v2",
+      "canonical_stages": [
+        "analysis",
+        "storyline",
+        "report",
+        "format"
+      ],
+      "default_delivery_targets": [
+        "document"
+      ],
+      "extension_workers": [
+        "qa_preparation",
+        "speaker_script"
+      ],
+      "internal_subagents": [
+        "evidence_harvester"
+      ],
+      "workers": [
+        {
+          "id": "analysis",
+          "name": "分析",
+          "stage": 1,
+          "skill": "analysis",
+          "description": "把 Raw Materials 转化为可追溯的发现、解释、备选观点和 so what；不生成最终 Executive Summary 或报告结构。",
+          "previous_agent_id": "manager",
+          "next_agent_id": "storyline",
+          "input_schema": "report_charter.v2",
+          "input_contract": {
+            "charter_schema": "report_charter.v2",
+            "required_inputs": [
+              "report_charter",
+              "analysis_objective",
+              "acceptance_criteria"
+            ],
+            "conditional_inputs": [
+              "raw_materials",
+              "evidence_catalog"
+            ],
+            "evidence_rule": "reuse_existing_catalog_else_invoke_once_for_raw_materials_else_record_gap"
+          },
+          "output_schema": "analysis.v1",
+          "output_contract": {
+            "required_handoff_fields": [
+              "analysis_questions",
+              "material_readiness",
+              "evidence_execution",
+              "findings",
+              "viewpoint_candidates",
+              "decision_tensions",
+              "assumptions",
+              "data_gaps",
+              "discussion_points",
+              "open_questions"
+            ],
+            "downstream": "storyline"
+          },
+          "memory_dimensions": [
+            "证据完整性",
+            "发现",
+            "替代解释",
+            "置信度",
+            "So What",
+            "决策张力"
+          ],
+          "max_revision_rounds": 2,
+          "loop": {
+            "trigger": "explicit_profile_runtime",
+            "workflow_owner": "skill",
+            "reviewer": "clean_context_review_sub_agent",
+            "stop_checker": "schema_and_p0_gate",
+            "human_review_required": true,
+            "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
+          },
+          "state": {
+            "global_reads": [
+              "audience_profile",
+              "target_action"
+            ],
+            "global_writes": [],
+            "agent_memory_scope": "analysis_v0_3_only",
+            "generation_memory_dimensions": [
+              "证据完整性",
+              "发现",
+              "替代解释",
+              "So What"
+            ]
+          },
+          "harness": {
+            "skill_package": "skills/analysis",
+            "runtime_adapter": "generic_llm_skill_runtime",
+            "review_policy": "schema_validation + machine_check + llm_p1",
+            "connectors": [
+              "docx_reader",
+              "xlsx_reader",
+              "csv_reader"
+            ],
+            "implementation_status": "profile_runtime_ready"
+          },
+          "implementation_status": "contract_only_wp1"
+        },
+        {
+          "id": "storyline",
+          "name": "故事线",
+          "stage": 2,
+          "skill": "storyline",
+          "description": "基于 Analysis 收敛 Executive Summary、动态 message pyramid、章节级叙事序列和报告大纲；不输出 pages。",
+          "previous_agent_id": "analysis",
+          "next_agent_id": "report",
+          "input_schema": "analysis.v1",
+          "input_contract": {
+            "required_inputs": [
+              "analysis_questions",
+              "findings",
+              "viewpoint_candidates",
+              "decision_tensions",
+              "assumptions",
+              "data_gaps",
+              "discussion_points",
+              "open_questions"
+            ],
+            "forbidden_inputs_as_authority": [
+              "raw_materials"
+            ]
+          },
+          "output_schema": "storyline.v3",
+          "output_contract": {
+            "required_handoff_fields": [
+              "executive_summary",
+              "message_pyramid",
+              "narrative_sequence",
+              "report_outline",
+              "appendix_plan",
+              "alignment_audit",
+              "upstream_revision_requests",
+              "open_questions"
+            ],
+            "forbidden_handoff_fields": [
+              "pages"
+            ],
+            "downstream": "report"
+          },
+          "memory_dimensions": [
+            "Executive Summary",
+            "Message Pyramid",
+            "论证结构",
+            "章节设计",
+            "证据边界"
+          ],
+          "max_revision_rounds": 2,
+          "loop": {
+            "trigger": "explicit_profile_runtime",
+            "workflow_owner": "skill",
+            "reviewer": "clean_context_review_sub_agent",
+            "stop_checker": "schema_and_p0_gate",
+            "human_review_required": true,
+            "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
+          },
+          "state": {
+            "global_reads": [
+              "audience_profile",
+              "target_action"
+            ],
+            "global_writes": [],
+            "agent_memory_scope": "storyline_v0_3_only",
+            "generation_memory_dimensions": [
+              "Executive Summary",
+              "Message Pyramid",
+              "论证结构",
+              "证据边界"
+            ]
+          },
+          "harness": {
+            "skill_package": "skills/storyline",
+            "runtime_adapter": "generic_llm_skill_runtime",
+            "review_policy": "schema_validation + machine_check + llm_p1",
+            "connectors": [],
+            "implementation_status": "profile_runtime_ready"
+          },
+          "implementation_status": "contract_only_wp1"
+        },
+        {
+          "id": "report",
+          "name": "报告产出",
+          "stage": 3,
+          "skill": "report",
+          "description": "把 Storyline 展开为完整、严肃、可独立阅读的分析报告语义结构，并声明内容版 DOCX 交付。",
+          "previous_agent_id": "storyline",
+          "next_agent_id": "format",
+          "input_schema": "storyline.v3",
+          "input_contract": {
+            "required_inputs": [
+              "executive_summary",
+              "message_pyramid",
+              "narrative_sequence",
+              "report_outline",
+              "appendix_plan",
+              "open_questions"
+            ]
+          },
+          "output_schema": "report.v1",
+          "output_contract": {
+            "required_handoff_fields": [
+              "report_metadata",
+              "executive_summary",
+              "sections",
+              "claims",
+              "findings",
+              "source_registry",
+              "claim_evidence_map",
+              "methodology",
+              "assumptions",
+              "data_gaps",
+              "risks_and_counterarguments",
+              "recommendations",
+              "content_deliverable",
+              "format_handoff"
+            ],
+            "downstream": "format"
+          },
+          "memory_dimensions": [
+            "连续正文",
+            "论证完整性",
+            "可追溯性",
+            "Caveat",
+            "独立可读性"
+          ],
+          "max_revision_rounds": 2,
+          "loop": {
+            "trigger": "explicit_profile_runtime",
+            "workflow_owner": "skill",
+            "reviewer": "clean_context_review_sub_agent",
+            "stop_checker": "schema_and_p0_gate",
+            "human_review_required": true,
+            "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
+          },
+          "state": {
+            "global_reads": [
+              "audience_profile",
+              "target_action"
+            ],
+            "global_writes": [],
+            "agent_memory_scope": "report_v0_3_only",
+            "generation_memory_dimensions": [
+              "连续正文",
+              "论证完整性",
+              "可追溯性",
+              "Caveat"
+            ]
+          },
+          "harness": {
+            "skill_package": "skills/report",
+            "runtime_adapter": "generic_llm_skill_runtime",
+            "review_policy": "schema_validation + machine_check + llm_p1",
+            "connectors": [
+              "docx_writer"
+            ],
+            "implementation_status": "profile_runtime_ready"
+          },
+          "implementation_status": "contract_only_wp1"
+        },
+        {
+          "id": "format",
+          "name": "可视化",
+          "stage": 4,
+          "skill": "format_report",
+          "description": "把 report.v1 转译为单一目标载体，维护来源映射并记录压缩、省略、caveat 与渲染状态。",
+          "previous_agent_id": "report",
+          "next_agent_id": null,
+          "input_schema": "report.v1",
+          "input_contract": {
+            "required_inputs": [
+              "report",
+              "delivery_target",
+              "format_handoff"
+            ],
+            "delivery_target_cardinality": "exactly_one"
+          },
+          "output_schema": "formatted_material.v2",
+          "output_contract": {
+            "required_handoff_fields": [
+              "delivery_target",
+              "source_report_ref",
+              "source_section_ids",
+              "source_claim_ids",
+              "delivery_units",
+              "visual_assets",
+              "compression_decisions",
+              "omitted_content_register",
+              "caveat_preservation",
+              "artifact_manifest",
+              "render_plan",
+              "render_result",
+              "quality_checks"
+            ],
+            "downstream": "extension_gate"
+          },
+          "memory_dimensions": [
+            "版式",
+            "视觉层级",
+            "来源映射",
+            "载体适配",
+            "Caveat 保真"
+          ],
+          "max_revision_rounds": 2,
+          "loop": {
+            "trigger": "explicit_profile_runtime",
+            "workflow_owner": "skill",
+            "reviewer": "clean_context_review_sub_agent",
+            "stop_checker": "schema_and_p0_gate",
+            "human_review_required": true,
+            "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
+          },
+          "state": {
+            "global_reads": [
+              "audience_profile",
+              "target_action"
+            ],
+            "global_writes": [],
+            "agent_memory_scope": "format_v0_3_only",
+            "generation_memory_dimensions": [
+              "版式",
+              "视觉层级",
+              "来源映射",
+              "载体适配"
+            ]
+          },
+          "harness": {
+            "skill_package": "skills/format_report",
+            "runtime_adapter": "generic_llm_skill_runtime",
+            "review_policy": "schema_validation + machine_check + llm_p1",
+            "connectors": [
+              "docx_writer",
+              "pptx_writer",
+              "html_writer"
+            ],
+            "implementation_status": "profile_runtime_ready"
+          },
+          "implementation_status": "contract_only_wp1"
+        }
+      ]
+    }
+  },
   "control_plane": {
     "id": "manager",
     "name": "汇报项目 Manager",

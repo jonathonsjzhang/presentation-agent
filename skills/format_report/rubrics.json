@@ -1,0 +1,126 @@
+{
+  "version": "v2",
+  "agent_id": "format",
+  "rubrics": [
+    {
+      "id": "FMT-CORE-001",
+      "severity": "P0",
+      "dimension": "input_fidelity",
+      "criterion": "正式材料不得改变 report.v1 的结论、证据含义、强度或缺口状态；载体重排必须留痕。",
+      "check": "逐单元核对 source_section_ids、source_claim_ids、source_evidence_refs、caveats 与转换记录。",
+      "fix": "恢复上游含义并显式保留 caveat 和 gap。"
+    },
+    {
+      "id": "FMT-CORE-002",
+      "severity": "P0",
+      "dimension": "formal_material_contract",
+      "criterion": "v0.3 产物必须包含 delivery units、render plan、manifest、来源映射和转换审计。",
+      "check": "检查 formatted_material.v2 必需字段及 delivery_units 是否为空。",
+      "fix": "补齐正式材料契约和 renderer handoff。"
+    },
+    {
+      "id": "FMT-CORE-003",
+      "severity": "P0",
+      "dimension": "source_and_gap_preservation",
+      "criterion": "section、claim、evidence、caveat 与省略内容必须可见且可追溯。",
+      "check": "抽查 delivery_units、compression_decisions、omitted_content_register 与 caveat_preservation。",
+      "fix": "恢复来源和缺口，不得把 provisional 内容伪装为完成。"
+    },
+    {
+      "id": "FMT-CORE-004",
+      "severity": "P0",
+      "dimension": "renderer_integrity",
+      "criterion": "Format Core 不接 renderer，所有渲染状态必须为 planned。",
+      "check": "检查 render_result、artifact_manifest 与 visual_assets 不含 rendered/completed。",
+      "fix": "恢复 planned render intent，等待后续 renderer 工作包。"
+    },
+    {
+      "id": "FMT-CORE-005",
+      "severity": "P1",
+      "dimension": "downstream_handoff",
+      "criterion": "Q&A 与 speaker 能定位高风险单元、弱证据、caveat 和讲述种子。",
+      "check": "检查 downstream_handoff、question_risk_tags 和 speaker_note_seed。",
+      "fix": "补充与正式材料单元绑定的下游交接。"
+    },
+    {
+      "id": "FMT-EVIDENCE-001",
+      "severity": "P0",
+      "dimension": "evidence_preservation",
+      "criterion": "Page Filling 声明的 must-render evidence 必须上屏，或在 evidence_trace 中逐项记录省略理由。",
+      "check": "按 source_page_no 对照上游 must_render_evidence 与 rendered_evidence_refs / omitted_evidence_refs。",
+      "fix": "恢复关键数字、矩阵、quote 或 caveat；确需省略时记录具体理由。"
+    },
+    {
+      "id": "FMT-COMPARE-001",
+      "severity": "P1",
+      "dimension": "comparison_rendering",
+      "criterion": "上游 comparison matrix 应转成可横向扫描的表、图或矩阵，不得退化为多段并列描述。",
+      "check": "对照上游 comparison_matrix 与 layout、tables、visual_object。",
+      "fix": "使用表格、热力图、散点图或多面板，并保留 reader takeaway 和来源。"
+    },
+    {
+      "id": "FMT-QUAL-001",
+      "severity": "P1",
+      "dimension": "qualitative_evidence",
+      "criterion": "被标为 must-render 的用户原声必须作为机制/例证/反例呈现，并保留署名与来源。",
+      "check": "检查 quote_blocks、callouts 和 evidence_trace。",
+      "fix": "恢复 quote、attribution、role 和 source ref；不得把 quote 当量化证明。"
+    },
+    {
+      "id": "FMT-CAVEAT-001",
+      "severity": "P0",
+      "dimension": "caveat_visibility",
+      "criterion": "影响结论强度的 caveat 和不显著结果必须页面可见，不能只留在内部 gap 或被改写成行动建议。",
+      "check": "对照上游 must_keep_caveats、caveat evidence 与正式单元。",
+      "fix": "恢复可见 caveat，并校准标题和建议强度。"
+    },
+    {
+      "id": "FMT-PPT-001",
+      "severity": "P0",
+      "dimension": "executive_summary",
+      "criterion": "封面后第一页必须是 Execution Summary。",
+      "check": "检查第二页是否为 executive_summary layout。",
+      "fix": "在封面后插入 Executive Summary 页。"
+    },
+    {
+      "id": "FMT-PPT-002",
+      "severity": "P0",
+      "dimension": "data_authenticity",
+      "criterion": "所有图表数据必须从原始文档提取，禁止使用模拟数据。",
+      "check": "检查 chart_spec.data_ref 或 table_data 是否可追溯到 source_refs[]。",
+      "fix": "从原始文档中提取真实数据；若不可获得，标记 quality_status=partial。"
+    },
+    {
+      "id": "FMT-PPT-003",
+      "severity": "P0",
+      "dimension": "visual_density",
+      "criterion": "PPT 每页必须包含至少一个视觉元素，禁止纯文字页。",
+      "check": "逐页检查 material_units[].visual_object 中是否有 chart_spec/table_data/shape_spec。",
+      "fix": "为纯文字页添加图表/表格/矩阵等视觉元素。"
+    },
+    {
+      "id": "FMT-NO-AMPLIFICATION",
+      "severity": "P0",
+      "dimension": "recommendation_scope",
+      "criterion": "Format 不得新增上游不存在的 timeline、KPI、owner、预算、组织调整、里程碑或路线图。",
+      "check": "检查 headline、finalized_content、visual_object、layout_type 和 render plan。",
+      "fix": "删除执行化细节；上游未提供时间计划时不得使用 timeline layout。",
+      "machine_check": {
+        "each": "material_units",
+        "rules": [
+          {
+            "kind": "forbidden_pattern",
+            "paths": ["headline", "content", "visual_asset_refs"],
+            "patterns": [
+              "(未来|在)?\\s*\\d+\\s*[-–~至]\\s*\\d+\\s*(周|月|季度|年)(内)?\\s*(完成|推进|实现|上线|评估|落地)",
+              "\\bQ[1-4]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "\\bH[12]\\b.{0,8}(路线图|完成|推进|上线|落地)",
+              "路线图|甘特图|里程碑|KPI|负责人|成立.{0,8}(团队|小组)"
+            ],
+            "label": "format execution amplification"
+          }
+        ]
+      }
+    }
+  ]
+}

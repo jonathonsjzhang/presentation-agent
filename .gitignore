@@ -36,6 +36,20 @@ agents.codex/
 tests/*
 !tests/test_evaluation.py
 !tests/test_page_filling_v2.py
+!tests/test_v0_3_schema_contracts.py
+!tests/test_analysis.py
+!tests/test_analysis_evidence_subtask.py
+!tests/test_storyline_v3.py
+!tests/test_report.py
+!tests/test_report_docx.py
+!tests/test_agent_profiles.py
+!tests/test_format_document_v2.py
+!tests/test_wp8_cross_review.py
+!tests/test_wp8_memory_routing.py
+!tests/fixtures/
+tests/fixtures/*
+!tests/fixtures/v0_3/
+!tests/fixtures/v0_3/**
 .workbuddy/
 .learnings/
 
@@ -44,6 +58,11 @@ tests/*
 data/
 runs/
 artifacts/
+!artifacts/
+artifacts/*
+!artifacts/wp4_report/
+artifacts/wp4_report/*
+!artifacts/wp4_report/report_content_smoke.docx
 outputs/
 tmp/
 

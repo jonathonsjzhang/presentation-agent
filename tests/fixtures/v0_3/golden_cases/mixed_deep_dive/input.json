@@ -1,0 +1,26 @@
+{
+  "case_id": "mixed_deep_dive",
+  "topic": "AI 助手用户留存改善机会",
+  "audience": "strategy_lead",
+  "report_type": "deep_dive",
+  "delivery_targets": ["document"],
+  "materials": [
+    {
+      "material_id": "quant_snapshot",
+      "fixture": "../quantitative_usage/input.json",
+      "role": "behavior_comparison"
+    },
+    {
+      "material_id": "interview_snapshot",
+      "fixture": "../qualitative_interviews/input.json",
+      "role": "mechanism_exploration"
+    }
+  ],
+  "decision_goal": "在价值闭环与提醒触达之间确定优先验证顺序。",
+  "expected_action": "批准优先验证成果保存与复用路径。",
+  "acceptance_focus": [
+    "跨来源结论可追溯",
+    "定性与定量证据不混用口径",
+    "输出完整文档结构而非纵向幻灯片"
+  ]
+}

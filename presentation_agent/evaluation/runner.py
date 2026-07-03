@@ -249,8 +249,13 @@ class EvaluationRunner:
             raise EvalError(f"Evaluation run state not found: {self.run_dir}")
 
     def _load_rubric(self, version: str) -> dict[str, Any]:
+        aliases = {
+            "report-v0.3": "e2e_report_v0.3.json",
+            "translation-v0.3": "e2e_translation_v0.3.json",
+        }
         normalized = version if version.startswith("v") else f"v{version}"
-        path = self.root / "evals" / "rubrics" / f"e2e_material_{normalized}.json"
+        filename = aliases.get(version, f"e2e_material_{normalized}.json")
+        path = self.root / "evals" / "rubrics" / filename
         if not path.exists():
             raise EvalError(f"E2E rubric version not found: {normalized} ({path})")
         rubric = read_json(path)
@@ -433,7 +438,7 @@ class EvaluationRunner:
                 "",
                 f"- `judge_role` 必须为 `{job}`。",
                 f"- `rubric_version` 必须为 `{rubric['version']}`。",
-                f"- `dimension_scores` 必须且只能包含：{_JOB_DIMENSIONS[job]}。",
+                f"- `dimension_scores` 必须且只能包含：{self._job_dimensions(rubric, job)}。",
                 f"- 只写严格 JSON 到 `{output_path}`，不要输出 Markdown 或解释。",
             ]
         )
@@ -455,7 +460,8 @@ class EvaluationRunner:
         scores = judgement.get("dimension_scores")
         if isinstance(scores, list):
             actual = [item.get("dimension_id") for item in scores if isinstance(item, dict)]
-            expected = _JOB_DIMENSIONS[job]
+            rubric = read_json(self.run_dir / "rubric_snapshot.json")
+            expected = self._job_dimensions(rubric, job)
             if sorted(actual) != sorted(expected) or len(actual) != len(set(actual)):
                 errors.append(
                     f"$.dimension_scores: expected exactly {expected}, got {actual}"
@@ -491,6 +497,14 @@ class EvaluationRunner:
                 )
         if errors:
             raise EvalError("Judge output validation failed:\n- " + "\n- ".join(errors))
+
+    @staticmethod
+    def _job_dimensions(rubric: dict[str, Any], job: str) -> list[str]:
+        return [
+            str(item["id"])
+            for item in rubric.get("dimensions", [])
+            if item.get("judge_role") == job
+        ]
 
     def _aggregate(self) -> dict[str, Any]:
         rubric = read_json(self.run_dir / "rubric_snapshot.json")
