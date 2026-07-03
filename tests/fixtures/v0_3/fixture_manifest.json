@@ -30,7 +30,7 @@
     },
     {
       "schema": "formatted_material.v2",
-      "schema_path": "skills/format/schemas/formatted_material.v2.json",
+      "schema_path": "skills/format_report/schemas/formatted_material.v2.json",
       "fixture_path": "tests/fixtures/v0_3/formatted_material.v2.valid.json",
       "consumer": "extension_gate"
     }

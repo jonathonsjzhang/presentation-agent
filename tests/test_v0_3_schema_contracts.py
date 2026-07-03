@@ -246,7 +246,7 @@ class FormatCoreCompilationTests(unittest.TestCase):
         )
         self.assertFalse(package.legacy)
         self.assertIn("format.ppt", package.selected_capabilities)
-        self.assertIn("Legacy v0.2 compatibility", package.instructions)
+        self.assertIn("Format Skill v3.12", package.instructions)
         self.assertIn("formatted_material.v1", package.schemas)
 
     def test_fixture_records_mapping_and_all_translation_audits(self) -> None:
@@ -265,7 +265,11 @@ class FormatCoreCompilationTests(unittest.TestCase):
 
     def test_v2_schema_rejects_missing_translation_audit_fields(self) -> None:
         schema = read_json(
-            ROOT / "skills" / "format" / "schemas" / "formatted_material.v2.json"
+            ROOT
+            / "skills"
+            / "format_report"
+            / "schemas"
+            / "formatted_material.v2.json"
         )
         for field in (
             "source_section_ids",

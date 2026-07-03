@@ -31,7 +31,6 @@
   "shared_assets": {
     "schemas": [
       "schemas/page_content.v3.json",
-      "schemas/formatted_material.ppt_v3.json",
       "schemas/formatted_material.v2.json"
     ],
     "evals": [

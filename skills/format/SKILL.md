@@ -1,33 +1,9 @@
 ---
 name: format
-description: Route report-first v0.3 inputs to traceable multi-carrier translation, while preserving the page-content Format v3.12 visual system and renderer workflow for legacy PPT inputs.
+description: "[v3.12] Convert approved page content into a render-ready formal deliverable. v3.12 is the first stable release of the v3 series (a.k.a. 'format skill v3'). It consolidates the v3.6→v3.11 cumulative improvements (4-zone filling, 7-variant insight_panel, baseline 5.40 alignment, text-overflow fixes, P3 顶部 4 blocks 重构, 中英文字体分离 via lxml) on top of the v0.9.1 visual system, and adds the v3.12 hotfix that resolves P0/P1/P2 code-quality issues: (1) extracts 8 layout constants (BLANK_LAYOUT_IDX=6, CONTENT_LEFT=0.7, CONTENT_W=11.933, DISCOVERY_X=10.00, DISCOVERY_W=2.63, DISCOVERY_H=4.10, BOTTOM_Y=5.55, BOTTOM_H=1.10) replacing 16 hardcoded prs.slide_layouts[6] / 0.7 / 11.933 magic numbers across 16 page builders; (2) fixes add_discovery_panel default drift (10.20/1.30/2.83/5.20 → 10.00/1.30/2.63/4.10) aligning with 12 actual caller values; (3) strict mode for silent fallbacks (dict.get('可用性', 0) → dict(...)[...] raising KeyError instead of drawing zero-height bars); (4) removes 8 dead functions (rgb_hex, add_red_box, add_not_significant, add_insight_panel_rail/banner/callout, add_insight_panel alias, add_legend), 1 unused import (MSO_LINE_DASH_STYLE), 1 unused kwarg (layout='3x1'), 1 unused constant (TITLE_EA_FONT); (5) all 5 QA gates green (FMT-V3-009/010/011/012/013). v3.12 preserves v0.9.1 invariants: top blue nav #003D82 + Tencent logo + 内部汇报·仅供参考 保密标签 + vS content title #1E6FE0 + right-side 发现 gray panel + 3-way product palette + 注1:... footnote + #D32F2F red highlight + uniform 0.7-inch margins (FMT-V3-009) + no text overlap (FMT-V3-010) + executive_summary no rail (FMT-V3-011) + bottom_summary required (FMT-V3-012) + discovery rail required (FMT-V3-013) + 4-zone filling (top nav + left main + right rail + bottom panel) + 7-variant insight_panel system."
 ---
 
 # Format Skill v3.12 (hotfix: layout 漂移修复 + 死代码清理 + strict 模式)
-
-## Contract-profile routing（合并约束）
-
-本 Skill 同时服务两条明确隔离的输入契约，先判断输入再执行，禁止混用字段：
-
-1. **Document-first v0.3**：输入包含 `report.v1` 或 task 声明
-   `contract_profile=v0_3` 时，以 `delivery_target` 选择 document / ppt / html，
-   严格输出 canonical `formatted_material.v2`。必须保留
-   `source_section_ids`、`source_claim_ids`、`source_evidence_refs`、caveat、
-   compression decisions 与 omission register。此模式以
-   `schemas/formatted_material.v2.json` 为唯一输出契约，不要求 `pages[]`。
-2. **Page-content Format v3.12**：输入为 `page_content.v3` 时，执行下文完整
-   v3.12 视觉系统与 PPT renderer 规则，输出契约为
-   `schemas/formatted_material.ppt_v3.json`。
-
-优先级：输入契约与来源保真 > 载体规则 > 美学规则。v0.3 可以复用下文的
-layout、style、chart、overflow 和 QA 规则，但不得因此把 Report 降级回
-page-first 结构，或把 PPT-only 字段强加给 document / HTML。
-
-## Legacy v0.2 compatibility
-
-旧 `page_content.v1/v2` runtime 继续使用原有 `formatted_material.v1`
-契约；新 Format v3.12 只在输入已经升级为 `page_content.v3` 时启用。
-不得把 v3 PPT-only schema 反向套用到尚未迁移的 legacy run。
 
 > **本版关键变更（v3.12 hotfix）**：
 > 1. **P0 layout 漂移修复**：8 个 layout 常量提取（`BLANK_LAYOUT_IDX=6` / `CONTENT_LEFT=0.7` / `CONTENT_W=11.933` / `DISCOVERY_X=10.00` / `DISCOVERY_W=2.63` / `DISCOVERY_H=4.10` / `BOTTOM_Y=5.55` / `BOTTOM_H=1.10`）；16 个 page builder 中 `prs.slide_layouts[6]` 16 处 → `prs.slide_layouts[BLANK_LAYOUT_IDX]`；`add_insight_panel_takeaway` / `add_insight_panel_matrix` 等内部硬编码的 0.7/11.933 全部常量化。

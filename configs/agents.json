@@ -270,7 +270,7 @@
           "id": "format",
           "name": "可视化",
           "stage": 4,
-          "skill": "format",
+          "skill": "format_report",
           "description": "把 report.v1 转译为单一目标载体，维护来源映射并记录压缩、省略、caveat 与渲染状态。",
           "previous_agent_id": "report",
           "next_agent_id": null,
@@ -333,7 +333,7 @@
             ]
           },
           "harness": {
-            "skill_package": "skills/format",
+            "skill_package": "skills/format_report",
             "runtime_adapter": "generic_llm_skill_runtime",
             "review_policy": "schema_validation + machine_check + llm_p1",
             "connectors": [

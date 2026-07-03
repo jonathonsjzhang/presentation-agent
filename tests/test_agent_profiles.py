@@ -159,7 +159,10 @@ class AgentProfileLoaderTests(unittest.TestCase):
         )
         for spec in profile.ordered_specs:
             with self.subTest(agent=spec.id):
-                self.assertEqual(spec.skill, spec.id)
+                expected_skill = (
+                    "format_report" if spec.id == "format" else spec.id
+                )
+                self.assertEqual(spec.skill, expected_skill)
                 self.assertTrue(spec.memory_dimensions)
                 self.assertGreater(spec.max_revision_rounds, 0)
                 self.assertTrue(spec.loop_policy)

@@ -22,7 +22,7 @@ def compile_skill_package(
     legacy_fallback: bool = True,
 ) -> SkillPackage:
     registry = CapabilityRegistry(root)
-    legacy = load_skill_package(root, spec.id)
+    legacy = load_skill_package(root, spec.skill)
     if not registry.enabled_for(spec.id):
         return legacy
 
