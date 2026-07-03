@@ -69,6 +69,11 @@ def build_parser() -> argparse.ArgumentParser:
     report_submit = report_subs.add_parser("submit", help="Submit host output for the current instruction.")
     report_submit.add_argument("--run", required=True, help="Run id or run directory.")
     report_submit.add_argument("--output-file", help="JSON output file produced by the host model.")
+    report_submit.add_argument(
+        "--spawn-completed",
+        action="store_true",
+        help="Attest that the dispatched sub-agent completed this Worker/Reviewer step.",
+    )
     _add_spawn_adapter_option(report_submit)
 
     report_approve = report_subs.add_parser("approve", help="Approve the current Manager human gate.")
@@ -782,6 +787,13 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
                 )
                 if args.output_file:
                     _copy_report_output(runner, Path(args.output_file).expanduser().resolve())
+                if state.get("spawn_adapter") != "inline":
+                    if not args.spawn_completed:
+                        raise StepError(
+                            "当前 Worker 使用非 inline adapter；必须由真实 sub-agent "
+                            "完成后使用 report submit --spawn-completed。"
+                        )
+                    manager.record_spawn_completed()
                 worker_result = runner.commit()
                 if worker_result.get("step") == "done":
                     result = manager.record_worker_completed(worker_result)

@@ -32,6 +32,16 @@ class AgentProfileLoaderTests(unittest.TestCase):
             ["report", "start", "--brief-file", "brief.json"]
         )
         self.assertEqual(args.contract_profile, "v0_3")
+        submit = build_parser().parse_args(
+            [
+                "report",
+                "submit",
+                "--run",
+                "run-id",
+                "--spawn-completed",
+            ]
+        )
+        self.assertTrue(submit.spawn_completed)
 
     def test_worker_spawn_is_exposed_consistently_at_cli_top_level(self) -> None:
         instruction = {

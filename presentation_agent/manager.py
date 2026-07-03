@@ -992,6 +992,50 @@ class ManagerOrchestrator:
             output_file.read_text(encoding="utf-8"), encoding="utf-8"
         )
 
+    def record_spawn_completed(self) -> dict[str, Any]:
+        """Record an auditable host attestation before non-inline Worker commit."""
+
+        state = self._load_state()
+        if state.get("current_actor") != "worker":
+            raise StepError("当前没有等待提交的 Worker sub-agent")
+        if state.get("spawn_adapter") == "inline":
+            return {"required": False, "adapter": "inline"}
+
+        instruction = state.get("last_instruction")
+        if not isinstance(instruction, dict):
+            raise StepError("缺少当前 Worker instruction，无法确认 sub-agent 执行")
+        spawn = instruction.get("spawn")
+        if not isinstance(spawn, dict) or spawn.get("status") != "dispatched":
+            raise StepError("当前 instruction 没有已派发的 spawn request")
+        detail = spawn.get("detail")
+        request_path = Path(str((detail or {}).get("spawn_request") or ""))
+        output_path = Path(str(instruction.get("output_path") or ""))
+        if not request_path.is_file():
+            raise StepError(f"spawn request 不存在: {request_path}")
+        if not output_path.is_file():
+            raise StepError(f"sub-agent 输出不存在: {output_path}")
+
+        receipt = {
+            "schema": "spawn_receipt.v1",
+            "adapter": spawn.get("adapter"),
+            "role": spawn.get("role"),
+            "spawn_request": str(request_path),
+            "instruction_path": instruction.get("instruction_path"),
+            "output_path": str(output_path),
+            "attested_at": now_iso(),
+            "attestation": "host_confirms_native_subagent_completed",
+        }
+        receipt_path = request_path.with_name("spawn_receipt.json")
+        write_json(receipt_path, receipt)
+        state["last_spawn_receipt"] = str(receipt_path)
+        self._save_state(state)
+        self._append_decision(
+            "spawn_completed",
+            "Host attested native sub-agent completion",
+            receipt,
+        )
+        return receipt
+
     def _commit_plan(self, state: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
         charter = decision["report_charter"]
         plan = decision["execution_plan"]
