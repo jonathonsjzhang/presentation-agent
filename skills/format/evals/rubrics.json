@@ -1,0 +1,134 @@
+{
+  "version": "v3",
+  "agent_id": "format",
+  "rubrics": [
+    {
+      "id": "FMT-V3-001",
+      "severity": "P0",
+      "dimension": "layout_convergence",
+      "criterion": "v3 material_unit.unit_type 必须从 5 类实证 layout 中选；禁止使用 v3 旧名（title_slide / action_title / pyramid / funnel / bar_chart_horizontal / scatter_plot / heatmap_table / user_voice / action_items / closing_slide / cube / quadrant_3group / lollipop 等）。",
+      "check": "逐单元核对 material_unit.unit_type ∈ {cover, executive_summary, analysis_dashboard, methodology_or_strategy, priority_matrix}。",
+      "fix": "将 v3 旧名映射到 v3 当前 5 类（参见 reference_manifest.json 的 deprecation 字段）。"
+    },
+    {
+      "id": "FMT-V3-002",
+      "severity": "P0",
+      "dimension": "style_ref_binding",
+      "criterion": "每个 material_unit 必须有 presentation_style_ref，引用 format.ppt §具体章节（如 'format.ppt §layout.cover'）。",
+      "check": "逐单元核对 presentation_style_ref 字段非空且匹配 ^format\\.ppt §.*$。",
+      "fix": "为缺失的 unit 补全 style_ref。"
+    },
+    {
+      "id": "FMT-V3-003",
+      "severity": "P0",
+      "dimension": "navigation_required",
+      "criterion": "从 P2 起，每页 analysis_dashboard 必带 navigation.tabs（3-6 个），active_tab 标注当前维度。",
+      "check": "逐页检查 material_unit.layout_or_structure 或 finalized_content 中是否含 navigation。",
+      "fix": "为缺失的页补 navigation。"
+    },
+    {
+      "id": "FMT-V3-004",
+      "severity": "P0",
+      "dimension": "insight_panel_required",
+      "criterion": "每页 analysis_dashboard 必带 insight_panel。v3.1 起位置和形态按 evidence_type 灵活选择 6 种变体之一：C-2-A right-rail / C-2-B top-banner / C-2-C bottom-takeaway / C-2-D callout-side / C-2-E inline-anchor / C-2-F matrix-grid（详见 references/components.md §C-2）。",
+      "check": "逐页检查 visual_object.shape_spec 或 finalized_content.supporting_points 中是否含 insight_panel。",
+      "fix": "为缺失的页补 insight_panel；按 layouts.md §选型指南选 6 变体之一。"
+    },
+    {
+      "id": "FMT-V3-005",
+      "severity": "P0",
+      "dimension": "data_source_extraction",
+      "criterion": "每个 visual_object.chart_spec 或 table_data 必须在 data_source_extraction 字段记录原始来源位置（如 'doc.pdf §3.2 Table 2'）。",
+      "check": "逐单元核对 data_source_extraction 非空。",
+      "fix": "补 data_source_extraction 字段；若原始数据不可获得，quality_status=partial + open_design_tasks 记录。"
+    },
+    {
+      "id": "FMT-V3-006",
+      "severity": "P1",
+      "dimension": "chart_type_convergence",
+      "criterion": "v3 当前阶段 chart_type 必须从 6 类实证 chart 中选（bar_chart / grouped_bar / horizontal_bar / scatter / matrix_table / quoted_table）。",
+      "check": "逐单元核对 visual_object.chart_type ∈ 上述集合。",
+      "fix": "将 v3 旧 chart_type 映射到 v3 当前名。"
+    },
+    {
+      "id": "FMT-V3-007",
+      "severity": "P1",
+      "dimension": "token_source",
+      "criterion": "style_tokens 的量化值必须来自 references/style.md（v0.9.1 实证），不允许凭空添加新 token。",
+      "check": "核对 style_tokens.typography / color / spacing 的字段是否在 references/style.md 的表中。",
+      "fix": "从 references/style.md 取值；新需求先更新 style.md 再引用。"
+    },
+    {
+      "id": "FMT-CORE-001",
+      "severity": "P0",
+      "dimension": "input_fidelity",
+      "criterion": "正式材料不得改变上游结论、证据含义、顺序或缺口状态。",
+      "check": "逐单元核对 source_page_no、takeaway、sources、confidence 与 data gaps。",
+      "fix": "恢复上游含义并显式保留 caveat 和 gap。"
+    },
+    {
+      "id": "FMT-CORE-002",
+      "severity": "P0",
+      "dimension": "formal_material_contract",
+      "criterion": "产物必须包含可渲染正式单元、render plan、manifest、来源/缺口策略和质量检查。",
+      "check": "检查 formatted_material.v2 必需字段及 material_units 是否为空。",
+      "fix": "补齐正式材料契约和 renderer handoff。"
+    },
+    {
+      "id": "FMT-CORE-003",
+      "severity": "P0",
+      "dimension": "source_and_gap_preservation",
+      "criterion": "来源、口径、confidence 与阻断缺口必须可见且可追溯。",
+      "check": "抽查每个单元的 source_display、gap_display 与 open_design_tasks。",
+      "fix": "恢复来源和缺口，不得把 provisional 内容伪装为完成。"
+    },
+    {
+      "id": "FMT-PPT-001",
+      "severity": "P0",
+      "dimension": "executive_summary",
+      "criterion": "封面后第一页必须是 Executive Summary。",
+      "check": "检查第二页是否为 executive_summary layout。",
+      "fix": "在封面后插入 Executive Summary 页。"
+    },
+    {
+      "id": "FMT-PPT-002",
+      "severity": "P0",
+      "dimension": "data_authenticity",
+      "criterion": "所有图表数据必须从原始文档提取，禁止使用模拟数据。",
+      "check": "检查 chart_spec.data_ref 或 table_data 是否可追溯到 source_refs[]。",
+      "fix": "从原始文档中提取真实数据；若不可获得，标记 quality_status=partial。"
+    },
+    {
+      "id": "FMT-PPT-003",
+      "severity": "P0",
+      "dimension": "visual_density",
+      "criterion": "PPT 每页必须包含至少一个视觉元素，禁止纯文字页。例外：executive_summary 的核心发现页（按 evidence 性质为'观点罗列'时）允许只含 card + insight_panel，不强制 chart。",
+      "check": "逐页检查 material_units[].visual_object 中是否有 chart_spec/table_data/shape_spec；executive_summary 类型的核心发现页检查是否至少有 card 类视觉元素。",
+      "fix": "为纯文字页添加图表/表格/矩阵等视觉元素；如该页确实是观点罗列，把 layout_type 标为 executive_summary 且在 insight_panel 标记 variant=rail。"
+    },
+    {
+      "id": "FMT-V3-008",
+      "severity": "P0",
+      "dimension": "evidence_to_variant_binding",
+      "criterion": "每个 insight_panel 必须显式选 1 种 variant（C-2-A / B / C / D / E / F），且 variant 与 evidence_type 匹配（参见 layouts.md §insight_panel 选型）。",
+      "check": "逐页核对 material_unit.layout_or_structure.insight_panel.variant ∈ {right-rail, top-banner, bottom-takeaway, callout-side, inline-anchor, matrix-grid}。",
+      "fix": "为缺失 variant 的页补 variant；选型参考 layouts.md §选型指南（多点并列=A，单点反差=D，关联图表某点=E，分类归类=F，全页主轴=B，行动建议=C）。"
+    },
+    {
+      "id": "FMT-V3-009",
+      "severity": "P0",
+      "dimension": "uniform_page_margin",
+      "criterion": "所有内部页面（除封面页 cover 和结尾页 cover-type closing 外）的上下左右页边距必须完全一致，强制为 0.7 inch（grid.margin）。任何 analysis_dashboard / executive_summary / methodology_or_strategy / priority_matrix 页的 content 区域必须在 (x=0.7, y=0.7, w=11.933, h=6.1) 范围内。",
+      "check": "逐页核对每个 shape 的 x ≥ 0.7、y ≥ 0.7、x+w ≤ 13.033、y+h ≤ 6.8（cover/closing 页除外）。",
+      "fix": "把所有内部页面的 x 起点改为 0.7，w 限制在 11.933 内；上下边距同 0.7。"
+    },
+    {
+      "id": "FMT-V3-010",
+      "severity": "P0",
+      "dimension": "no_overlap",
+      "criterion": "页面内任意两个 shape 的 bounding box 不能重叠（同一 layer 的视觉元素必须独占区域）。例外：(a) 装饰性背景（slide_bg）允许覆盖全画布；(b) anchor 变体的引线允许与图表重叠（这是设计意图）；(c) 边框/分隔线允许压在 panel 边缘。",
+      "check": "逐页两两比对 shape 的 (x, y, w, h) 是否相交；排除上述例外后，所有 shape 必须无重叠。",
+      "fix": "调整 shape 位置或大小直到无重叠；常见重叠原因：matrix_grid 与 quote_items 在 P13 覆盖、anchor 与 main_chart 在 P8 覆盖、callout 与 emphasis_frame 在 P5 覆盖。"
+    }
+  ]
+}
