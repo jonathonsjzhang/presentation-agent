@@ -14,7 +14,7 @@ from presentation_agent.loop import LoopRunner
 from presentation_agent.launch import normalize_brief
 from presentation_agent.manager import ManagerOrchestrator
 from presentation_agent.context import ContextAssembler
-from presentation_agent.cli import build_parser
+from presentation_agent.cli import build_parser, _worker_spawn_response
 from presentation_agent.step import PipelineStepper, StepRunner
 
 
@@ -32,6 +32,17 @@ class AgentProfileLoaderTests(unittest.TestCase):
             ["report", "start", "--brief-file", "brief.json"]
         )
         self.assertEqual(args.contract_profile, "v0_3")
+
+    def test_worker_spawn_is_exposed_consistently_at_cli_top_level(self) -> None:
+        instruction = {
+            "actor": "worker",
+            "step": "gen",
+            "spawn": {"status": "dispatched", "adapter": "workbuddy"},
+        }
+        for result in (instruction, {"instruction": instruction}):
+            exposed = _worker_spawn_response(result)
+            self.assertIs(exposed["instruction"], instruction)
+            self.assertTrue(exposed["spawn_required"])
 
     def test_v03_manager_starts_four_stage_document_first_gate(self) -> None:
         brief = normalize_brief(

@@ -476,16 +476,27 @@ class WorkerExecutor:
         self, task_dir: Path, instruction: dict[str, Any]
     ) -> SpawnRequest:
         run_state = read_json(task_dir / "run_state.json", default={})
-        agent_id = str(run_state.get("agent_id") or "")
+        request_task_dir = (
+            Path(str(instruction["subtask_dir"]))
+            if instruction.get("subtask") and instruction.get("subtask_dir")
+            else task_dir
+        )
+        agent_id = str(
+            instruction.get("agent_id")
+            or run_state.get("agent_id")
+            or ""
+        )
         step = str(instruction.get("step") or "")
         role = "reviewer" if step.startswith("review") else "worker"
         return SpawnRequest(
-            task_dir=task_dir,
+            task_dir=request_task_dir,
             agent_id=agent_id,
             role=role,
             instruction_path=Path(instruction.get("instruction_path", "")),
             output_path=Path(instruction.get("output_path", "")),
-            input_path=task_dir / "input.json",
+            input_path=Path(
+                str(instruction.get("input_path") or request_task_dir / "input.json")
+            ),
             mode="foreground",
         )
 

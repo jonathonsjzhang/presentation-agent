@@ -204,6 +204,19 @@ CLI 会返回 JSON，记录：
 8. 用户要求调整或回答 Manager 问题：report feedback
 ```
 
+每次 `report next`、`report approve` 或 `report submit` 返回后，必须先检查顶层
+`spawn_required`：
+
+- `spawn_required=true`：立即读取顶层 `instruction.spawn.detail`，调用当前宿主的
+  sub-agent 工具；主对话不得亲自执行该 Worker/Reviewer instruction。
+- 等 sub-agent 写完 `instruction.output_path`（Reviewer 则由主对话原样转写返回
+  JSON）后，才调用 `report submit`。
+- `spawn_required=false`：按 `instruction.actor` 继续；只有 adapter 明确为
+  `inline` 时，主对话才可以执行 Worker。
+
+不要因为 spawn 信息来自 `report approve` 或 `report submit` 而跳过；三条命令
+使用相同的顶层 `instruction + spawn_required` 协议。
+
 Worker 指令已经包含 runtime 编译后的 core + audience + report type + format
 能力，以及投影后的命名空间化 context。宿主只执行该指令，不自行选择、拼接
 或复制 atomic capability 规则，也不要为了“补上下文”把历史 artifact 全量塞回 prompt。

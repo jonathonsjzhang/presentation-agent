@@ -667,6 +667,22 @@ def main() -> None:
         return
 
 
+def _worker_spawn_response(result: object) -> dict[str, object]:
+    if not isinstance(result, dict):
+        return {}
+    nested = result.get("instruction")
+    instruction = nested if isinstance(nested, dict) else result
+    if instruction.get("actor") != "worker":
+        return {}
+    spawn = instruction.get("spawn")
+    return {
+        "instruction": instruction,
+        "spawn_required": bool(
+            isinstance(spawn, dict) and spawn.get("status") == "dispatched"
+        ),
+    }
+
+
 def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> None:
     if args.report_command == "start":
         from presentation_agent.io import write_json
@@ -737,6 +753,10 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "ok": True,
             "run_dir": str(run_dir),
             "instruction": prepared,
+            "spawn_required": bool(
+                isinstance(prepared.get("spawn"), dict)
+                and prepared["spawn"].get("status") == "dispatched"
+            ),
             "manager": manager.status(),
             "next_action": prepared.get("next_action", "host_write_output_then_report_submit"),
         })
@@ -766,8 +786,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
                 if worker_result.get("step") == "done":
                     result = manager.record_worker_completed(worker_result)
                 else:
-                    worker_result["actor"] = "worker"
-                    result = worker_result
+                    result = manager.prepare()
             elif actor == "human":
                 raise StepError("当前等待人工确认，请调用 report approve 或先提供反馈")
             else:
@@ -779,6 +798,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "ok": True,
             "run_dir": str(run_dir),
             "result": result,
+            **_worker_spawn_response(result),
             "manager": manager.status(),
             "next_action": result.get(
                 "next_action",
@@ -797,6 +817,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "ok": True,
             "run_dir": str(run_dir),
             "result": result,
+            **_worker_spawn_response(result),
             "manager": manager.status(),
             "next_action": result.get(
                 "next_action",
