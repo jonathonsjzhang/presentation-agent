@@ -1356,7 +1356,7 @@ class ManagerOrchestrator:
             "argument_synthesis": "核心论点提炼",
             "storyline_design": "故事线设计",
             "page_filling": "草稿填充",
-            "format": "材料可视化",
+            "format": "可视化",
             "qa_preparation": "QA 梳理",
             "speaker_script": "逐字稿生成",
             "analysis": "分析",
@@ -1432,7 +1432,7 @@ class ManagerOrchestrator:
             result["run_mode_options"] = {
                 "full_auto": "全程自动，不中断",
                 "step_by_step": "每个 Worker 完成后暂停确认",
-                "custom": "指定暂停的 Worker 列表，如 [\"argument_synthesis\", \"format\"]",
+                "custom": "指定暂停的 Worker 列表，如 [\"analysis\", \"format\"]",
             }
             result["next_action"] = "human_feedback"
             # Structured questions for host AskUserQuestion
@@ -1453,7 +1453,7 @@ class ManagerOrchestrator:
                     "options": [
                         {"label": "full_auto", "description": "全程自动，一口气跑完，不中断"},
                         {"label": "step_by_step", "description": "每个 Worker 完成后暂停，逐环节确认"},
-                        {"label": "custom", "description": "只在指定环节暂停，如 [\"argument_synthesis\", \"format\"]"},
+                        {"label": "custom", "description": "只在指定环节暂停，如 [\"analysis\", \"format\"]"},
                     ],
                 },
             ]

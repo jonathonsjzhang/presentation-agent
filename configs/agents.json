@@ -4,7 +4,7 @@
   "contract_profiles": {
     "v0_3": {
       "status": "frozen",
-      "activation": "deferred_to_wp7_manager_runtime",
+      "activation": "default_user_entry",
       "frozen_at": "2026-07-02",
       "manager_charter_schema": "report_charter.v2",
       "canonical_stages": [

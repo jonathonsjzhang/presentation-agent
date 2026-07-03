@@ -81,11 +81,12 @@ class V03SchemaContractTests(unittest.TestCase):
             self.assertLessEqual(set(unit["source_section_ids"]), report_sections)
             self.assertLessEqual(set(unit["source_claim_ids"]), report_claims)
 
-    def test_v03_agent_contract_is_frozen_but_runtime_is_not_activated(self) -> None:
+    def test_v03_agent_contract_is_default_user_entry_but_legacy_api_is_preserved(self) -> None:
         config = read_json(ROOT / "configs/agents.json")
         profile = config["contract_profiles"]["v0_3"]
         self.assertEqual(config["active_contract_profile"], "legacy.v0_2")
         self.assertEqual(profile["status"], "frozen")
+        self.assertEqual(profile["activation"], "default_user_entry")
         self.assertEqual(
             profile["canonical_stages"],
             ["analysis", "storyline", "report", "format"],

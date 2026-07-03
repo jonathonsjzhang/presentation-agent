@@ -153,6 +153,7 @@ python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
   report start \
   --brief-file "<brief_file>" \
+  --contract-profile "v0_3" \
   --spawn-adapter "<workbuddy|codex|claude|inline>"
 ```
 

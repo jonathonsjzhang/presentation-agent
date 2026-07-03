@@ -57,8 +57,8 @@ def build_parser() -> argparse.ArgumentParser:
     report_start.add_argument(
         "--contract-profile",
         choices=["legacy.v0_2", "v0_3"],
-        default="legacy.v0_2",
-        help="Runtime contract profile. v0_3 enables the document-first four-stage chain.",
+        default="v0_3",
+        help="Runtime contract profile. Defaults to the document-first v0_3 user flow.",
     )
     _add_spawn_adapter_option(report_start)
 
@@ -158,8 +158,8 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument(
         "--contract-profile",
         choices=["legacy.v0_2", "v0_3"],
-        default="legacy.v0_2",
-        help="Runtime contract profile.",
+        default="v0_3",
+        help="Runtime contract profile. Defaults to the document-first v0_3 user flow.",
     )
     launch.add_argument("--auto", action="store_true", help="Run all stages back to back.")
     launch.add_argument(

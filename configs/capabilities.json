@@ -3,7 +3,7 @@
   "contract_profiles": {
     "v0_3": {
       "status": "frozen",
-      "activation": "deferred_to_wp2_wp7",
+      "activation": "default_user_entry",
       "workers": [
         "analysis",
         "storyline",
