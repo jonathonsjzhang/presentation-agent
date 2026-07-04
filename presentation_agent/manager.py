@@ -476,16 +476,27 @@ class WorkerExecutor:
         self, task_dir: Path, instruction: dict[str, Any]
     ) -> SpawnRequest:
         run_state = read_json(task_dir / "run_state.json", default={})
-        agent_id = str(run_state.get("agent_id") or "")
+        request_task_dir = (
+            Path(str(instruction["subtask_dir"]))
+            if instruction.get("subtask") and instruction.get("subtask_dir")
+            else task_dir
+        )
+        agent_id = str(
+            instruction.get("agent_id")
+            or run_state.get("agent_id")
+            or ""
+        )
         step = str(instruction.get("step") or "")
         role = "reviewer" if step.startswith("review") else "worker"
         return SpawnRequest(
-            task_dir=task_dir,
+            task_dir=request_task_dir,
             agent_id=agent_id,
             role=role,
             instruction_path=Path(instruction.get("instruction_path", "")),
             output_path=Path(instruction.get("output_path", "")),
-            input_path=task_dir / "input.json",
+            input_path=Path(
+                str(instruction.get("input_path") or request_task_dir / "input.json")
+            ),
             mode="foreground",
         )
 
@@ -981,6 +992,50 @@ class ManagerOrchestrator:
             output_file.read_text(encoding="utf-8"), encoding="utf-8"
         )
 
+    def record_spawn_completed(self) -> dict[str, Any]:
+        """Record an auditable host attestation before non-inline Worker commit."""
+
+        state = self._load_state()
+        if state.get("current_actor") != "worker":
+            raise StepError("当前没有等待提交的 Worker sub-agent")
+        if state.get("spawn_adapter") == "inline":
+            return {"required": False, "adapter": "inline"}
+
+        instruction = state.get("last_instruction")
+        if not isinstance(instruction, dict):
+            raise StepError("缺少当前 Worker instruction，无法确认 sub-agent 执行")
+        spawn = instruction.get("spawn")
+        if not isinstance(spawn, dict) or spawn.get("status") != "dispatched":
+            raise StepError("当前 instruction 没有已派发的 spawn request")
+        detail = spawn.get("detail")
+        request_path = Path(str((detail or {}).get("spawn_request") or ""))
+        output_path = Path(str(instruction.get("output_path") or ""))
+        if not request_path.is_file():
+            raise StepError(f"spawn request 不存在: {request_path}")
+        if not output_path.is_file():
+            raise StepError(f"sub-agent 输出不存在: {output_path}")
+
+        receipt = {
+            "schema": "spawn_receipt.v1",
+            "adapter": spawn.get("adapter"),
+            "role": spawn.get("role"),
+            "spawn_request": str(request_path),
+            "instruction_path": instruction.get("instruction_path"),
+            "output_path": str(output_path),
+            "attested_at": now_iso(),
+            "attestation": "host_confirms_native_subagent_completed",
+        }
+        receipt_path = request_path.with_name("spawn_receipt.json")
+        write_json(receipt_path, receipt)
+        state["last_spawn_receipt"] = str(receipt_path)
+        self._save_state(state)
+        self._append_decision(
+            "spawn_completed",
+            "Host attested native sub-agent completion",
+            receipt,
+        )
+        return receipt
+
     def _commit_plan(self, state: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
         charter = decision["report_charter"]
         plan = decision["execution_plan"]
@@ -1356,7 +1411,7 @@ class ManagerOrchestrator:
             "argument_synthesis": "核心论点提炼",
             "storyline_design": "故事线设计",
             "page_filling": "草稿填充",
-            "format": "材料可视化",
+            "format": "可视化",
             "qa_preparation": "QA 梳理",
             "speaker_script": "逐字稿生成",
             "analysis": "分析",
@@ -1432,7 +1487,7 @@ class ManagerOrchestrator:
             result["run_mode_options"] = {
                 "full_auto": "全程自动，不中断",
                 "step_by_step": "每个 Worker 完成后暂停确认",
-                "custom": "指定暂停的 Worker 列表，如 [\"argument_synthesis\", \"format\"]",
+                "custom": "指定暂停的 Worker 列表，如 [\"analysis\", \"format\"]",
             }
             result["next_action"] = "human_feedback"
             # Structured questions for host AskUserQuestion
@@ -1453,7 +1508,7 @@ class ManagerOrchestrator:
                     "options": [
                         {"label": "full_auto", "description": "全程自动，一口气跑完，不中断"},
                         {"label": "step_by_step", "description": "每个 Worker 完成后暂停，逐环节确认"},
-                        {"label": "custom", "description": "只在指定环节暂停，如 [\"argument_synthesis\", \"format\"]"},
+                        {"label": "custom", "description": "只在指定环节暂停，如 [\"analysis\", \"format\"]"},
                     ],
                 },
             ]

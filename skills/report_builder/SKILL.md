@@ -153,6 +153,7 @@ python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
   report start \
   --brief-file "<brief_file>" \
+  --contract-profile "v0_3" \
   --spawn-adapter "<workbuddy|codex|claude|inline>"
 ```
 
@@ -202,6 +203,24 @@ CLI 会返回 JSON，记录：
 7. 用户确认：report approve
 8. 用户要求调整或回答 Manager 问题：report feedback
 ```
+
+每次 `report next`、`report approve` 或 `report submit` 返回后，必须先检查顶层
+`spawn_required`：
+
+- `spawn_required=true`：立即读取顶层 `instruction.spawn.detail`，调用当前宿主的
+  sub-agent 工具；主对话不得亲自执行该 Worker/Reviewer instruction。
+- 等 sub-agent 写完 `instruction.output_path`（Reviewer 则由主对话原样转写返回
+  JSON）后，调用 `report submit --spawn-completed`。非 inline run 不带该参数会被
+  runtime 拒绝。
+- `spawn_required=false`：按 `instruction.actor` 继续；只有 adapter 明确为
+  `inline` 时，主对话才可以执行 Worker。
+
+不要因为 spawn 信息来自 `report approve` 或 `report submit` 而跳过；三条命令
+使用相同的顶层 `instruction + spawn_required` 协议。
+
+如果主对话曾绕过 spawn 直接生成 Worker 输出，该步骤视为协议无效：不得向用户
+提供“保留当前产出”作为等价选项，也不得用 `--spawn-completed` 追认；应删除/隔离
+该非合规输出并从当前 instruction 重新派发真实 sub-agent。
 
 Worker 指令已经包含 runtime 编译后的 core + audience + report type + format
 能力，以及投影后的命名空间化 context。宿主只执行该指令，不自行选择、拼接

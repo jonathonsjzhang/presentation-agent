@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional, Union
 
-from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE, load_agent_profile
 from presentation_agent.capabilities.profile import normalize_report_profile
 from presentation_agent.io import write_json
 from presentation_agent.models import now_iso
@@ -87,6 +87,7 @@ def normalize_brief(
     fields. Materials are lightly normalized so a host can pass a plain list of
     claim strings and still get a usable structure.
     """
+    selected_profile = load_agent_profile(root, contract_profile).contract_profile
     data = _coerce_to_dict(brief, root)
 
     normalized: dict[str, Any] = {**_DEFAULTS, **data}
@@ -101,7 +102,7 @@ def normalize_brief(
 
     normalized["materials"] = _normalize_materials(normalized.get("materials"))
     normalized["constraints"] = _as_str_list(normalized.get("constraints"))
-    if contract_profile == "v0_3":
+    if selected_profile == "v0_3":
         targets = normalized.get("delivery_targets") or ["document"]
         if isinstance(targets, str):
             targets = [targets]
@@ -163,7 +164,7 @@ def launch_report(
     out: Optional[Union[str, Path]] = None,
     spawn_adapter: Optional[str] = None,
     init_only: bool = False,
-    contract_profile: str = LEGACY_CONTRACT_PROFILE,
+    contract_profile: str = "v0_3",
 ) -> dict[str, Any]:
     """Normalize a brief, persist it, and kick off a report run.
 
@@ -185,7 +186,10 @@ def launch_report(
     stage 1's run_dir without running any agent.
     """
     root_path = Path(root).resolve()
-    normalized = normalize_brief(brief, root_path, contract_profile)
+    selected_profile = load_agent_profile(
+        root_path, contract_profile
+    ).contract_profile
+    normalized = normalize_brief(brief, root_path, selected_profile)
 
     run_id = f"report-{now_iso().replace(':', '').replace('+', 'Z')}"
     out_root = Path(out).resolve() if out else (root_path / "artifacts" / run_id)
@@ -204,7 +208,7 @@ def launch_report(
             root_path,
             out_root,
             spawn_adapter=spawn_adapter,
-            contract_profile=contract_profile,
+            contract_profile=selected_profile,
         )
         instruction = orchestrator.initialize_run(brief_path)
         return {
@@ -212,7 +216,7 @@ def launch_report(
             "run_dir": str(out_root),
             "brief_path": str(brief_path),
             "mode": "manager_controlled",
-            "contract_profile": contract_profile,
+            "contract_profile": orchestrator.contract_profile,
             "spawn_adapter": orchestrator.workers.spawn_adapter.kind,
             "instruction": instruction,
         }

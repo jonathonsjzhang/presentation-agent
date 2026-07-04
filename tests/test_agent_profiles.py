@@ -14,6 +14,7 @@ from presentation_agent.loop import LoopRunner
 from presentation_agent.launch import normalize_brief
 from presentation_agent.manager import ManagerOrchestrator
 from presentation_agent.context import ContextAssembler
+from presentation_agent.cli import build_parser, _worker_spawn_response
 from presentation_agent.step import PipelineStepper, StepRunner
 
 
@@ -26,6 +27,33 @@ def read_json(path: Path) -> dict:
 
 
 class AgentProfileLoaderTests(unittest.TestCase):
+    def test_user_facing_report_start_defaults_to_v03(self) -> None:
+        args = build_parser().parse_args(
+            ["report", "start", "--brief-file", "brief.json"]
+        )
+        self.assertEqual(args.contract_profile, "v0_3")
+        submit = build_parser().parse_args(
+            [
+                "report",
+                "submit",
+                "--run",
+                "run-id",
+                "--spawn-completed",
+            ]
+        )
+        self.assertTrue(submit.spawn_completed)
+
+    def test_worker_spawn_is_exposed_consistently_at_cli_top_level(self) -> None:
+        instruction = {
+            "actor": "worker",
+            "step": "gen",
+            "spawn": {"status": "dispatched", "adapter": "workbuddy"},
+        }
+        for result in (instruction, {"instruction": instruction}):
+            exposed = _worker_spawn_response(result)
+            self.assertIs(exposed["instruction"], instruction)
+            self.assertTrue(exposed["spawn_required"])
+
     def test_v03_manager_starts_four_stage_document_first_gate(self) -> None:
         brief = normalize_brief(
             {
@@ -50,6 +78,17 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 prepared["selected_workers"],
                 ["analysis", "storyline", "report", "format"],
             )
+            confirmation = prepared["present_to_user"]
+            for hidden_worker in (
+                "evidence_harvester",
+                "argument_synthesis",
+                "page_filling",
+                "qa_preparation",
+                "speaker_script",
+            ):
+                self.assertNotIn(hidden_worker, confirmation)
+            self.assertIn("`report` 报告产出", confirmation)
+            self.assertIn("`format` 可视化", confirmation)
             self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
             self.assertEqual(
                 manager.status()["state"]["contract_profile"], "v0_3"

@@ -57,8 +57,8 @@ def build_parser() -> argparse.ArgumentParser:
     report_start.add_argument(
         "--contract-profile",
         choices=["legacy.v0_2", "v0_3"],
-        default="legacy.v0_2",
-        help="Runtime contract profile. v0_3 enables the document-first four-stage chain.",
+        default="v0_3",
+        help="Runtime contract profile. Defaults to the document-first v0_3 user flow.",
     )
     _add_spawn_adapter_option(report_start)
 
@@ -69,6 +69,11 @@ def build_parser() -> argparse.ArgumentParser:
     report_submit = report_subs.add_parser("submit", help="Submit host output for the current instruction.")
     report_submit.add_argument("--run", required=True, help="Run id or run directory.")
     report_submit.add_argument("--output-file", help="JSON output file produced by the host model.")
+    report_submit.add_argument(
+        "--spawn-completed",
+        action="store_true",
+        help="Attest that the dispatched sub-agent completed this Worker/Reviewer step.",
+    )
     _add_spawn_adapter_option(report_submit)
 
     report_approve = report_subs.add_parser("approve", help="Approve the current Manager human gate.")
@@ -158,8 +163,8 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument(
         "--contract-profile",
         choices=["legacy.v0_2", "v0_3"],
-        default="legacy.v0_2",
-        help="Runtime contract profile.",
+        default="v0_3",
+        help="Runtime contract profile. Defaults to the document-first v0_3 user flow.",
     )
     launch.add_argument("--auto", action="store_true", help="Run all stages back to back.")
     launch.add_argument(
@@ -667,6 +672,22 @@ def main() -> None:
         return
 
 
+def _worker_spawn_response(result: object) -> dict[str, object]:
+    if not isinstance(result, dict):
+        return {}
+    nested = result.get("instruction")
+    instruction = nested if isinstance(nested, dict) else result
+    if instruction.get("actor") != "worker":
+        return {}
+    spawn = instruction.get("spawn")
+    return {
+        "instruction": instruction,
+        "spawn_required": bool(
+            isinstance(spawn, dict) and spawn.get("status") == "dispatched"
+        ),
+    }
+
+
 def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> None:
     if args.report_command == "start":
         from presentation_agent.io import write_json
@@ -737,6 +758,10 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "ok": True,
             "run_dir": str(run_dir),
             "instruction": prepared,
+            "spawn_required": bool(
+                isinstance(prepared.get("spawn"), dict)
+                and prepared["spawn"].get("status") == "dispatched"
+            ),
             "manager": manager.status(),
             "next_action": prepared.get("next_action", "host_write_output_then_report_submit"),
         })
@@ -762,12 +787,18 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
                 )
                 if args.output_file:
                     _copy_report_output(runner, Path(args.output_file).expanduser().resolve())
+                if state.get("spawn_adapter") != "inline":
+                    if not args.spawn_completed:
+                        raise StepError(
+                            "当前 Worker 使用非 inline adapter；必须由真实 sub-agent "
+                            "完成后使用 report submit --spawn-completed。"
+                        )
+                    manager.record_spawn_completed()
                 worker_result = runner.commit()
                 if worker_result.get("step") == "done":
                     result = manager.record_worker_completed(worker_result)
                 else:
-                    worker_result["actor"] = "worker"
-                    result = worker_result
+                    result = manager.prepare()
             elif actor == "human":
                 raise StepError("当前等待人工确认，请调用 report approve 或先提供反馈")
             else:
@@ -779,6 +810,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "ok": True,
             "run_dir": str(run_dir),
             "result": result,
+            **_worker_spawn_response(result),
             "manager": manager.status(),
             "next_action": result.get(
                 "next_action",
@@ -797,6 +829,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "ok": True,
             "run_dir": str(run_dir),
             "result": result,
+            **_worker_spawn_response(result),
             "manager": manager.status(),
             "next_action": result.get(
                 "next_action",
