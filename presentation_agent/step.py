@@ -625,6 +625,7 @@ class StepRunner:
             review_json = {"objections": []}
         write_json(self.run_dir / "review.json", review_json)
 
+        p0_blocked = bool(state.get("p0_open"))
         analysis_blocked = self._analysis_is_blocked(artifact)
         render_result = self._render_deliverable(artifact)
         report_render_blocked = (
@@ -645,12 +646,17 @@ class StepRunner:
 
         state["status"] = (
             "blocked"
-            if analysis_blocked or report_render_blocked or format_render_blocked
+            if p0_blocked
+            or analysis_blocked
+            or report_render_blocked
+            or format_render_blocked
             else "pending_human_review"
         )
         state["current_step"] = "done"
         state["next_action"] = (
-            "return_blocking_gap_to_manager"
+            "return_open_p0_to_manager"
+            if p0_blocked
+            else "return_blocking_gap_to_manager"
             if analysis_blocked
             else "retry_report_docx_render"
             if report_render_blocked
@@ -659,7 +665,9 @@ class StepRunner:
             else "await_human_decision"
         )
         finalize_note = (
-            "Report DOCX 渲染失败，stage blocked"
+            "达到最大返工轮数但仍有 P0，stage blocked"
+            if p0_blocked
+            else "Report DOCX 渲染失败，stage blocked"
             if report_render_blocked
             else "Format 正式材料渲染失败，stage blocked"
             if format_render_blocked

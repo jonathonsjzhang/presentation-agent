@@ -12,10 +12,14 @@ from presentation_agent.agent_profiles import (
 )
 from presentation_agent.loop import LoopRunner
 from presentation_agent.launch import normalize_brief
-from presentation_agent.manager import ManagerOrchestrator, WorkerExecutor
+from presentation_agent.manager import (
+    ManagerAgentRuntime,
+    ManagerOrchestrator,
+    WorkerExecutor,
+)
 from presentation_agent.context import ContextAssembler
 from presentation_agent.cli import build_parser, _worker_spawn_response
-from presentation_agent.step import PipelineStepper, StepRunner
+from presentation_agent.step import PipelineStepper, StepError, StepRunner
 from presentation_agent.spawn import WorkBuddySpawnAdapter
 
 
@@ -43,10 +47,29 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 "full_auto",
                 "--review-mode",
                 "schema_only",
+                "--delivery-option",
+                "format:ppt",
             ]
         )
         self.assertEqual(approve.run_mode, "full_auto")
         self.assertEqual(approve.review_mode, "schema_only")
+        self.assertEqual(approve.delivery_option, "format:ppt")
+        custom = build_parser().parse_args(
+            [
+                "report",
+                "approve",
+                "--run",
+                "run-id",
+                "--run-mode",
+                "custom",
+                "--pause-after",
+                "analysis",
+                "--pause-after",
+                "format",
+            ]
+        )
+        self.assertEqual(custom.run_mode, "custom")
+        self.assertEqual(custom.pause_after, ["analysis", "format"])
         submit = build_parser().parse_args(
             [
                 "report",
@@ -131,6 +154,154 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertEqual(approved_state["review_mode"], "schema_only")
             self.assertFalse(approved_state["review_subagents_enabled"])
 
+    def test_v03_manager_uses_profile_specific_skill_without_legacy_workers(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = ManagerOrchestrator(
+                ROOT,
+                Path(temp_dir),
+                contract_profile="v0_3",
+            )
+            instructions = manager.agent.package.instructions
+            self.assertIn(
+                "analysis → storyline → report → format",
+                instructions,
+            )
+            for legacy_worker in (
+                "argument_synthesis",
+                "storyline_design",
+                "page_filling",
+                "evidence_harvester 任务",
+            ):
+                self.assertNotIn(legacy_worker, instructions)
+
+    def test_v03_manager_runtime_enforces_canonical_plan_and_routes(self) -> None:
+        charter = read_json(FIXTURES / "report_charter.v2.valid.json")
+        tasks = [
+            {
+                "task_id": f"t{index}",
+                "agent_id": agent_id,
+                "objective": agent_id,
+                "dependencies": [] if index == 1 else [f"t{index - 1}"],
+                "status": "planned",
+            }
+            for index, agent_id in enumerate(
+                ("analysis", "storyline", "report", "format"),
+                start=1,
+            )
+        ]
+        packet = {
+            "agent_id": "analysis",
+            "recommendation_granularity": charter[
+                "recommendation_granularity"
+            ],
+            "unsupported_specificity_policy": charter[
+                "unsupported_specificity_policy"
+            ],
+        }
+        self.assertEqual(
+            ManagerAgentRuntime._v03_plan_errors(
+                charter,
+                {"tasks": tasks},
+                packet,
+            ),
+            [],
+        )
+        bad_tasks = list(reversed(tasks))
+        self.assertTrue(
+            ManagerAgentRuntime._v03_plan_errors(
+                charter,
+                {"tasks": bad_tasks},
+                {**packet, "agent_id": "storyline"},
+            )
+        )
+        state = {
+            "current_task": {"agent_id": "analysis"},
+            "last_event": "worker_completed",
+        }
+        self.assertTrue(
+            ManagerAgentRuntime._v03_acceptance_route_errors(
+                "complete", state, None
+            )
+        )
+        self.assertTrue(
+            ManagerAgentRuntime._v03_acceptance_route_errors(
+                "dispatch",
+                state,
+                {"agent_id": "report"},
+            )
+        )
+        self.assertEqual(
+            ManagerAgentRuntime._v03_acceptance_route_errors(
+                "dispatch",
+                state,
+                {"agent_id": "storyline"},
+            ),
+            [],
+        )
+
+    def test_delivery_gate_exposes_structured_choice_and_routes_selection(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            manager = ManagerOrchestrator(
+                ROOT,
+                run_dir,
+                contract_profile="v0_3",
+            )
+            state = {
+                "version": "manager_state.v2",
+                "run_id": "delivery-test",
+                "contract_profile": "v0_3",
+                "current_actor": "human",
+                "human_gate": "delivery_options",
+                "status": "awaiting_delivery_option_selection",
+                "pending_decision": {"user_message": "文档已完成"},
+                "current_task": {
+                    "task_id": "format-document",
+                    "agent_id": "format",
+                },
+                "tasks": [],
+                "accepted_artifacts": [],
+                "project_state": {},
+                "manager_phase": "acceptance",
+                "manager_step": "idle",
+                "last_event": "worker_completed",
+                "spawn_adapter": "inline",
+            }
+            manager._save_state(state)
+            (run_dir / "raw_brief.json").write_text(
+                '{"topic":"测试","audience":"strategy_lead","decision_goal":"决策"}',
+                encoding="utf-8",
+            )
+            gate = manager.prepare()
+            values = [
+                option["value"]
+                for option in gate["questions"][0]["options"]
+            ]
+            self.assertEqual(
+                values,
+                [
+                    "format:ppt",
+                    "format:html",
+                    "qa_preparation",
+                    "speaker_script",
+                    "skip",
+                ],
+            )
+
+            result = manager.approve(delivery_option="qa_preparation")
+
+            self.assertEqual(result["actor"], "manager")
+            updated = manager.status()["state"]
+            self.assertEqual(updated["last_event"], "human_feedback")
+            self.assertIn(
+                "qa_preparation",
+                updated["human_feedback"][-1]["text"],
+            )
+
     def test_v03_defers_requested_ppt_until_after_document(self) -> None:
         brief = normalize_brief(
             {
@@ -183,6 +354,49 @@ class AgentProfileLoaderTests(unittest.TestCase):
             )
             task_state = read_json(Path(task["task_dir"]) / "run_state.json")
             self.assertFalse(task_state["review_subagents_enabled"])
+
+    def test_v03_downstream_task_requires_resolved_upstream_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            raw_brief_path = run_dir / "raw_brief.json"
+            raw_brief_path.write_text(
+                '{"topic":"测试","audience":"strategy_lead","decision_goal":"决策"}',
+                encoding="utf-8",
+            )
+            executor = WorkerExecutor(
+                ROOT,
+                run_dir,
+                run_dir / "data",
+                contract_profile="v0_3",
+            )
+            packet = {
+                "task_id": "storyline-001",
+                "agent_id": "storyline",
+                "objective": "形成故事线",
+                "input_artifacts": ["missing-analysis.json"],
+                "acceptance_criteria": ["结构有效"],
+            }
+            with self.assertRaisesRegex(
+                StepError, "无法解析的 input_artifacts"
+            ):
+                executor.create_task(
+                    packet,
+                    read_json(FIXTURES / "report_charter.v2.valid.json"),
+                    raw_brief_path,
+                )
+
+            wrong_schema_path = run_dir / "wrong.json"
+            wrong_schema_path.write_text(
+                '{"schema":"report.v1"}',
+                encoding="utf-8",
+            )
+            packet["input_artifacts"] = [str(wrong_schema_path)]
+            with self.assertRaisesRegex(StepError, "缺少必需上游 analysis.v1"):
+                executor.create_task(
+                    packet,
+                    read_json(FIXTURES / "report_charter.v2.valid.json"),
+                    raw_brief_path,
+                )
 
     def test_spawn_chain_uses_worker_reviewer_worker_roles(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -327,6 +541,10 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertEqual(profile.specs["storyline"].next_agent_id, "report")
         self.assertEqual(profile.specs["report"].next_agent_id, "format")
         self.assertIsNone(profile.specs["format"].next_agent_id)
+        self.assertEqual(
+            profile.specs["qa_preparation"].input_schema,
+            "formatted_material.v2",
+        )
 
     def test_loop_runner_accepts_explicit_profile_without_running_a_model(self) -> None:
         runner = LoopRunner(ROOT, provider_override="mock", contract_profile="v0_3")

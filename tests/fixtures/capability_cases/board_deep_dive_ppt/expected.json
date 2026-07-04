@@ -1,0 +1,11 @@
+{
+  "must_include_capabilities": [
+    "audience.board",
+    "report.deep_dive",
+    "format.ppt"
+  ],
+  "must_not_include_capabilities": [
+    "audience.external",
+    "format.html"
+  ]
+}

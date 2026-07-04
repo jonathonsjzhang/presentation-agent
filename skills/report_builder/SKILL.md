@@ -144,10 +144,10 @@ python -m presentation_agent.cli --root "$HOME/PresentationAgent/repo" derive-ag
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `topic` | 是 | 汇报主题 |
-| `audience` | 否 | 汇报对象，缺失时由 Manager 识别或追问 |
-| `decision_goal` | 否 | 希望支撑的决策，由 Manager 正式定义 |
+| `audience` | 是 | 汇报对象；不确定时先用自然语言与用户确认 |
+| `decision_goal` | 是 | 希望支撑的决策 |
 | `report_type` | 否 | `deep_dive` / `business_progress` / `quick_sync`，默认 `deep_dive` |
-| `output_format` | 否 | `ppt` / `document` / `html`，默认 `ppt` |
+| `output_format` | 否 | v0.3 固定先生成 `document`；PPT/HTML 在文档完成后追加 |
 | `context` | 否 | 背景 |
 | `materials` | 否 | 素材、结论、证据、文件路径 |
 | `constraints` | 否 | 页数、保密、口径、格式限制 |
@@ -200,7 +200,7 @@ CLI 会返回 JSON，记录：
 - 当前 `instruction.instruction_path`
 - 当前 `instruction.output_path`
 
-第一条指令一定属于 Manager planning。Manager 会输出 `report_charter`、`execution_plan` 和首个 `task_packet`。
+第一条返回一定是 Brief 人工确认 gate；用户确认后才进入 Manager planning。
 
 ## Manager / Worker 调度循环
 
@@ -221,10 +221,13 @@ CLI 会返回 JSON，记录：
 
    **AskUserQuestion 映射**（仅 brief gate）：
    - "Brief确认": "准确，继续" → approve；"需要修改" → 先展示问题，等用户说修改内容后 feedback
-   - "运行模式": "full_auto" / "step_by_step" / "custom" → 把值写入 brief.run_mode 后 approve
-     (若选 custom，追问具体暂停环节列表)
+   - "运行模式": "full_auto" / "step_by_step" / "custom" → 通过 approve 参数提交；
+     custom 需为每个暂停环节追加 `--pause-after`
    - "Review模式": "启用（推荐）" → `independent`，启用独立 Reviewer；
      "不启用（快速）" → `schema_only`，跳过 LLM Reviewer、仅保留 Schema/P0 门禁
+   - "追加交付": 将选项映射为 `--delivery-option`：
+     PPT=`format:ppt`、HTML=`format:html`、Q&A=`qa_preparation`、
+     逐字稿=`speaker_script`、结束=`skip`
 7. 用户确认：report approve
 8. 用户要求调整或回答 Manager 问题：report feedback
 ```
@@ -237,6 +240,25 @@ python -m presentation_agent.cli \
   report approve --run "<run_id>" \
   --run-mode "<full_auto|step_by_step>" \
   --review-mode "<independent|schema_only>"
+```
+
+自定义暂停点示例：
+
+```bash
+python -m presentation_agent.cli \
+  --workspace "$HOME/PresentationAgent/workspaces/default" \
+  report approve --run "<run_id>" --run-mode custom \
+  --pause-after analysis --pause-after format \
+  --review-mode independent
+```
+
+Delivery options gate 使用：
+
+```bash
+python -m presentation_agent.cli \
+  --workspace "$HOME/PresentationAgent/workspaces/default" \
+  report approve --run "<run_id>" \
+  --delivery-option "<format:ppt|format:html|qa_preparation|speaker_script|skip>"
 ```
 
 spawn 与 human gate 的决策规则以文首“不可违背的执行协议”为准；本循环不另设例外。
@@ -300,7 +322,9 @@ Worker 指令已经包含 runtime 编译后的 core + audience + report type + f
 
 ### 单环节闭环（实跑验证的状态机推进）
 
-一个 Worker 环节内部由 StepRunner 驱动 `gen → review → revise → done`，**review 是状态机的正式一步，不是可选项**。因此一个环节通常要派 2 次：
+一个 Worker 环节由 StepRunner 驱动。`independent` 模式执行
+`gen → review → revise/done`；`schema_only` 模式执行
+`gen → Schema/P0 gate → revise/done`，不派 Reviewer。
 
 ```text
 1. report next → instruction.spawn.role=worker → 派 worker(general-purpose) 写 output_gen.json
@@ -329,7 +353,7 @@ python -m presentation_agent.cli \
 
 python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
-  report submit --run "<run_id>"
+  report submit --run "<run_id>" --spawn-completed
 
 python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \

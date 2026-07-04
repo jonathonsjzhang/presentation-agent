@@ -206,6 +206,16 @@ class GenericSkill:
                 "## 原始 brief（已按本 Worker 投影）",
                 self._json_block(raw_brief),
             ])
+        canonical_inputs = {
+            key: input_data[key]
+            for key in ("raw_materials", "evidence_catalog", "delivery_target")
+            if input_data.get(key) not in (None, "", [], {})
+        }
+        if canonical_inputs:
+            blocks.extend([
+                "## v0.3 Canonical inputs（本环节正式输入）",
+                self._json_block(canonical_inputs),
+            ])
         inputs = input_data.get("inputs", {})
         if inputs:
             blocks.extend([

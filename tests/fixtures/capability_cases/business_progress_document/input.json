@@ -1,0 +1,8 @@
+{
+  "topic": "季度业务进展",
+  "audience": "business_team",
+  "report_type": "business_progress",
+  "output_format": "document",
+  "decision_goal": "确认偏差处置和资源支持",
+  "expected_action": "明确 owner、支持请求和下一步"
+}

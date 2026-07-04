@@ -1,0 +1,11 @@
+{
+  "must_include_capabilities": [
+    "audience.external",
+    "report.quick_sync",
+    "format.html"
+  ],
+  "must_not_include_capabilities": [
+    "audience.board",
+    "format.ppt"
+  ]
+}

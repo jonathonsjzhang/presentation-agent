@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import copy
+import tempfile
 import unittest
 from pathlib import Path
 
 from presentation_agent.cross_review import CrossStageReviewer
-from presentation_agent.io import read_json
+from presentation_agent.io import read_json, write_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +40,31 @@ class WP8CrossReviewTests(unittest.TestCase):
             )["status"],
             "pass",
         )
+
+    def test_runtime_unwraps_v03_canonical_upstream_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            stage_dir = Path(temp_dir)
+            input_path = stage_dir / "input.json"
+            write_json(
+                input_path,
+                {
+                    "schema": "worker_context.v1",
+                    "analysis": self.analysis,
+                },
+            )
+            write_json(stage_dir / "artifact.json", self.storyline)
+            write_json(
+                stage_dir / "run_state.json",
+                {
+                    "agent_id": "storyline",
+                    "current_step": "done",
+                    "input_path": str(input_path),
+                },
+            )
+
+            result = CrossStageReviewer(ROOT, stage_dir).review_stage(stage_dir)
+
+            self.assertEqual(result["status"], "pass")
 
     def test_analysis_to_storyline_blocks_missing_and_unsupported(self) -> None:
         artifact = copy.deepcopy(self.storyline)

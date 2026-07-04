@@ -1,0 +1,46 @@
+{
+  "rubrics": [
+    {
+      "id": "MGR03-P0-001",
+      "severity": "P0",
+      "dimension": "主链",
+      "check": "初始计划是否严格为 analysis → storyline → report → format。",
+      "fix": "恢复固定四阶段，不把 Evidence 或扩展 Worker 放入初始计划。"
+    },
+    {
+      "id": "MGR03-P0-002",
+      "severity": "P0",
+      "dimension": "文档优先",
+      "check": "初始 delivery_targets 是否仅为 document。",
+      "fix": "先交付 document，再通过 delivery options gate 追加其他载体。"
+    },
+    {
+      "id": "MGR03-P0-003",
+      "severity": "P0",
+      "dimension": "输入依赖",
+      "check": "下游 task_packet 是否引用真实、已批准的必需上游 artifact。",
+      "fix": "使用 artifact_catalog 中的真实路径并保持阶段依赖。"
+    },
+    {
+      "id": "MGR03-P0-004",
+      "severity": "P0",
+      "dimension": "验收",
+      "check": "是否拒绝仍有 P0、阻塞状态、渲染失败或跨阶段硬冲突的产物。",
+      "fix": "派发返工或请求人工决策，不得按 schema 合格直接放行。"
+    },
+    {
+      "id": "MGR03-P0-005",
+      "severity": "P0",
+      "dimension": "建议粒度",
+      "check": "task packet 是否继承 Charter 的建议粒度和不支持细节政策。",
+      "fix": "原样继承并拦截无来源的执行化扩写。"
+    },
+    {
+      "id": "MGR03-P1-001",
+      "severity": "P1",
+      "dimension": "用户沟通",
+      "check": "是否用简洁自然语言说明当前产物、未决问题和下一步。",
+      "improvement": "只呈现用户决策所需信息，避免暴露内部 Evidence 子任务。"
+    }
+  ]
+}

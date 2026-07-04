@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional
 
@@ -48,6 +50,14 @@ class ManagerAgentRuntime:
         self.handoff_dir = self.manager_dir / "handoff"
         self.handoff_dir.mkdir(parents=True, exist_ok=True)
         self.package = load_skill_package(root, "manager")
+        if contract_profile == "v0_3":
+            behavior = load_skill_package(root, "manager_v03")
+            self.package = replace(
+                self.package,
+                path=behavior.path,
+                instructions=behavior.instructions,
+                rubrics=behavior.rubrics,
+            )
         self.memory = MemoryStore(root, "manager", data_root=data_root)
 
     def prepare(self, context: dict[str, Any], phase: str) -> dict[str, Any]:
@@ -70,15 +80,6 @@ class ManagerAgentRuntime:
             json.dumps(context, ensure_ascii=False, indent=2),
             "```",
         ]
-        if self.contract_profile == "v0_3":
-            lines.extend([
-                "",
-                "## v0.3 Schema 优先级",
-                "",
-                "下方兼容性“必填字段速查”描述的是 legacy.v0_2，v0.3 必须忽略其中的 "
-                "`output_format`、`evidence_inventory_policy` 与旧 Worker ID，"
-                "严格以本指令末尾 JSON Schema、report_charter.v2 和 task_packet.v2 为准。",
-            ])
         if memory_guidance:
             lines.extend([
                 "",
@@ -86,19 +87,56 @@ class ManagerAgentRuntime:
                 "",
                 *[f"- {item}" for item in memory_guidance],
             ])
-        if self.contract_profile == "v0_3":
-            lines.extend([
-                "",
-                "## v0.3 文档优先约束",
-                "",
-                "- 固定主链：analysis → storyline → report → format。",
-                "- Evidence 不是顶层 Worker；由 Analysis 按确定性规则内部调用。",
-                "- 默认 delivery_targets=[\"document\"]；主链先且只生成 document。",
-                "- document 完成后进入 delivery options gate，再询问是否转译 PPT/HTML，或生成 QA/逐字稿。",
-                "- PPT、HTML、QA 与逐字稿不得进入默认初始计划。",
-                "- planning 使用 report_charter.v2 与 task_packet.v2。",
-            ])
+        lines.extend(self._required_fields_reference())
         lines.extend([
+            "",
+            "## Manager Rubrics",
+            "",
+            "```json",
+            json.dumps(rubrics, ensure_ascii=False, indent=2),
+            "```",
+            "",
+            "## 输出 Schema（完整 JSON Schema）",
+            "",
+            "```json",
+            json.dumps(schema, ensure_ascii=False, indent=2),
+            "```",
+            "",
+            "## 输出操作",
+            "",
+            f"只写一个严格符合 manager_decision.v1 的 JSON 对象到 `{output_path}`。",
+            f"`phase` 必须为 `{phase}`。不要输出 Markdown、解释或思考过程。",
+        ])
+        instruction_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return {
+            "actor": "manager",
+            "step": phase,
+            "instruction_path": str(instruction_path),
+            "output_path": str(output_path),
+        }
+
+    def _required_fields_reference(self) -> list[str]:
+        if self.contract_profile == "v0_3":
+            return [
+                "",
+                "## v0.3 planning 契约速查",
+                "",
+                "- report_charter 使用 report_charter.v2；不得添加 run_mode 或 output_format。",
+                "- delivery_targets 固定为 [\"document\"]。",
+                "- execution_plan 的主链严格为 analysis → storyline → report → format。",
+                "- 首个 task_packet 必须派发 analysis。",
+                "- task_packet 使用 task_packet.v2，并继承 recommendation_granularity 与 unsupported_specificity_policy。",
+                "- Evidence 由 Analysis 内部调用，不得进入 execution_plan。",
+                "- PPT、HTML、QA 和逐字稿只允许在 document 完成后的 delivery options gate 追加。",
+                "",
+                "### acceptance_report 必填字段",
+                "- task_id: 必须等于当前 task_id",
+                "- verdict: accept / revise / blocked",
+                "- criteria_results: array",
+                "- cross_stage_findings: array",
+                "- reason: string",
+            ]
+        return [
             "",
             "## 必填字段速查（planning 阶段须写入以下所有嵌套字段）",
             "",
@@ -136,31 +174,7 @@ class ManagerAgentRuntime:
             "- criteria_results: array",
             "- cross_stage_findings: array",
             "- reason: string",
-            "",
-            "## Manager Rubrics",
-            "",
-            "```json",
-            json.dumps(rubrics, ensure_ascii=False, indent=2),
-            "```",
-            "",
-            "## 输出 Schema（完整 JSON Schema）",
-            "",
-            "```json",
-            json.dumps(schema, ensure_ascii=False, indent=2),
-            "```",
-            "",
-            "## 输出操作",
-            "",
-            f"只写一个严格符合 manager_decision.v1 的 JSON 对象到 `{output_path}`。",
-            f"`phase` 必须为 `{phase}`。不要输出 Markdown、解释或思考过程。",
-        ])
-        instruction_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return {
-            "actor": "manager",
-            "step": phase,
-            "instruction_path": str(instruction_path),
-            "output_path": str(output_path),
-        }
+        ]
 
     def read_decision(self, phase: str) -> dict[str, Any]:
         output_path = self.handoff_dir / f"output_{phase}.json"
@@ -225,6 +239,13 @@ class ManagerAgentRuntime:
                     "$.report_charter.delivery_targets: v0.3 initial plan must be "
                     "['document']; PPT/HTML are offered after document delivery"
                 )
+            if (
+                self.contract_profile == "v0_3"
+                and isinstance(charter, dict)
+                and isinstance(plan, dict)
+                and isinstance(packet, dict)
+            ):
+                errors.extend(self._v03_plan_errors(charter, plan, packet))
         else:
             report = decision.get("acceptance_report")
             if not isinstance(report, dict):
@@ -251,10 +272,95 @@ class ManagerAgentRuntime:
                         errors.extend(self._policy_inheritance_errors(charter, packet))
             if action == "complete" and phase != "acceptance":
                 errors.append("$.action: complete is only valid during acceptance")
+            if self.contract_profile == "v0_3":
+                state = read_json(
+                    self.run_dir / "manager_state.json", default={}
+                )
+                errors.extend(
+                    self._v03_acceptance_route_errors(
+                        action,
+                        state,
+                        decision.get("task_packet"),
+                    )
+                )
 
         if errors:
             raise StepError("Manager decision 校验失败:\n- " + "\n- ".join(errors))
         return decision
+
+    @staticmethod
+    def _v03_plan_errors(
+        charter: dict[str, Any],
+        plan: dict[str, Any],
+        packet: dict[str, Any],
+    ) -> list[str]:
+        errors: list[str] = []
+        expected = ["analysis", "storyline", "report", "format"]
+        actual = [
+            str(item.get("agent_id") or "")
+            for item in plan.get("tasks", [])
+            if isinstance(item, dict)
+        ]
+        if actual != expected:
+            errors.append(
+                "$.execution_plan.tasks: v0.3 canonical stages must be exactly "
+                f"{expected}, got {actual}"
+            )
+        if packet.get("agent_id") != "analysis":
+            errors.append(
+                "$.task_packet.agent_id: v0.3 initial task must be 'analysis'"
+            )
+        for key in (
+            "recommendation_granularity",
+            "unsupported_specificity_policy",
+        ):
+            if packet.get(key) != charter.get(key):
+                errors.append(
+                    f"$.task_packet.{key}: expected inherited value "
+                    f"{charter.get(key)!r}, got {packet.get(key)!r}"
+                )
+        return errors
+
+    @staticmethod
+    def _v03_acceptance_route_errors(
+        action: Any,
+        state: dict[str, Any],
+        packet: Any,
+    ) -> list[str]:
+        current = state.get("current_task") or {}
+        current_agent = str(current.get("agent_id") or "")
+        next_agent = (
+            str(packet.get("agent_id") or "")
+            if isinstance(packet, dict)
+            else ""
+        )
+        expected_next = {
+            "analysis": "storyline",
+            "storyline": "report",
+            "report": "format",
+        }
+        if action == "dispatch" and current_agent in expected_next:
+            expected = expected_next[current_agent]
+            if next_agent != expected:
+                return [
+                    "$.task_packet.agent_id: canonical next worker after "
+                    f"{current_agent} is {expected}, got {next_agent!r}"
+                ]
+        if action == "complete" and current_agent in expected_next:
+            return [
+                f"$.action: cannot complete v0.3 after {current_agent}; "
+                f"must dispatch {expected_next[current_agent]}"
+            ]
+        if (
+            action == "dispatch"
+            and current_agent == "format"
+            and state.get("last_event") != "human_feedback"
+        ):
+            return [
+                "$.action: initial document Format must complete into the "
+                "delivery options gate before optional dispatch"
+            ]
+        return []
 
     @staticmethod
     def _policy_inheritance_errors(
@@ -369,21 +475,47 @@ class WorkerExecutor:
                 f"可用 Worker: {sorted(self.specs)}"
             )
         spec = self.specs[agent_id]
-        task_id = self._safe_id(str(packet.get("task_id") or f"task-{agent_id}"))
-        task_dir = self._unique_task_dir(task_id, agent_id)
-        task_dir.mkdir(parents=True, exist_ok=False)
-        (task_dir / "handoff").mkdir(parents=True, exist_ok=True)
 
         resolved_inputs: list[str] = []
         resolved_artifacts: list[tuple[Path, dict[str, Any]]] = []
+        unresolved_inputs: list[str] = []
         for reference in packet.get("input_artifacts", []):
             path = self._resolve_artifact(str(reference))
             if path is None:
+                unresolved_inputs.append(str(reference))
                 continue
             resolved_inputs.append(str(path))
             data = read_json(path, default={})
             if isinstance(data, dict) and path.resolve() != raw_brief_path.resolve():
                 resolved_artifacts.append((path, data))
+        if unresolved_inputs:
+            raise StepError(
+                "Manager task_packet 包含无法解析的 input_artifacts: "
+                + ", ".join(unresolved_inputs)
+            )
+        if self.contract_profile == "v0_3":
+            required_schema = {
+                "storyline": "analysis.v1",
+                "report": "storyline.v3",
+                "format": "report.v1",
+                "qa_preparation": "formatted_material.v2",
+                "speaker_script": "formatted_material.v2",
+            }.get(agent_id)
+            available_schemas = {
+                str(data.get("schema") or "")
+                for _, data in resolved_artifacts
+                if isinstance(data, dict)
+            }
+            if required_schema and required_schema not in available_schemas:
+                raise StepError(
+                    f"v0.3 Worker {agent_id} 缺少必需上游 {required_schema}; "
+                    f"已解析 schemas={sorted(available_schemas)}"
+                )
+
+        task_id = self._safe_id(str(packet.get("task_id") or f"task-{agent_id}"))
+        task_dir = self._unique_task_dir(task_id, agent_id)
+        task_dir.mkdir(parents=True, exist_ok=False)
+        (task_dir / "handoff").mkdir(parents=True, exist_ok=True)
 
         raw_brief = read_json(raw_brief_path, default={})
         worker_input = self.context_assembler.assemble(
@@ -809,6 +941,7 @@ class ManagerOrchestrator:
         *,
         run_mode: Optional[str] = None,
         review_mode: Optional[str] = None,
+        delivery_option: Optional[str] = None,
     ) -> dict[str, Any]:
         state = self._load_state()
         if state.get("current_actor") != "human":
@@ -890,6 +1023,10 @@ class ManagerOrchestrator:
                 "present_to_user": decision.get("user_message") or "汇报项目已完成并通过最终确认。",
             }
         if gate == "delivery_options":
+            if delivery_option and delivery_option != "skip":
+                return self.record_human_feedback(
+                    f"用户选择追加交付：{delivery_option}"
+                )
             state["status"] = "completed"
             state["current_actor"] = "human"
             state["human_gate"] = None
@@ -993,6 +1130,24 @@ class ManagerOrchestrator:
         adapter = self.workers.spawn_adapter
         if adapter.kind == "inline":
             return
+        previous = (
+            read_json(self.state_path, default={}).get("last_instruction")
+            if self.state_path.exists()
+            else None
+        )
+        if isinstance(previous, dict):
+            previous_spawn = previous.get("spawn")
+            if (
+                previous.get("step") == instruction.get("step")
+                and previous.get("instruction_path")
+                == instruction.get("instruction_path")
+                and previous.get("output_path") == instruction.get("output_path")
+                and isinstance(previous_spawn, dict)
+                and previous_spawn.get("status") == "dispatched"
+                and previous_spawn.get("adapter") == adapter.kind
+            ):
+                instruction["spawn"] = previous_spawn
+                return
         # _build_spawn_request keys off instruction["step"]; the awaiting_* short
         # circuit only has current_step, which already carries the sub-step name
         # (e.g. "awaiting_review_output" / "awaiting_revise_output").
@@ -1040,6 +1195,16 @@ class ManagerOrchestrator:
             raise StepError(f"spawn request 不存在: {request_path}")
         if not output_path.is_file():
             raise StepError(f"sub-agent 输出不存在: {output_path}")
+        if output_path.stat().st_mtime_ns < request_path.stat().st_mtime_ns:
+            raise StepError(
+                "sub-agent 输出早于当前 spawn request，疑似复用了旧输出"
+            )
+        output_sha256 = hashlib.sha256(output_path.read_bytes()).hexdigest()
+        task_dir = self.current_worker_dir(state)
+        if task_dir is None:
+            raise StepError("Manager state 缺少当前 Worker task_dir")
+        worker_state = read_json(task_dir / "run_state.json", default={})
+        round_index = int(worker_state.get("round_index", 0))
 
         receipt = {
             "schema": "spawn_receipt.v1",
@@ -1048,10 +1213,14 @@ class ManagerOrchestrator:
             "spawn_request": str(request_path),
             "instruction_path": instruction.get("instruction_path"),
             "output_path": str(output_path),
+            "output_sha256": output_sha256,
+            "round_index": round_index,
             "attested_at": now_iso(),
             "attestation": "host_confirms_native_subagent_completed",
         }
-        receipt_path = request_path.with_name("spawn_receipt.json")
+        receipt_path = request_path.with_name(
+            f"spawn_receipt_{output_path.stem}_round_{round_index}.json"
+        )
         write_json(receipt_path, receipt)
         state["last_spawn_receipt"] = str(receipt_path)
         self._save_state(state)
@@ -1587,6 +1756,40 @@ class ManagerOrchestrator:
                 "qa_preparation",
                 "speaker_script",
                 "skip",
+            ]
+            result["questions"] = [
+                {
+                    "header": "追加交付",
+                    "question": "文档已完成，是否追加其他交付物？",
+                    "multiSelect": False,
+                    "options": [
+                        {
+                            "label": "PPT",
+                            "description": "基于已批准报告转译 PPT",
+                            "value": "format:ppt",
+                        },
+                        {
+                            "label": "HTML",
+                            "description": "基于已批准报告转译 HTML",
+                            "value": "format:html",
+                        },
+                        {
+                            "label": "Q&A",
+                            "description": "生成管理层追问与回答策略",
+                            "value": "qa_preparation",
+                        },
+                        {
+                            "label": "逐字稿",
+                            "description": "生成汇报讲稿与时间节奏",
+                            "value": "speaker_script",
+                        },
+                        {
+                            "label": "结束",
+                            "description": "不追加其他交付物",
+                            "value": "skip",
+                        },
+                    ],
+                }
             ]
             result["next_action"] = "report_approve"
 

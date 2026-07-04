@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+from presentation_agent.capabilities.models import CapabilityError
+from presentation_agent.capabilities.profile import normalize_report_profile
+from presentation_agent.launch import normalize_brief
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class ReportProfileTests(unittest.TestCase):
+    def test_canonical_profile(self) -> None:
+        profile = normalize_report_profile(
+            {
+                "audience": "board",
+                "report_type": "business_progress",
+                "output_format": "document",
+            },
+            root=ROOT,
+        )
+        self.assertEqual(profile.audience, "board")
+        self.assertEqual(profile.report_type, "business_progress")
+        self.assertEqual(profile.output_format, "document")
+
+    def test_chinese_aliases(self) -> None:
+        profile = normalize_report_profile(
+            {
+                "audience": "董事会",
+                "report_type": "业务进展汇报",
+                "output_format": "文档",
+            },
+            root=ROOT,
+        )
+        self.assertEqual(
+            profile.to_dict(),
+            {
+                "audience": "board",
+                "report_type": "business_progress",
+                "output_format": "document",
+                "version": "v1",
+            },
+        )
+
+    def test_unknown_value_fails_in_strict_mode(self) -> None:
+        with self.assertRaises(CapabilityError):
+            normalize_report_profile(
+                {
+                    "audience": "mystery",
+                    "report_type": "deep_dive",
+                    "output_format": "ppt",
+                },
+                root=ROOT,
+            )
+
+    def test_raw_brief_rejects_unknown_report_type(self) -> None:
+        with self.assertRaises(CapabilityError):
+            normalize_brief(
+                {
+                    "topic": "AI 产品",
+                    "audience": "CEO 和 COO",
+                    "decision_goal": "确定投入优先级",
+                    "report_type": "weekly_magic",
+                },
+                ROOT,
+            )
+
+    def test_free_form_audience_survives_raw_brief_normalization(self) -> None:
+        brief = normalize_brief(
+            {
+                "topic": "AI 产品",
+                "audience": "CEO 和 COO",
+                "decision_goal": "确定投入优先级",
+            },
+            ROOT,
+        )
+        self.assertEqual(brief["audience"], "CEO 和 COO")
+        self.assertEqual(brief["report_type"], "deep_dive")
+        self.assertEqual(brief["output_format"], "ppt")
+
+
+if __name__ == "__main__":
+    unittest.main()

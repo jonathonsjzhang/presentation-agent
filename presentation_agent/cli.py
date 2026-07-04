@@ -80,13 +80,31 @@ def build_parser() -> argparse.ArgumentParser:
     report_approve.add_argument("--run", required=True, help="Run id or run directory.")
     report_approve.add_argument(
         "--run-mode",
-        choices=["full_auto", "step_by_step"],
+        choices=["full_auto", "step_by_step", "custom"],
         help="Brief gate execution mode.",
+    )
+    report_approve.add_argument(
+        "--pause-after",
+        action="append",
+        choices=["analysis", "storyline", "report", "format"],
+        default=[],
+        help="Worker pause point for --run-mode custom; repeat as needed.",
     )
     report_approve.add_argument(
         "--review-mode",
         choices=["independent", "schema_only"],
         help="Brief gate review mode; schema_only skips LLM review sub-agents.",
+    )
+    report_approve.add_argument(
+        "--delivery-option",
+        choices=[
+            "format:ppt",
+            "format:html",
+            "qa_preparation",
+            "speaker_script",
+            "skip",
+        ],
+        help="Delivery-options gate selection after document completion.",
     )
     _add_spawn_adapter_option(report_approve)
 
@@ -730,7 +748,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "brief_path": str(brief_path),
             "instruction": prepared,
             "manager": manager.status(),
-            "next_action": "host_write_output_then_report_submit",
+            "next_action": prepared.get("next_action", "human_feedback"),
         })
         return
 
@@ -831,9 +849,17 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
 
     if args.report_command == "approve":
         try:
+            selected_run_mode = getattr(args, "run_mode", None)
+            if selected_run_mode == "custom":
+                selected_run_mode = list(getattr(args, "pause_after", []))
+                if not selected_run_mode:
+                    raise StepError(
+                        "--run-mode custom 至少需要一个 --pause-after"
+                    )
             result = manager.approve(
-                run_mode=getattr(args, "run_mode", None),
+                run_mode=selected_run_mode,
                 review_mode=getattr(args, "review_mode", None),
+                delivery_option=getattr(args, "delivery_option", None),
             )
         except StepError as exc:
             _print_json({"ok": False, "error": str(exc), "manager": manager.status()})
@@ -862,7 +888,9 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             "run_dir": str(run_dir),
             "result": result,
             "manager": manager.status(),
-            "next_action": "host_write_output_then_report_submit",
+            "next_action": result.get(
+                "next_action", "host_write_output_then_report_submit"
+            ),
         })
         return
 

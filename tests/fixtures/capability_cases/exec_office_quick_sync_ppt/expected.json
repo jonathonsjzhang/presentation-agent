@@ -1,0 +1,12 @@
+{
+  "must_include_capabilities": [
+    "audience.exec_office",
+    "report.quick_sync",
+    "format.ppt"
+  ],
+  "must_not_include_capabilities": [
+    "audience.business_team",
+    "report.deep_dive",
+    "format.html"
+  ]
+}

@@ -58,9 +58,15 @@ def load_agent_profile(
         rows = profile_config.get("workers", [])
         declared_order = profile_config.get("canonical_stages", [])
         extension_ids = set(profile_config.get("extension_workers", []))
+        extension_overrides = profile_config.get(
+            "extension_worker_overrides", {}
+        )
         if extension_ids:
             rows = list(rows) + [
-                row
+                {
+                    **row,
+                    **dict(extension_overrides.get(row.get("id"), {})),
+                }
                 for row in config.get("agents", [])
                 if row.get("id") in extension_ids
             ]

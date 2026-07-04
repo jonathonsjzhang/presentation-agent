@@ -1,0 +1,14 @@
+{
+  "must_include_capabilities": [
+    "audience.business_team",
+    "report.business_progress",
+    "format.document"
+  ],
+  "required_story_elements": [
+    "目标/承诺",
+    "偏差与原因",
+    "风险/卡点",
+    "支持请求",
+    "下一步"
+  ]
+}

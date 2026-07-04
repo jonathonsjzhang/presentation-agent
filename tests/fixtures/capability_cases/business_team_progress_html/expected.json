@@ -1,0 +1,12 @@
+{
+  "must_include_capabilities": [
+    "audience.business_team",
+    "report.business_progress",
+    "format.html"
+  ],
+  "must_not_include_capabilities": [
+    "audience.board",
+    "format.ppt",
+    "format.document"
+  ]
+}

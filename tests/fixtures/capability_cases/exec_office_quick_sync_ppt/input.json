@@ -1,0 +1,8 @@
+{
+  "topic": "AI 助手市场份额快速同步",
+  "audience": "exec_office",
+  "report_type": "quick_sync",
+  "output_format": "ppt",
+  "decision_goal": "快速同步最新市场份额数据，确认无需立即干预",
+  "constraints": ["不超过 5 页", "不展开策略建议"]
+}

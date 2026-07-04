@@ -208,7 +208,14 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
 
     def test_raw_materials_spawn_once_resume_and_inject_catalog(self) -> None:
         runner, task_dir = self._runner(
-            {"raw_materials": [{"material_id": "M-1", "text": "source"}]}
+            {
+                "raw_materials": [
+                    {
+                        "material_id": "M-1",
+                        "text": "UNIQUE_RAW_MATERIAL_42",
+                    }
+                ]
+            }
         )
         first = runner.prepare()
         self.assertEqual(first["step"], "evidence")
@@ -248,6 +255,11 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         self.assertTrue(
             (task_dir / "subtasks" / "evidence_harvester" / "review.json").exists()
         )
+        instruction = Path(analysis["instruction_path"]).read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("UNIQUE_RAW_MATERIAL_42", instruction)
+        self.assertIn("SU-1", instruction)
 
     def test_blocking_unresolved_evidence_returns_analysis_blocked(self) -> None:
         runner, _ = self._runner({"analysis_objective": "test"})
@@ -284,6 +296,25 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         review = read_json(task_dir / "review_round_0.json")
         self.assertEqual(review["reviewer"], "schema_gate_only")
         self.assertEqual(review["objections"], [])
+
+    def test_open_schema_p0_is_blocked_at_revision_limit(self) -> None:
+        runner, task_dir = self._runner({"analysis_objective": "test"})
+        runner.max_revision_rounds = 0
+        generation = runner.prepare()
+        artifact = json.loads(
+            (FIXTURES / "analysis.v1.valid.json").read_text(encoding="utf-8")
+        )
+        artifact.pop("findings")
+        write_json(Path(generation["output_path"]), artifact)
+        review = runner.commit()
+        write_json(Path(review["output_path"]), {"objections": []})
+
+        done = runner.commit()
+
+        state = read_json(task_dir / "run_state.json")
+        self.assertEqual(done["status"], "blocked")
+        self.assertEqual(state["next_action"], "return_open_p0_to_manager")
+        self.assertTrue(state["p0_open"])
 
     def test_default_mode_still_prepares_independent_reviewer(self) -> None:
         runner, _ = self._runner({"analysis_objective": "test"})
