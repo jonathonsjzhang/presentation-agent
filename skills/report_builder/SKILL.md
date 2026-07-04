@@ -223,8 +223,20 @@ CLI 会返回 JSON，记录：
    - "Brief确认": "准确，继续" → approve；"需要修改" → 先展示问题，等用户说修改内容后 feedback
    - "运行模式": "full_auto" / "step_by_step" / "custom" → 把值写入 brief.run_mode 后 approve
      (若选 custom，追问具体暂停环节列表)
+   - "Review模式": "启用（推荐）" → `independent`，启用独立 Reviewer；
+     "不启用（快速）" → `schema_only`，跳过 LLM Reviewer、仅保留 Schema/P0 门禁
 7. 用户确认：report approve
 8. 用户要求调整或回答 Manager 问题：report feedback
+```
+
+Brief gate 确认时应把选择显式传给 CLI：
+
+```bash
+python -m presentation_agent.cli \
+  --workspace "$HOME/PresentationAgent/workspaces/default" \
+  report approve --run "<run_id>" \
+  --run-mode "<full_auto|step_by_step>" \
+  --review-mode "<independent|schema_only>"
 ```
 
 spawn 与 human gate 的决策规则以文首“不可违背的执行协议”为准；本循环不另设例外。

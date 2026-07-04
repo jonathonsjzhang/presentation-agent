@@ -360,6 +360,7 @@ class WorkerExecutor:
         packet: dict[str, Any],
         report_charter: dict[str, Any],
         raw_brief_path: Path,
+        review_subagents_enabled: bool = True,
     ) -> dict[str, Any]:
         agent_id = str(packet.get("agent_id") or "")
         if agent_id not in self.specs:
@@ -436,6 +437,7 @@ class WorkerExecutor:
             "created_at": now_iso(),
             "updated_at": now_iso(),
             "contract_profile": self.contract_profile,
+            "review_subagents_enabled": review_subagents_enabled,
         }
         write_json(task_dir / "run_state.json", run_state)
         return {
@@ -592,6 +594,8 @@ class ManagerOrchestrator:
             "accepted_artifacts": [],
             "project_state": {},
             "run_mode": None,  # set during brief confirmation: "full_auto" | "step_by_step"
+            "review_mode": "independent",
+            "review_subagents_enabled": True,
             "created_at": now_iso(),
             "updated_at": now_iso(),
         }
@@ -800,7 +804,12 @@ class ManagerOrchestrator:
         )
         return self.prepare()
 
-    def approve(self) -> dict[str, Any]:
+    def approve(
+        self,
+        *,
+        run_mode: Optional[str] = None,
+        review_mode: Optional[str] = None,
+    ) -> dict[str, Any]:
         state = self._load_state()
         if state.get("current_actor") != "human":
             raise StepError("当前没有等待人工确认的 Manager gate")
@@ -809,7 +818,11 @@ class ManagerOrchestrator:
         if gate == "brief":
             brief_data = decision.get("brief", {})
             # run_mode: "full_auto" | "step_by_step" | ["agent_id", ...]
-            raw_run_mode = decision.get("run_mode") or brief_data.get("run_mode")
+            raw_run_mode = (
+                run_mode
+                or decision.get("run_mode")
+                or brief_data.get("run_mode")
+            )
             if isinstance(raw_run_mode, list):
                 state["run_mode"] = raw_run_mode  # custom pause points
                 state["custom_pause_agents"] = raw_run_mode
@@ -817,6 +830,18 @@ class ManagerOrchestrator:
                 state["run_mode"] = "full_auto"
             else:
                 state["run_mode"] = "step_by_step"  # default
+            selected_review_mode = (
+                review_mode
+                or decision.get("review_mode")
+                or brief_data.get("review_mode")
+                or "independent"
+            )
+            if selected_review_mode not in ("independent", "schema_only"):
+                raise StepError(f"未知 review_mode: {selected_review_mode}")
+            state["review_mode"] = selected_review_mode
+            state["review_subagents_enabled"] = (
+                selected_review_mode == "independent"
+            )
             state["human_gate"] = None
             state["pending_decision"] = None
             state["current_actor"] = "manager"
@@ -826,7 +851,8 @@ class ManagerOrchestrator:
             state["status"] = "planning"
             self._save_state(state)
             self._append_decision("brief_confirmed",
-                f"用户确认了 brief，run_mode={state['run_mode']}",
+                "用户确认了 brief，"
+                f"run_mode={state['run_mode']}，review_mode={selected_review_mode}",
                 {"brief": brief_data})
             return {"actor": "manager", "step": "planning",
                     "message": "Brief 已确认，开始规划。"}
@@ -1165,6 +1191,9 @@ class ManagerOrchestrator:
             packet,
             state.get("report_charter") or read_json(self.charter_path, default={}),
             self.raw_brief_path,
+            review_subagents_enabled=bool(
+                state.get("review_subagents_enabled", True)
+            ),
         )
         state.setdefault("tasks", []).append(task)
         self._set_plan_task_status(str(task.get("task_id") or ""), "dispatched", task)
@@ -1453,7 +1482,7 @@ class ManagerOrchestrator:
         lines.append("")
         lines.append("---")
         lines.append("")
-        lines.append("请通过下方选项确认 Brief 信息并选择运行模式。")
+        lines.append("请通过下方选项确认 Brief，并选择运行模式和 Review 模式。")
 
         return "\n".join(lines)
 
@@ -1477,6 +1506,7 @@ class ManagerOrchestrator:
             "status": state.get("status"),
             "present_to_user": present_to_user,
             "run_mode": state.get("run_mode"),
+            "review_mode": state.get("review_mode"),
         }
 
         if gate == "brief":
@@ -1488,6 +1518,10 @@ class ManagerOrchestrator:
                 "full_auto": "全程自动，不中断",
                 "step_by_step": "每个 Worker 完成后暂停确认",
                 "custom": "指定暂停的 Worker 列表，如 [\"analysis\", \"format\"]",
+            }
+            result["review_mode_options"] = {
+                "independent": "独立 Review sub-agent（质量优先）",
+                "schema_only": "仅 Schema/P0 门禁（速度优先）",
             }
             result["next_action"] = "human_feedback"
             # Structured questions for host AskUserQuestion
@@ -1509,6 +1543,21 @@ class ManagerOrchestrator:
                         {"label": "full_auto", "description": "全程自动，一口气跑完，不中断"},
                         {"label": "step_by_step", "description": "每个 Worker 完成后暂停，逐环节确认"},
                         {"label": "custom", "description": "只在指定环节暂停，如 [\"analysis\", \"format\"]"},
+                    ],
+                },
+                {
+                    "header": "Review模式",
+                    "question": "是否启用独立 Review sub-agent？",
+                    "multiSelect": False,
+                    "options": [
+                        {
+                            "label": "启用（推荐）",
+                            "description": "启用独立 Reviewer，质量更稳但耗时更长",
+                        },
+                        {
+                            "label": "不启用（快速）",
+                            "description": "跳过 LLM Reviewer，仅保留确定性 Schema/P0 门禁",
+                        },
                     ],
                 },
             ]

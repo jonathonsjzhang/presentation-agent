@@ -12,10 +12,11 @@ from presentation_agent.agent_profiles import (
 )
 from presentation_agent.loop import LoopRunner
 from presentation_agent.launch import normalize_brief
-from presentation_agent.manager import ManagerOrchestrator
+from presentation_agent.manager import ManagerOrchestrator, WorkerExecutor
 from presentation_agent.context import ContextAssembler
 from presentation_agent.cli import build_parser, _worker_spawn_response
 from presentation_agent.step import PipelineStepper, StepRunner
+from presentation_agent.spawn import WorkBuddySpawnAdapter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,20 @@ class AgentProfileLoaderTests(unittest.TestCase):
             ["report", "start", "--brief-file", "brief.json"]
         )
         self.assertEqual(args.contract_profile, "v0_3")
+        approve = build_parser().parse_args(
+            [
+                "report",
+                "approve",
+                "--run",
+                "run-id",
+                "--run-mode",
+                "full_auto",
+                "--review-mode",
+                "schema_only",
+            ]
+        )
+        self.assertEqual(approve.run_mode, "full_auto")
+        self.assertEqual(approve.review_mode, "schema_only")
         submit = build_parser().parse_args(
             [
                 "report",
@@ -93,6 +108,28 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertEqual(
                 manager.status()["state"]["contract_profile"], "v0_3"
             )
+            self.assertEqual(
+                set(prepared["review_mode_options"]),
+                {"independent", "schema_only"},
+            )
+            review_question = next(
+                question
+                for question in prepared["questions"]
+                if question["header"] == "Review模式"
+            )
+            self.assertEqual(
+                [option["label"] for option in review_question["options"]],
+                ["启用（推荐）", "不启用（快速）"],
+            )
+
+            manager.approve(
+                run_mode="full_auto",
+                review_mode="schema_only",
+            )
+            approved_state = manager.status()["state"]
+            self.assertEqual(approved_state["run_mode"], "full_auto")
+            self.assertEqual(approved_state["review_mode"], "schema_only")
+            self.assertFalse(approved_state["review_subagents_enabled"])
 
     def test_v03_defers_requested_ppt_until_after_document(self) -> None:
         brief = normalize_brief(
@@ -110,6 +147,84 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertEqual(
             brief["requested_followup_targets"], ["ppt", "html"]
         )
+
+    def test_review_choice_is_copied_into_each_worker_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            raw_brief_path = run_dir / "raw_brief.json"
+            raw_brief_path.write_text(
+                json.dumps(
+                    {
+                        "topic": "测试主题",
+                        "audience": "strategy_lead",
+                        "decision_goal": "决定下一步",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            executor = WorkerExecutor(
+                ROOT,
+                run_dir,
+                run_dir / "data",
+                contract_profile="v0_3",
+            )
+            task = executor.create_task(
+                {
+                    "task_id": "analysis-001",
+                    "agent_id": "analysis",
+                    "objective": "形成可追溯的分析判断",
+                    "input_artifacts": [],
+                    "acceptance_criteria": ["结构有效"],
+                },
+                read_json(FIXTURES / "report_charter.v2.valid.json"),
+                raw_brief_path,
+                review_subagents_enabled=False,
+            )
+            task_state = read_json(Path(task["task_dir"]) / "run_state.json")
+            self.assertFalse(task_state["review_subagents_enabled"])
+
+    def test_spawn_chain_uses_worker_reviewer_worker_roles(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            task_dir = Path(temp_dir)
+            handoff = task_dir / "handoff"
+            handoff.mkdir()
+            input_path = task_dir / "input.json"
+            input_path.write_text("{}", encoding="utf-8")
+            (task_dir / "run_state.json").write_text(
+                '{"agent_id":"analysis"}',
+                encoding="utf-8",
+            )
+            executor = WorkerExecutor(
+                ROOT,
+                task_dir,
+                task_dir / "data",
+                contract_profile="v0_3",
+            )
+
+            roles = {}
+            for step in ("gen", "review", "revise"):
+                request = executor._build_spawn_request(
+                    task_dir,
+                    {
+                        "step": step,
+                        "instruction_path": str(
+                            handoff / f"instruction_{step}.md"
+                        ),
+                        "output_path": str(handoff / f"output_{step}.json"),
+                        "input_path": str(input_path),
+                    },
+                )
+                roles[step] = request.role
+                if step == "review":
+                    detail = WorkBuddySpawnAdapter().spawn(request).detail
+                    self.assertEqual(detail["subagent_type"], "Explore")
+                    self.assertEqual(detail["result_delivery"], "host_relay")
+
+            self.assertEqual(
+                roles,
+                {"gen": "worker", "review": "reviewer", "revise": "worker"},
+            )
 
     def test_v03_normalization_preserves_material_references(self) -> None:
         brief = normalize_brief(
