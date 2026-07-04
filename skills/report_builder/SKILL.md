@@ -23,6 +23,29 @@ description: >-
 - 只在 CLI 返回 `actor=human` 时把 `present_to_user` 展示给用户。
 - 用户在 Manager gate 给出反馈时，通过 `report feedback` 送回当前 run；可复用偏好再用 `feedback-text auto` 沉淀。
 
+## 不可违背的执行协议（每轮首先检查）
+
+每次 `report next`、`report approve` 或 `report submit` 返回后，只按以下状态机执行：
+
+```text
+actor=human
+→ 立即暂停并展示 present_to_user；禁止自动 approve。
+
+actor=manager
+→ 主对话执行 Manager instruction；不派 sub-agent。
+
+actor=worker + spawn_required=true
+→ 必须调用 instruction.spawn.detail 指定的真实 sub-agent；
+→ 主对话禁止代写 Worker / Reviewer 输出；
+→ 等 output_path 就绪后执行 report submit --spawn-completed。
+
+actor=worker + spawn_required=false
+→ 只有 manager.state.spawn_adapter=inline 时才允许主对话执行。
+```
+
+若主对话绕过 spawn 生成了 Worker 输出，该输出无效：不得追认、不得作为正式交付，
+也不得让用户选择“保留当前产出”；必须从当前 instruction 重新派发 sub-agent。
+
 ## 默认安装位置
 
 ```text
@@ -204,23 +227,7 @@ CLI 会返回 JSON，记录：
 8. 用户要求调整或回答 Manager 问题：report feedback
 ```
 
-每次 `report next`、`report approve` 或 `report submit` 返回后，必须先检查顶层
-`spawn_required`：
-
-- `spawn_required=true`：立即读取顶层 `instruction.spawn.detail`，调用当前宿主的
-  sub-agent 工具；主对话不得亲自执行该 Worker/Reviewer instruction。
-- 等 sub-agent 写完 `instruction.output_path`（Reviewer 则由主对话原样转写返回
-  JSON）后，调用 `report submit --spawn-completed`。非 inline run 不带该参数会被
-  runtime 拒绝。
-- `spawn_required=false`：按 `instruction.actor` 继续；只有 adapter 明确为
-  `inline` 时，主对话才可以执行 Worker。
-
-不要因为 spawn 信息来自 `report approve` 或 `report submit` 而跳过；三条命令
-使用相同的顶层 `instruction + spawn_required` 协议。
-
-如果主对话曾绕过 spawn 直接生成 Worker 输出，该步骤视为协议无效：不得向用户
-提供“保留当前产出”作为等价选项，也不得用 `--spawn-completed` 追认；应删除/隔离
-该非合规输出并从当前 instruction 重新派发真实 sub-agent。
+spawn 与 human gate 的决策规则以文首“不可违背的执行协议”为准；本循环不另设例外。
 
 Worker 指令已经包含 runtime 编译后的 core + audience + report type + format
 能力，以及投影后的命名空间化 context。宿主只执行该指令，不自行选择、拼接
@@ -228,7 +235,7 @@ Worker 指令已经包含 runtime 编译后的 core + audience + report type + f
 
 ## Sub-agent 派生（隔离上下文执行）
 
-每个 Worker / Reviewer 步骤都必须在与主对话隔离的独立 sub-agent 上下文中执行，避免上下文积累导致的漂移。Manager planning / acceptance 由主对话 Agent 执行，因此 `actor=manager` 时没有 `spawn` 是正常行为；只有 `actor=worker` 才检查并执行 `instruction.spawn`。
+本节只说明不同宿主如何执行文首协议，不重新定义是否需要 spawn。
 
 ### 如何识别"该派 sub-agent"
 
@@ -255,10 +262,8 @@ Worker 指令已经包含 runtime 编译后的 core + audience + report type + f
 }
 ```
 
-- `actor=worker` 且有 `instruction.spawn`、`status=dispatched` → 按 `spawn.role` 派一个真 sub-agent 去执行本步骤。
-- `actor=worker` 且本次 run 的 adapter 为 `inline` → 本对话直接读 `instruction_path`、写 `output_path`。
-- `actor=worker`、run adapter 非 `inline`，但 instruction 没有 `spawn` → 这是后端协议错误；先用 `report status` 检查 `manager.state.spawn_adapter`，不得静默降级为 inline。
-- `actor=manager` → 由主对话 Manager 执行 planning / acceptance，不派生 sub-agent。
+非 inline run 若 `actor=worker` 却没有已派发的 `instruction.spawn`，属于后端协议错误；
+使用 `report status` 检查 adapter，禁止静默降级或由主对话代写。
 
 ### 角色 → sub-agent 类型映射（终端无关契约）
 
