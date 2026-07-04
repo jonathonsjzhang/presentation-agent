@@ -210,6 +210,10 @@ class StepRunner:
     def _uses_analysis_evidence_runtime(self) -> bool:
         return self.contract_profile == "v0_3" and self.spec.id == "analysis"
 
+    @staticmethod
+    def _review_subagents_enabled(state: dict[str, Any]) -> bool:
+        return bool(state.get("review_subagents_enabled", True))
+
     def _prepare_analysis_evidence(
         self, state: dict[str, Any]
     ) -> dict[str, Any] | None:
@@ -462,7 +466,11 @@ class StepRunner:
         state["current_step"] = "gen_completed"
         self._save_state(state)
 
-        result = self._prepare_review(state)
+        result = (
+            self._prepare_review(state)
+            if self._review_subagents_enabled(state)
+            else self._run_schema_only_review(state)
+        )
         if memory_note:
             result["memory_notes"] = memory_note
         return result
@@ -545,6 +553,45 @@ class StepRunner:
         result["memory_notes"] = memory_note
         return result
 
+    def _run_schema_only_review(self, state: dict[str, Any]) -> dict[str, Any]:
+        """Apply deterministic schema/P0 gates without an LLM Reviewer."""
+
+        artifact_path = self.run_dir / f"draft_round_{state['round_index']}.json"
+        artifact = read_json(artifact_path)
+        objections = self.reviewer._schema_gate(
+            self.spec, artifact, self.skill_package.to_dict()
+        )
+        review = ReviewReport(reviewer="schema_gate_only", objections=objections)
+        review_path = self.run_dir / f"review_round_{state['round_index']}.json"
+        write_json(review_path, review.to_dict())
+        state["produced_artifacts"].append(str(review_path))
+        state["p0_open"] = [item.to_dict() for item in review.p0]
+        state["p1_open"] = [item.to_dict() for item in review.p1]
+
+        decision = self.stop_checker.check(self.spec, artifact, review)
+        stop_path = self.run_dir / f"stop_decision_round_{state['round_index']}.json"
+        write_json(stop_path, decision.to_dict())
+        state["produced_artifacts"].append(str(stop_path))
+        state["stop_decision"] = decision.to_dict()
+        state["current_step"] = "review_completed"
+        self._write_state(
+            state,
+            "schema_only_review",
+            f"schema-only review: P0={len(review.p0)}, P1={len(review.p1)}",
+        )
+        self._save_state(state)
+
+        summary = self._objections_to_summary(review, state["round_index"])
+        if decision.can_stop or state["round_index"] >= self.max_revision_rounds:
+            result = self._finalize(state)
+            result["review_summary"] = summary
+            result["review_mode"] = "schema_only"
+            return result
+        result = self._prepare_revise(state)
+        result["review_summary"] = summary
+        result["review_mode"] = "schema_only"
+        return result
+
     def _commit_revise(self, state: dict[str, Any]) -> dict[str, Any]:
         artifact = self._read_and_validate_output("output_revise.json", state)
 
@@ -558,7 +605,11 @@ class StepRunner:
         state["current_step"] = "gen_completed"
         self._save_state(state)
 
-        return self._prepare_review(state)
+        return (
+            self._prepare_review(state)
+            if self._review_subagents_enabled(state)
+            else self._run_schema_only_review(state)
+        )
 
     # ---- internal: helpers --------------------------------------------------
 

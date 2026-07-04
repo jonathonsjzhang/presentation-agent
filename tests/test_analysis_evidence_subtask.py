@@ -141,7 +141,12 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
             },
         }
 
-    def _runner(self, input_data: dict) -> tuple[StepRunner, Path]:
+    def _runner(
+        self,
+        input_data: dict,
+        *,
+        review_subagents_enabled: bool = True,
+    ) -> tuple[StepRunner, Path]:
         task_dir = self.tmp / f"task-{len(list(self.tmp.glob('task-*')))}"
         task_dir.mkdir()
         input_path = task_dir / "input.json"
@@ -163,6 +168,7 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
                 "p1_open": [],
                 "produced_artifacts": [],
                 "history": [],
+                "review_subagents_enabled": review_subagents_enabled,
             },
         )
         return (
@@ -256,6 +262,74 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         write_json(Path(review["output_path"]), {"objections": []})
         done = runner.commit()
         self.assertEqual(done["status"], "blocked")
+
+    def test_schema_only_mode_skips_reviewer_subagent_but_keeps_gate(self) -> None:
+        runner, task_dir = self._runner(
+            {"analysis_objective": "test"},
+            review_subagents_enabled=False,
+        )
+        generation = runner.prepare()
+        artifact = json.loads(
+            (FIXTURES / "analysis.v1.valid.json").read_text(encoding="utf-8")
+        )
+        write_json(Path(generation["output_path"]), artifact)
+
+        done = runner.commit()
+
+        self.assertEqual(done["step"], "done")
+        self.assertEqual(done["review_mode"], "schema_only")
+        self.assertFalse(
+            (task_dir / "handoff" / "instruction_review.md").exists()
+        )
+        review = read_json(task_dir / "review_round_0.json")
+        self.assertEqual(review["reviewer"], "schema_gate_only")
+        self.assertEqual(review["objections"], [])
+
+    def test_default_mode_still_prepares_independent_reviewer(self) -> None:
+        runner, _ = self._runner({"analysis_objective": "test"})
+        generation = runner.prepare()
+        artifact = json.loads(
+            (FIXTURES / "analysis.v1.valid.json").read_text(encoding="utf-8")
+        )
+        write_json(Path(generation["output_path"]), artifact)
+
+        review = runner.commit()
+
+        self.assertEqual(review["step"], "review")
+        self.assertTrue(Path(review["instruction_path"]).exists())
+
+    def test_revise_is_followed_by_a_fresh_independent_review(self) -> None:
+        runner, _ = self._runner({"analysis_objective": "test"})
+        generation = runner.prepare()
+        artifact = json.loads(
+            (FIXTURES / "analysis.v1.valid.json").read_text(encoding="utf-8")
+        )
+        write_json(Path(generation["output_path"]), artifact)
+        review = runner.commit()
+        write_json(
+            Path(review["output_path"]),
+            {
+                "objections": [
+                    {
+                        "severity": "P0",
+                        "rubric_id": "test-revise",
+                        "dimension": "logic",
+                        "message": "需要返工验证",
+                        "evidence": "unit test",
+                        "suggestion": "修正后重新审查",
+                    }
+                ]
+            },
+        )
+
+        revise = runner.commit()
+        self.assertEqual(revise["step"], "revise")
+        write_json(Path(revise["output_path"]), artifact)
+
+        second_review = runner.commit()
+        self.assertEqual(second_review["step"], "review")
+        self.assertEqual(second_review["round_index"], 1)
+        self.assertTrue(Path(second_review["instruction_path"]).exists())
 
 
 if __name__ == "__main__":

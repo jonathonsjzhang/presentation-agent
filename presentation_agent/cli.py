@@ -78,6 +78,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     report_approve = report_subs.add_parser("approve", help="Approve the current Manager human gate.")
     report_approve.add_argument("--run", required=True, help="Run id or run directory.")
+    report_approve.add_argument(
+        "--run-mode",
+        choices=["full_auto", "step_by_step"],
+        help="Brief gate execution mode.",
+    )
+    report_approve.add_argument(
+        "--review-mode",
+        choices=["independent", "schema_only"],
+        help="Brief gate review mode; schema_only skips LLM review sub-agents.",
+    )
     _add_spawn_adapter_option(report_approve)
 
     report_feedback = report_subs.add_parser("feedback", help="Return human feedback to Manager.")
@@ -821,7 +831,10 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
 
     if args.report_command == "approve":
         try:
-            result = manager.approve()
+            result = manager.approve(
+                run_mode=getattr(args, "run_mode", None),
+                review_mode=getattr(args, "review_mode", None),
+            )
         except StepError as exc:
             _print_json({"ok": False, "error": str(exc), "manager": manager.status()})
             raise SystemExit(3)
