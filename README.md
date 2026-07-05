@@ -1,10 +1,10 @@
 # 汇报助手系统框架介绍
 
-> 当前版本：`v0.2`
+> 当前版本：`v0.3`
 
 ## 一、系统总框架
 
-- **Manager + 6 核心 Worker + Evidence Harvester**：Manager 直接面向用户，负责任务定义、计划、派发、验收和返工；Evidence Harvester 在 deep-dive、多源或用户研究材料中先建立完整证据目录，其余 6 个专业 Worker 负责论点、故事线、单页、格式、Q&A 和逐字稿。
+- **Manager + 4 核心 Worker**：Manager 直接面向用户，负责任务定义、计划、派发、验收和返工；Evidence Harvester 在 deep-dive、多源或用户研究材料中先建立完整证据目录，其余 4 个专业 Worker 负责论点分析、故事线设计、报告产出和可视化。
 - **自演进闭环**：每个 Agent 由可编辑 skill 定义工作方式，由 loop 执行、review 拦截、state/memory 持续学习，并通过 Web Cockpit 可视化管理整个 harness。
 - **覆盖场景**：支持董事会、总办、战略负责人、业务团队、外部等不同汇报对象，覆盖专题深度分析、业务进展汇报与信息快速同步三种汇报性质，可产出文档、PPT 或 HTML 三种材料格式。
 
