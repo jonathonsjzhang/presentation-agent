@@ -194,6 +194,8 @@ class ContextAssembler:
             "analysis.v1": "analysis",
             "storyline.v3": "storyline",
             "report.v1": "report",
+            "formatted_material.v2": "formatted_material",
+            "qa_pack.v1": "qa_pack",
         }
         for _, data in rows:
             alias = schema_aliases.get(str(data.get("schema") or ""))

@@ -106,7 +106,10 @@ class V03SchemaContractTests(unittest.TestCase):
             self.assertIn(worker["input_schema"], frozen_schemas)
             self.assertIn(worker["output_schema"], frozen_schemas)
         self.assertTrue(
-            all(worker["implementation_status"] == "contract_only_wp1" for worker in workers.values())
+            all(
+                worker["implementation_status"] == "implemented"
+                for worker in workers.values()
+            )
         )
 
     def test_capability_and_context_profiles_use_delivery_target(self) -> None:
@@ -124,7 +127,17 @@ class V03SchemaContractTests(unittest.TestCase):
 
         context = read_json(ROOT / "configs/context_requirements.json")
         context_workers = context["contract_profiles"]["v0_3"]["workers"]
-        self.assertEqual(set(context_workers), {"analysis", "storyline", "report", "format"})
+        self.assertEqual(
+            set(context_workers),
+            {
+                "analysis",
+                "storyline",
+                "report",
+                "format",
+                "qa_preparation",
+                "speaker_script",
+            },
+        )
         self.assertIn("raw_materials", context_workers["storyline"]["excluded_fields"])
         self.assertIn("delivery_target", context_workers["format"]["task_fields"])
         self.assertIn("storyline.pages", context_workers["format"]["excluded_fields"])

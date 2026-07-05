@@ -20,6 +20,15 @@
         "qa_preparation",
         "speaker_script"
       ],
+      "extension_worker_overrides": {
+        "qa_preparation": {
+          "input_schema": "formatted_material.v2",
+          "description": "核心材料完成后按用户选择，对 formatted_material.v2 做压力测试并生成可追溯 Q&A。"
+        },
+        "speaker_script": {
+          "description": "核心材料完成后按用户选择，基于 formatted_material.v2 与可选 qa_pack.v1 生成讲稿。"
+        }
+      },
       "internal_subagents": [
         "evidence_harvester"
       ],
@@ -104,7 +113,7 @@
             ],
             "implementation_status": "profile_runtime_ready"
           },
-          "implementation_status": "contract_only_wp1"
+          "implementation_status": "implemented"
         },
         {
           "id": "storyline",
@@ -184,7 +193,7 @@
             "connectors": [],
             "implementation_status": "profile_runtime_ready"
           },
-          "implementation_status": "contract_only_wp1"
+          "implementation_status": "implemented"
         },
         {
           "id": "report",
@@ -264,7 +273,7 @@
             ],
             "implementation_status": "profile_runtime_ready"
           },
-          "implementation_status": "contract_only_wp1"
+          "implementation_status": "implemented"
         },
         {
           "id": "format",
@@ -343,7 +352,7 @@
             ],
             "implementation_status": "profile_runtime_ready"
           },
-          "implementation_status": "contract_only_wp1"
+          "implementation_status": "implemented"
         }
       ]
     }

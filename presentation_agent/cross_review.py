@@ -30,7 +30,7 @@ class CrossStageReviewer:
             return self._result("pass", [], "stage is not done")
 
         artifact = read_json(artifact_path, default={})
-        upstream = self._load_upstream_artifact(state)
+        upstream = self._load_upstream_artifact(state, agent_id)
         if not upstream:
             return self._result("pass", [], "no upstream artifact")
 
@@ -300,7 +300,9 @@ class CrossStageReviewer:
             f"report mapping and {target} content retention checked",
         )
 
-    def _load_upstream_artifact(self, state: dict[str, Any]) -> Optional[dict[str, Any]]:
+    def _load_upstream_artifact(
+        self, state: dict[str, Any], agent_id: str
+    ) -> Optional[dict[str, Any]]:
         input_path = state.get("input_path")
         if not input_path:
             return None
@@ -308,7 +310,24 @@ class CrossStageReviewer:
         if not path.exists():
             return None
         data = read_json(path, default={})
-        return data if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return None
+        if data.get("schema") != "worker_context.v1":
+            return data
+        alias = {
+            "storyline": "analysis",
+            "report": "storyline",
+            "format": "report",
+            "qa_preparation": "formatted_material",
+            "speaker_script": "qa_pack",
+        }.get(agent_id)
+        canonical = data.get(alias) if alias else None
+        if (
+            agent_id == "speaker_script"
+            and not isinstance(canonical, dict)
+        ):
+            canonical = data.get("formatted_material")
+        return canonical if isinstance(canonical, dict) else None
 
     def _check_storyline(self, upstream: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
         issues: list[dict[str, Any]] = []

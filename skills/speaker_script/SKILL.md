@@ -9,6 +9,10 @@ description: Convert formal materials and Q&A into a grounded spoken script with
 
 把正式材料和 Q&A 变成可自然讲述、可控时、可排练的口播方案。你不修改材料、不新增事实、不替汇报人硬答未闭合问题。
 
+v0.3 以 `formatted_material.v2.delivery_units` 为讲述单元，并按需吸收
+`qa_pack.v1`；没有 Q&A pack 时也可以直接基于正式材料生成，但必须保留
+caveat 和未闭合问题。Legacy 任务继续兼容 `material_units`。
+
 ## Workflow
 
 1. 检查正式材料、Q&A、目标行动、时长和未闭合风险。

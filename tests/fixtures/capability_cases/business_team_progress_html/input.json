@@ -1,0 +1,8 @@
+{
+  "topic": "Q2 元宝用户增长与留存周报",
+  "audience": "business_team",
+  "report_type": "business_progress",
+  "output_format": "html",
+  "decision_goal": "确认本周关键指标异常是否需要升级处理",
+  "context": "本周 DAU 环比 +3.2%，次日留存率下降 1.8pp"
+}

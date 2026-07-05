@@ -3,7 +3,7 @@
   "contract_profiles": {
     "v0_3": {
       "status": "frozen",
-      "activation": "deferred_to_wp8_context_runtime",
+      "activation": "active_user_default",
       "projection_policy": "namespace_upstream_artifacts_and_inline_only_declared_fields",
       "workers": {
         "analysis": {
@@ -71,6 +71,32 @@
             "page_content"
           ],
           "output_schema": "formatted_material.v2"
+        },
+        "qa_preparation": {
+          "upstream_schema": "formatted_material.v2",
+          "required_fields": [
+            "delivery_target",
+            "delivery_units",
+            "visual_assets",
+            "caveat_preservation",
+            "omitted_content_register",
+            "quality_checks",
+            "artifact_manifest"
+          ],
+          "output_schema": "qa_pack.v1"
+        },
+        "speaker_script": {
+          "required_fields": [
+            "delivery_target",
+            "delivery_units",
+            "caveat_preservation",
+            "quality_checks",
+            "top_questions",
+            "risk_register",
+            "speaker_script_handoff",
+            "data_gaps_to_close"
+          ],
+          "output_schema": "speaker_script.v1"
         }
       }
     }

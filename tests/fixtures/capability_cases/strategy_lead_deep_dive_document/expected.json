@@ -1,0 +1,11 @@
+{
+  "must_include_capabilities": [
+    "audience.strategy_lead",
+    "report.deep_dive",
+    "format.document"
+  ],
+  "must_not_include_capabilities": [
+    "audience.board",
+    "format.ppt"
+  ]
+}

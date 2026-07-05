@@ -32,24 +32,8 @@ agents.workbuddy/
 agents.claude/
 agents.codex/
 
-# ===== Tests（默认仅本地保留；E2E 评测契约随仓库发布） =====
-tests/*
-!tests/test_evaluation.py
-!tests/test_page_filling_v2.py
-!tests/test_v0_3_schema_contracts.py
-!tests/test_analysis.py
-!tests/test_analysis_evidence_subtask.py
-!tests/test_storyline_v3.py
-!tests/test_report.py
-!tests/test_report_docx.py
-!tests/test_agent_profiles.py
-!tests/test_format_document_v2.py
-!tests/test_wp8_cross_review.py
-!tests/test_wp8_memory_routing.py
-!tests/fixtures/
-tests/fixtures/*
-!tests/fixtures/v0_3/
-!tests/fixtures/v0_3/**
+# ===== Tests =====
+# Unit and contract tests are repository assets and must remain reviewable in CI.
 .workbuddy/
 .learnings/
 
