@@ -91,9 +91,9 @@
       "id": "ST-UPSTREAM-001",
       "severity": "P0",
       "dimension": "upstream_revision",
-      "criterion": "存在证据缺口、关键 finding 冲突或决策语境不明时，必须生成 upstream_revision_requests。blocking_level 取决于缺口是否影响仍在 main_story 中的 apex 级 finding：影响 main_story 中直接支撑 apex 的 finding → blocking；缺口对应的 finding 已在 editorial_decisions 中移入 appendix 或 omitted → advisory。",
-      "check": "对照 material readiness、evidence execution、data gaps、findings 冲突和 decision tensions 检查请求完整性，并核验对应的 editorial_decisions disposition。",
-      "fix": "新增准确的 request_type、finding_refs、reason 和分级后的 blocking_level。Scope narrowing 是预期行为——已移出 main_story 的 finding 的缺口不应 blocking。"
+      "criterion": "存在证据缺口、关键 finding 冲突或决策语境不明时，必须生成 upstream_revision_requests。blocking_level 分级只取决于一个标准：缺口是否使得 apex 主张在当前证据范围内完全无法自洽成立。即使缺口影响 main_story finding，只要可通过标注 caveat '数据边界说明' 消化（核心结论仍成立），就应设为 advisory。仅当移除该 finding 后 apex 完全丧失支撑时，才设为 blocking。",
+      "check": "对照 material readiness、evidence execution、data gaps、findings 冲突和 decision tensions 检查请求完整性。问自己：假如把这个 gap 标注为 caveat 后读者还能接受核心结论吗？能 → advisory，不能 → blocking。",
+      "fix": "新增准确的 request_type、finding_refs、reason 和分级后的 blocking_level。数据限制导致的 gap（如缺某竞品数据、某指标无历史趋势）只要不影响核心结论，都应设为 advisory 并标注 caveat，不应错误地 block 管线。"
     },
     {
       "id": "ST-PYRAMID-001",
