@@ -91,9 +91,9 @@
       "id": "ST-UPSTREAM-001",
       "severity": "P0",
       "dimension": "upstream_revision",
-      "criterion": "blocking data gap/unresolved unit、核心证据缺失、关键 finding 冲突或决策语境不明时，必须生成对应 upstream_revision_requests；影响塔尖者 blocking_level 必须为 blocking。",
-      "check": "对照 material readiness、evidence execution、data gaps、findings 冲突和 decision tensions 检查请求完整性。",
-      "fix": "新增准确的 request_type、finding_refs、reason 和 blocking_level；不得用虚构结论绕过。"
+      "criterion": "存在证据缺口、关键 finding 冲突或决策语境不明时，必须生成 upstream_revision_requests。blocking_level 取决于缺口是否影响仍在 main_story 中的 apex 级 finding：影响 main_story 中直接支撑 apex 的 finding → blocking；缺口对应的 finding 已在 editorial_decisions 中移入 appendix 或 omitted → advisory。",
+      "check": "对照 material readiness、evidence execution、data gaps、findings 冲突和 decision tensions 检查请求完整性，并核验对应的 editorial_decisions disposition。",
+      "fix": "新增准确的 request_type、finding_refs、reason 和分级后的 blocking_level。Scope narrowing 是预期行为——已移出 main_story 的 finding 的缺口不应 blocking。"
     },
     {
       "id": "ST-PYRAMID-001",
