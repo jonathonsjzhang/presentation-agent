@@ -91,6 +91,19 @@ class CrossStageReviewer:
         self, upstream: dict[str, Any], artifact: dict[str, Any]
     ) -> dict[str, Any]:
         issues: list[dict[str, Any]] = []
+
+        # Build the set of finding IDs covered by advisory upstream_revision_requests.
+        # The Storyline has already acknowledged these as data-limited gaps that
+        # cannot be resolved with current materials.  When the Report inevitably
+        # cannot perfectly preserve every ref / caveat for these findings, the gap
+        # should be a P1 warning, not a pipeline-blocking P0.
+        revision_requests = upstream.get("upstream_revision_requests", [])
+        advisory_fids: set[str] = set()
+        for req in revision_requests:
+            if isinstance(req, dict) and req.get("blocking_level") == "advisory":
+                for fid in req.get("finding_refs", []):
+                    advisory_fids.add(str(fid))
+
         outline = upstream.get("report_outline", {}).get("sections", [])
         report_sections = artifact.get("sections", [])
         expected = self._ids(outline, "section_id")
@@ -111,7 +124,9 @@ class CrossStageReviewer:
         }
         changed_theses = []
         missing_finding_refs: dict[str, list[str]] = {}
+        advisory_missing_finding_refs: dict[str, list[str]] = {}
         missing_caveats: dict[str, list[str]] = {}
+        advisory_missing_caveats: dict[str, list[str]] = {}
         for source in outline if isinstance(outline, list) else []:
             if not isinstance(source, dict):
                 continue
@@ -121,8 +136,14 @@ class CrossStageReviewer:
                 changed_theses.append(section_id)
             source_refs = set(map(str, source.get("finding_refs", [])))
             target_refs = set(map(str, target.get("finding_refs", [])))
-            if source_refs - target_refs:
-                missing_finding_refs[section_id] = sorted(source_refs - target_refs)
+            missing = source_refs - target_refs
+            if missing:
+                adv = missing & advisory_fids
+                non_adv = missing - advisory_fids
+                if adv:
+                    advisory_missing_finding_refs[section_id] = sorted(adv)
+                if non_adv:
+                    missing_finding_refs[section_id] = sorted(non_adv)
             # Caveats may be preserved in the claim registry or methodology
             # rather than repeated verbatim inside every section.
             target_text = self._normalized_text(artifact)
@@ -131,7 +152,18 @@ class CrossStageReviewer:
                 if not self._caveat_preserved(str(caveat), target_text)
             ]
             if absent:
-                missing_caveats[section_id] = absent
+                # A caveat is "advisory-related" when its text references a
+                # finding ID that belongs to an advisory revision request.
+                adv_caveats = [
+                    c for c in absent
+                    if any(fid in str(c) for fid in advisory_fids)
+                ]
+                non_adv_caveats = [c for c in absent if c not in adv_caveats]
+                if adv_caveats:
+                    advisory_missing_caveats[section_id] = adv_caveats
+                if non_adv_caveats:
+                    missing_caveats[section_id] = non_adv_caveats
+
         if changed_theses or missing_finding_refs or missing_caveats:
             issues.append(self._issue(
                 "P0", "storyline_fidelity",
@@ -143,8 +175,22 @@ class CrossStageReviewer:
                 },
                 "report",
             ))
+
+        if advisory_missing_finding_refs or advisory_missing_caveats:
+            issues.append(self._issue(
+                "P1", "storyline_fidelity_advisory",
+                "Report 中与 Storyline 已标注 advisory gap 的 finding 相关的 "
+                "refs/caveats 未完整保留（数据限制已知，核心结论仍可成立，非阻断）",
+                {
+                    "advisory_missing_finding_refs": advisory_missing_finding_refs,
+                    "advisory_missing_caveats": advisory_missing_caveats,
+                },
+                "report",
+            ))
+
         return self._result(
-            "block" if issues else "pass", issues,
+            "block" if any(row.get("severity") == "P0" for row in issues) else "pass",
+            issues,
             "storyline section coverage and fidelity checked",
         )
 
@@ -286,7 +332,8 @@ class CrossStageReviewer:
                 retention, "format",
             ))
         return self._result(
-            "block" if issues else "pass", issues,
+            "block" if any(row.get("severity") == "P0" for row in issues) else "pass",
+            issues,
             f"report mapping and {target} content retention checked",
         )
 
