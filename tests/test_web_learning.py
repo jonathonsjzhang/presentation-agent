@@ -9,14 +9,16 @@ from presentation_agent.io import read_json, write_json
 from presentation_agent.web import WebApp
 
 ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_DATA = ROOT / "tests" / "fixtures" / "runtime_data"
 
 
 class WebLearningTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmpdir = tempfile.TemporaryDirectory()
         self.root = Path(self.tmpdir.name)
-        for name in ["configs", "data", "skills"]:
-            shutil.copytree(ROOT / name, self.root / name)
+        shutil.copytree(ROOT / "configs", self.root / "configs")
+        shutil.copytree(RUNTIME_DATA, self.root / "data")
+        shutil.copytree(ROOT / "skills", self.root / "skills")
         story_memory_dir = self.root / "data" / "agents" / "storyline_design"
         write_json(story_memory_dir / "memory.json", {"items": []})
         log_path = story_memory_dir / "learning_log.jsonl"

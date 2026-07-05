@@ -10,6 +10,7 @@ from presentation_agent.memory import MemoryStore
 
 
 ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_FIXTURES = ROOT / "tests" / "fixtures"
 
 
 class LoopTests(unittest.TestCase):
@@ -17,8 +18,8 @@ class LoopTests(unittest.TestCase):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.root = Path(self.tmpdir.name)
         shutil.copytree(ROOT / "configs", self.root / "configs")
-        shutil.copytree(ROOT / "data", self.root / "data")
-        shutil.copytree(ROOT / "examples", self.root / "examples")
+        shutil.copytree(RUNTIME_FIXTURES / "runtime_data", self.root / "data")
+        shutil.copytree(RUNTIME_FIXTURES / "runtime_examples", self.root / "examples")
         shutil.copytree(ROOT / "skills", self.root / "skills")
 
     def tearDown(self) -> None:

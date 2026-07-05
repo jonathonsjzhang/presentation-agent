@@ -1,0 +1,22 @@
+{
+  "schema": "raw_brief.v1",
+  "report_type": "deep_dive",
+  "output_format": "ppt",
+  "topic": "AI 助手用户留存分析",
+  "audience": "exec_office",
+  "decision_goal": "判断是否应优先投入成果复用场景",
+  "context": "团队需要根据匿名化材料确定下一阶段产品投入重点。",
+  "materials": [
+    {
+      "claim": "成果保存与后续复用可能改善留存",
+      "evidence": [
+        "匿名化访谈发现用户会回访已保存成果"
+      ],
+      "so_what": "应优先验证成果复用链路"
+    }
+  ],
+  "constraints": [
+    "仅使用匿名化测试材料"
+  ],
+  "user_intent": "形成可供管理层决策的分析"
+}

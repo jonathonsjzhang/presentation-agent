@@ -10,6 +10,9 @@ from presentation_agent.io import read_json
 from presentation_agent.llm.adapters.mock import synthesize_from_schema
 from presentation_agent.step import PipelineStepper, StepError, StepRunner
 
+ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_EXAMPLES = ROOT / "tests" / "fixtures" / "runtime_examples"
+
 
 # Minimal artifact for step runner testing (argument_synthesis stage)
 def _arg_artifact() -> dict:
@@ -84,7 +87,7 @@ class TestStepRunner(unittest.TestCase):
             "current_step": "init",
             "round_index": 0,
             "max_revision_rounds": 2,
-            "input_path": str(self.root / "examples" / "raw_brief.json"),
+            "input_path": str(RUNTIME_EXAMPLES / "raw_brief.json"),
             "output_dir": str(stage_dir),
             "p0_open": [],
             "p1_open": [],
@@ -270,7 +273,7 @@ class TestPipelineStepper(unittest.TestCase):
     def test_init_and_advance_full_chain(self):
         import shutil
 
-        brief_path = self.root / "examples" / "raw_brief.json"
+        brief_path = RUNTIME_EXAMPLES / "raw_brief.json"
         shutil.copy2(str(brief_path), str(self.tmp / "raw_brief.json"))
         stepper = PipelineStepper(self.root, self.tmp)
         stage1 = stepper.init_pipeline(self.tmp / "raw_brief.json")
@@ -309,7 +312,7 @@ class TestPipelineStepper(unittest.TestCase):
     def test_advance_without_artifact_errors(self):
         import shutil
 
-        brief_path = self.root / "examples" / "raw_brief.json"
+        brief_path = RUNTIME_EXAMPLES / "raw_brief.json"
         shutil.copy2(str(brief_path), str(self.tmp / "raw_brief.json"))
         stepper = PipelineStepper(self.root, self.tmp)
         stepper.init_pipeline(self.tmp / "raw_brief.json")
@@ -319,7 +322,7 @@ class TestPipelineStepper(unittest.TestCase):
     def test_pipeline_status(self):
         import shutil
 
-        brief_path = self.root / "examples" / "raw_brief.json"
+        brief_path = RUNTIME_EXAMPLES / "raw_brief.json"
         shutil.copy2(str(brief_path), str(self.tmp / "raw_brief.json"))
         stepper = PipelineStepper(self.root, self.tmp)
         stepper.init_pipeline(self.tmp / "raw_brief.json")

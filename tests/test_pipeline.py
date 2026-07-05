@@ -10,14 +10,17 @@ from presentation_agent.llm.schema import validate
 from presentation_agent.pipeline import Pipeline
 
 ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_FIXTURES = ROOT / "tests" / "fixtures"
 
 
 class PipelineTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmpdir = tempfile.TemporaryDirectory()
         self.root = Path(self.tmpdir.name)
-        for name in ("configs", "data", "examples", "skills"):
-            shutil.copytree(ROOT / name, self.root / name)
+        shutil.copytree(ROOT / "configs", self.root / "configs")
+        shutil.copytree(RUNTIME_FIXTURES / "runtime_data", self.root / "data")
+        shutil.copytree(RUNTIME_FIXTURES / "runtime_examples", self.root / "examples")
+        shutil.copytree(ROOT / "skills", self.root / "skills")
 
     def tearDown(self) -> None:
         self.tmpdir.cleanup()
