@@ -103,11 +103,12 @@ Storyline 产出 `upstream_revision_requests` 是**正常行为**——它表示
 
 | 缺口影响范围 | 判断标准 | 动作 |
 |---|---|---|
-| **Apex 级**：缺证据的 finding 是 apex 的直接支撑 | 去掉该 finding 后核心主张无法成立 | `revise` → Analysis，要求补充证据或降级 confidence |
-| **Supporting 级**：缺证据的 finding 是辅助论据 | Storyline 已在 `editorial_decisions` 中将其标记为 `omitted` 或降级到 `appendix` | `dispatch` → Report，在 task_packet 中标注该 gap 为已知 caveat |
-| **Edge 级**：缺口已被 Storyline 通过缩小命题范围消化 | Storyline 的 ES / apex 已反映更窄的范围，open_questions 已记录 | `dispatch` → Report，gap 作为 open_question 传递 |
+| **Apex 级**：缺口使核心主张完全无法自洽成立 | 即使标注 caveat 也无法让读者接受核心结论 | `revise` → Analysis |
+| **Caveated 级**：缺口已被标注 caveat，核心结论仍成立 | 数据限制所致（缺历史趋势/竞品数据等），Storyline 已标注 caveat_acknowledged | `dispatch` → Report。不要因数据不完美而反复 revise |
+| **Supporting 级**：缺证据的 finding 已被移出主线 | editorial_decisions 已标记为 omitted 或降级到 appendix | `dispatch` → Report |
+| **Edge 级**：缺口已被缩小命题范围消化 | ES / apex 已反映更窄范围，open_questions 已记录 | `dispatch` → Report |
 
-**核心原则**：Storyline 的设计意图是"选择证据允许的更窄命题"——它应该已经处理了大多数证据缺口。你的任务是确认它确实处理了，而不是把每个 request 都当成管线阻断。
+**核心原则**：Storyline 的设计意图是"选择证据允许的更窄命题"——它应该已经处理了大多数证据缺口。你的任务是确认它确实处理了，而不是把每个 request 都当成管线阻断。**数据限制导致的缺口（如缺某竞品数据、缺某指标历史趋势）是正常现象，只要核心结论仍可成立，就应 dispatch 而非反复 revise。**
 
 选择动作：
 
@@ -124,8 +125,8 @@ Analysis 后只能 dispatch Storyline；Storyline 后只能 dispatch Report；Re
 |---|---|
 | Worker 产物 schema 不匹配 | `revise`，明确指出期望 schema 版本 |
 | Worker P0 不通过 | `revise`，附带具体 P0 项和修复方向 |
-| Storyline upstream_revision_requests 影响 apex 级 finding | `revise` → Analysis，要求补充证据；不要直接 dispatch Report |
-| Storyline upstream_revision_requests 仅影响 supporting/edge 级 | `dispatch` → Report，gap 作为已知 caveat 传递 |
+| Storyline upstream_revision_requests 为 apex 级（核心主张完全无法成立） | `revise` → Analysis |
+| Storyline upstream_revision_requests 为 caveated/supporting/edge 级（gap 已标注 caveat 或已缩窄范围） | `dispatch` → Report，gap 作为已知 caveat 传递。数据限制导致的缺口是正常现象，不要反复 revise |
 | 同一 Worker 连续 2 轮 revise 未通过 | `ask_human`，展示两轮差异和阻塞点 |
 | 上游 artifact 缺失导致下游无法启动 | `ask_human`，说明缺哪个文件、在哪个阶段 |
 | Worker 超时或无输出 | `ask_human`，说明当前阶段和可能原因 |
