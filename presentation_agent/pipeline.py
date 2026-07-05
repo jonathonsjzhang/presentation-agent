@@ -3,14 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional
 
-from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.io import write_json
 from presentation_agent.loop import LoopRunner
 from presentation_agent.models import now_iso
 
 
 class Pipeline:
-    """Legacy direct pipeline for the six specialist workers.
+    """Direct pipeline for the active specialist workers.
 
     Each stage's approved artifact becomes the next stage's input. Two modes,
     both honoring the design's human-in-the-loop principle:
@@ -30,7 +29,6 @@ class Pipeline:
         self.runner = LoopRunner(
             root,
             provider_override=provider_override,
-            contract_profile=LEGACY_CONTRACT_PROFILE,
         )
         self.stages = self._ordered_stages()
 

@@ -21,7 +21,7 @@ from presentation_agent.step import StepError
 def _request(task_dir: Path, role: str = "worker") -> SpawnRequest:
     return SpawnRequest(
         task_dir=task_dir,
-        agent_id="argument_synthesis",
+        agent_id="analysis",
         role=role,  # type: ignore[arg-type]
         instruction_path=task_dir / "handoff" / "instruction_gen.md",
         output_path=task_dir / "handoff" / "output_gen.json",
@@ -60,7 +60,7 @@ class WorkBuddySpawnAdapterTests(unittest.TestCase):
             spec = read_json(spawn_file)
             self.assertEqual(spec["host"], "workbuddy")
             self.assertEqual(spec["subagent_type"], "general-purpose")
-            self.assertEqual(spec["agent_id"], "argument_synthesis")
+            self.assertEqual(spec["agent_id"], "analysis")
             self.assertEqual(spec["role"], "worker")
             self.assertEqual(spec["invariants"]["max_depth"], 1)
             self.assertEqual(spec["invariants"]["write_scope"], str(task_dir))

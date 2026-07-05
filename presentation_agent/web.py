@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
-from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.capabilities.registry import CapabilityRegistry
 from presentation_agent.io import read_json, write_json
 from presentation_agent.learning import LearningEventStore, compare_material_versions
@@ -97,10 +96,7 @@ class WebApp:
         raise NotFound(f"Unknown API route: {path}")
 
     def overview(self) -> dict[str, Any]:
-        runner = LoopRunner(
-            self.root,
-            contract_profile=LEGACY_CONTRACT_PROFILE,
-        )
+        runner = LoopRunner(self.root)
         agents = []
         control_plane = runner.config.get("control_plane", {})
         if control_plane:
@@ -170,10 +166,7 @@ class WebApp:
         }
 
     def learning_overview(self) -> dict[str, Any]:
-        runner = LoopRunner(
-            self.root,
-            contract_profile=LEGACY_CONTRACT_PROFILE,
-        )
+        runner = LoopRunner(self.root)
         global_state_path = self.root / "data" / "global" / "state.json"
         global_state = read_json(global_state_path, default={})
         agents: list[dict[str, Any]] = []
@@ -281,7 +274,7 @@ class WebApp:
         return {"ok": True, "path": self.to_rel(path)}
 
     def run_agent(self, body: dict[str, Any]) -> dict[str, Any]:
-        agent_id = str(body.get("agent_id") or "storyline_design")
+        agent_id = str(body.get("agent_id") or "storyline")
         input_path = Path(str(body.get("input_path") or "examples/storyline_input.json"))
         inline_input = str(body.get("input_json") or "").strip()
         run_name = self.slug(str(body.get("run_name") or "ui_run"))
@@ -296,10 +289,7 @@ class WebApp:
         else:
             input_path = self.safe_path(str(input_path), ("examples/", "artifacts/"))
 
-        runner = LoopRunner(
-            self.root,
-            contract_profile=LEGACY_CONTRACT_PROFILE,
-        )
+        runner = LoopRunner(self.root)
         result = runner.run(agent_id, input_path, run_dir)
         result["latest_runs"] = self.list_runs(limit=6)
         return result
@@ -455,10 +445,7 @@ class WebApp:
         apply = bool(body.get("apply", False))
         reason = str(body.get("reason") or "api")
         if body.get("all"):
-            runner = LoopRunner(
-                self.root,
-                contract_profile=LEGACY_CONTRACT_PROFILE,
-            )
+            runner = LoopRunner(self.root)
             agent_ids = [spec.id for spec in runner.list_agents()]
         else:
             agent_id = str(body.get("agent_id") or "").strip()
@@ -534,12 +521,12 @@ class WebApp:
         if lower in {"list agents", "agents"}:
             return {"ok": True, "kind": "overview", "data": self.overview()}
         if lower == "run storyline":
-            return {"ok": True, "kind": "run", "data": self.run_agent({"agent_id": "storyline_design"})}
+            return {"ok": True, "kind": "run", "data": self.run_agent({"agent_id": "storyline"})}
         if lower.startswith("run "):
             parts = command.split()
-            agent_id = parts[1] if len(parts) > 1 else "storyline_design"
+            agent_id = parts[1] if len(parts) > 1 else "storyline"
             if agent_id in {"storyline", "storyline-design"}:
-                agent_id = "storyline_design"
+                agent_id = "storyline"
             body: dict[str, Any] = {"agent_id": agent_id}
             if len(parts) > 2:
                 body["input_path"] = parts[2]
@@ -548,12 +535,12 @@ class WebApp:
             return {"ok": True, "kind": "file", "data": self.read_file(command[5:].strip())}
         if lower.startswith("show memory"):
             parts = command.split()
-            agent_id = parts[-1] if len(parts) >= 3 else "storyline_design"
+            agent_id = parts[-1] if len(parts) >= 3 else "storyline"
             store = MemoryStore(self.root, agent_id)
             return {"ok": True, "kind": "memory", "data": [item.to_dict() for item in store.load_items()]}
         return {
             "ok": False,
-            "message": "I can route simple local commands now. Use: list agents, run storyline_design, open <path>, show memory <agent_id>.",
+            "message": "I can route simple local commands now. Use: list agents, run storyline, open <path>, show memory <agent_id>.",
         }
 
     # ---- inline single-step pipeline (PipelineStepper / StepRunner) --------

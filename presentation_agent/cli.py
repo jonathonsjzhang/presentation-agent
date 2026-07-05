@@ -4,7 +4,6 @@ import argparse
 import json
 from pathlib import Path
 
-from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.launch import BriefError, launch_report
 from presentation_agent.learning import LearningEventStore, compare_material_versions
 from presentation_agent.loop import LoopRunner
@@ -57,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     report_start.add_argument("--brief-file", required=True, help="raw_brief JSON file path.")
     report_start.add_argument(
         "--contract-profile",
-        choices=["legacy.v0_2", "v0_3"],
+        choices=["v0_3"],
         default="v0_3",
         help="Runtime contract profile. Defaults to the document-first v0_3 user flow.",
     )
@@ -172,7 +171,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--out", help="Optional output directory.")
     run.add_argument("--provider", help="Override LLM provider (mock/cli/codex/inline).")
 
-    pipe = sub.add_parser("pipeline", help="Run the legacy direct six-Worker pipeline.")
+    pipe = sub.add_parser("pipeline", help="Run the four-stage v0.3 debug pipeline.")
     pipe.add_argument("--input", required=True, help="Initial raw brief JSON path.")
     pipe.add_argument("--out", help="Optional output directory.")
     pipe.add_argument("--auto", action="store_true", help="Run all stages back to back.")
@@ -191,7 +190,7 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument("--out", help="Optional output directory.")
     launch.add_argument(
         "--contract-profile",
-        choices=["legacy.v0_2", "v0_3"],
+        choices=["v0_3"],
         default="v0_3",
         help="Runtime contract profile. Defaults to the document-first v0_3 user flow.",
     )
@@ -425,7 +424,7 @@ def main() -> None:
             return
         if result.get("mode") == "manager_controlled":
             print(f"brief: {result['brief_path']}")
-            print(f"contract profile: {result.get('contract_profile', 'legacy.v0_2')}")
+            print(f"contract profile: {result.get('contract_profile', 'v0_3')}")
             print(f"run dir: {result['run_dir']}")
             print(json.dumps(result["instruction"], ensure_ascii=False, indent=2))
             return
@@ -489,19 +488,11 @@ def main() -> None:
         from presentation_agent.models import now_iso
         run_id = f"pipeline-{now_iso().replace(':', '').replace('+', 'Z')}"
         out_root = Path(args.out).resolve() if args.out else (root / "artifacts" / run_id)
-        normalized = normalize_brief(
-            args.brief,
-            root,
-            LEGACY_CONTRACT_PROFILE,
-        )
+        normalized = normalize_brief(args.brief, root)
         brief_path = out_root / "raw_brief.json"
         out_root.mkdir(parents=True, exist_ok=True)
         write_json(brief_path, normalized)
-        stepper = PipelineStepper(
-            root,
-            out_root,
-            contract_profile=LEGACY_CONTRACT_PROFILE,
-        )
+        stepper = PipelineStepper(root, out_root)
         stage1 = stepper.init_pipeline(brief_path)
         print(f"pipeline dir: {out_root}")
         print(f"brief: {brief_path}")

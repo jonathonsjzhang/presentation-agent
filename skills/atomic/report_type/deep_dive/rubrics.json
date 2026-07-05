@@ -2,7 +2,7 @@
   "rubrics": [
     {
       "id": "RPT-DEEP-SL-001",
-      "applies_to": ["storyline_design"],
+      "applies_to": ["storyline"],
       "severity": "P1",
       "dimension": "report_type_fit",
       "criterion": "深度分析故事线应包含完整推导、关键转折、反方或边界。",

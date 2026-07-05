@@ -19,8 +19,6 @@ class ContextAssembler:
         ).contract_profile
         profile = (
             config.get("contract_profiles", {}).get(self.contract_profile, {})
-            if self.contract_profile != "legacy.v0_2"
-            else {}
         )
         profile_workers = dict(profile.get("workers", {}))
         if profile_workers:

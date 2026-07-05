@@ -27,8 +27,6 @@ class DocxConnector(SuffixConnector):
     suffixes = (".docx",)
 
     def load(self, path: Path, context: ConnectorContext) -> dict[str, Any]:
-        if context.agent_id == "storyline_design":
-            return docx_to_storyline_input(path)
         paragraphs = extract_docx_paragraphs(path)
         if not paragraphs:
             raise ValueError(f"No readable text found in DOCX: {path}")
@@ -52,33 +50,6 @@ class DocxConnector(SuffixConnector):
                 "关键数字、拐点和结构关系，补充到分析中——不要仅依赖文字描述。"
             )
         return result
-
-
-def docx_to_storyline_input(path: Path) -> dict[str, Any]:
-    paragraphs = extract_docx_paragraphs(path)
-    if not paragraphs:
-        raise ValueError(f"No readable text found in DOCX: {path}")
-
-    topic = paragraphs[0]
-    body = paragraphs[1:]
-    materials = group_paragraphs_into_materials(body)
-    images = extract_docx_images(path)
-    result: dict[str, Any] = {
-        "topic": topic,
-        "audience": "管理层",
-        "objective": "将 Word 分析稿整理为可汇报的 storyline",
-        "source_path": str(path),
-        "source_type": "docx",
-        "raw_text": "\n".join(paragraphs),
-        "materials": materials,
-    }
-    if images:
-        result["images"] = images
-        result["images_note"] = (
-            f"本文档包含 {len(images)} 张内嵌图片（图表/截图）。"
-            "请使用 Read 工具逐张查看图片内容。"
-        )
-    return result
 
 
 def extract_docx_paragraphs(path: Path) -> list[str]:

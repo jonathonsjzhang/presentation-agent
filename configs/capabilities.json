@@ -31,31 +31,19 @@
         "pptx": "ppt",
         "网页": "html"
       },
-      "format_selection": "exactly_one_delivery_target_capability_per_task",
-      "legacy_output_format_mapping": {
-        "document": [
-          "document"
-        ],
-        "ppt": [
-          "ppt"
-        ],
-        "html": [
-          "html"
-        ]
-      }
+      "format_selection": "exactly_one_delivery_target_capability_per_task"
     }
   },
   "runtime": {
     "enabled": true,
     "pilot_agents": [
-      "argument_synthesis",
-      "storyline_design",
-      "page_filling",
+      "analysis",
+      "storyline",
+      "report",
       "format",
       "qa_preparation",
       "speaker_script"
-    ],
-    "legacy_fallback": true
+    ]
   },
   "dimensions": {
     "audience": [

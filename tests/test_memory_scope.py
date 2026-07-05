@@ -18,8 +18,8 @@ class MemoryScopeTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def test_legacy_memory_receives_core_owner_and_wildcard_scope(self) -> None:
-        path = self.data_root / "agents" / "storyline_design" / "memory.json"
+    def test_memory_receives_core_owner_and_wildcard_scope(self) -> None:
+        path = self.data_root / "agents" / "storyline" / "memory.json"
         write_json(path, {
             "items": [{
                 "id": "M-001",
@@ -30,10 +30,10 @@ class MemoryScopeTests(unittest.TestCase):
             }]
         })
         item = MemoryStore(
-            self.root, "storyline_design", data_root=self.data_root
+            self.root, "storyline", data_root=self.data_root
         ).load_items()[0]
 
-        self.assertEqual(item.owner, "core.storyline_design")
+        self.assertEqual(item.owner, "core.storyline")
         self.assertEqual(item.applies_to["audience"], ["*"])
 
     def test_profile_scoped_memory_does_not_cross_audience_or_format(self) -> None:
@@ -45,14 +45,14 @@ class MemoryScopeTests(unittest.TestCase):
             suggestion="董事会先讲 downside",
             owner="audience.board",
             applies_to={
-                "worker": ["storyline_design"],
+                "worker": ["storyline"],
                 "audience": ["board"],
                 "report_type": ["*"],
                 "format": ["ppt"],
             },
         )
         store = MemoryStore(
-            self.root, "storyline_design", data_root=self.data_root
+            self.root, "storyline", data_root=self.data_root
         )
         store.save_items([board])
 
@@ -60,7 +60,7 @@ class MemoryScopeTests(unittest.TestCase):
             len(store.scan(
                 "风险",
                 active_capabilities=[
-                    "core.storyline_design",
+                    "core.storyline",
                     "audience.board",
                     "report.deep_dive",
                     "format.ppt",
@@ -72,7 +72,7 @@ class MemoryScopeTests(unittest.TestCase):
             store.scan(
                 "风险",
                 active_capabilities=[
-                    "core.storyline_design",
+                    "core.storyline",
                     "audience.external",
                     "report.deep_dive",
                     "format.document",
@@ -157,16 +157,16 @@ class MemoryScopeTests(unittest.TestCase):
     def test_professional_feedback_stays_core_despite_active_profile(self) -> None:
         route = MemoryRouter(self.root, data_root=self.data_root).route(
             text="标题还是主题词，下次改成完整判断句",
-            current_agent_id="storyline_design",
+            current_agent_id="storyline",
             active_capabilities=[
-                "core.storyline_design",
+                "core.storyline",
                 "audience.board",
                 "report.deep_dive",
                 "format.ppt",
             ],
         )
 
-        self.assertEqual(route.capability_owner, "core.storyline_design")
+        self.assertEqual(route.capability_owner, "core.storyline")
         self.assertEqual(route.scope["audience"], ["*"])
         self.assertEqual(route.scope["format"], ["*"])
 

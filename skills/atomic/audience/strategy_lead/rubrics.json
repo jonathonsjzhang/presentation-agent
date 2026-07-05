@@ -2,7 +2,7 @@
   "rubrics": [
     {
       "id": "AUD-STRATEGY-SL-001",
-      "applies_to": ["storyline_design"],
+      "applies_to": ["storyline"],
       "severity": "P1",
       "dimension": "audience_fit",
       "criterion": "战略负责人版本应能看清分析框架、关键假设和验证路径。",

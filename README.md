@@ -26,12 +26,12 @@
 - **Evidence 内部化**：由 Analysis 按确定性三路径调用，不再占用顶层 execution plan。
 - **完整报告语义层**：`report.v1` 保存正文、主张、证据、反方、caveat、来源与附录，并生成内容版 DOCX。
 - **三载体转译**：`formatted_material.v2` 从 Report 转译为精装 DOCX、PPT 或 HTML，记录压缩、遗漏和来源映射。
-- **Profile-aware runtime**：v0.3 是默认活动 profile；`legacy.v0_2` 仅作为显式兼容路径保留，run state 防止跨 profile 恢复。
+- **单一活动契约**：v0.3 是唯一运行 profile，run state 会校验契约版本，避免错误恢复。
 - **扩展 gate**：QA list 与逐字稿移至核心材料完成之后。
 
 #### v0.2（2026-06-30）
 
-- **可组合原子能力**：专业 Worker 按受众、汇报性质和材料格式编译当轮所需 Skill bundle，支持 fingerprint、prompt budget 与 legacy fallback。
+- **可组合原子能力**：专业 Worker 按受众、汇报性质和材料格式编译当轮所需 Skill bundle，支持 fingerprint 与 prompt budget。
 - **投影上下文与 scoped memory**：Manager 按 Worker 投影上游 artifact；memory 按 capability owner 和 profile scope 检索，并可晋升到对应 atomic rubric。
 - **三载体 Format**：PPT、DOCX、HTML 分别加载独立执行规则、工具与 renderer 校验。
 - **E2E 自动评测脚手架**：冻结独立 rubric，通过 Content Judge + Visual Judge 评价最终材料；PPT、DOCX、HTML 均生成格式适配的视觉快照，缺少截图时阻断评测放行。
@@ -101,7 +101,7 @@ Runtime 是 loop 的运行骨架，主要由以下文件实现：
 
 - `presentation_agent/loop.py`：`LoopRunner`，一次性跑单个 Agent 的完整 maker-checker loop。
 - `presentation_agent/manager.py`：`ManagerAgentRuntime`、`ManagerOrchestrator`、`WorkerExecutor`，组成控制面和动态调度状态机。
-- `presentation_agent/pipeline.py`：保留的 legacy.v0_2 固定顺序兼容/调试入口。
+- `presentation_agent/pipeline.py`：四阶段固定顺序的调试入口；用户交付默认走 Manager。
 - `presentation_agent/step.py`：`StepRunner` / `PipelineStepper`，支持宿主模型自执行的单步模式。
 - `presentation_agent/launch.py`：统一启动入口，负责把自然输入或 brief 标准化后交给 pipeline。
 
@@ -204,7 +204,7 @@ Stop checker 只判断是否可以停止并进入 human review，不等同于完
 
 这能避免系统假装"全自动判断主观质量"，也符合汇报材料生产中高质量判断必须有人参与的现实。
 
-> **注意**：Manager 编排路径（宿主自执行模式）下的 `StopChecker` 仅做确定性判定（P0 数量、schema 匹配），不做独立 LLM sanity check。这是因为宿主自执行模式下只有一个模型可用，LLM 级别的合理性扫描已在 review 阶段的 `_compose_review_instruction` 中由宿主模型完成。Legacy `LoopRunner` 路径（harness 自持多个 LLM client）仍使用带独立 LLM 的 `StopChecker`。两种路径的安全边界等价，差异仅在于 sanity check 的执行位置。
+> **注意**：Manager 编排路径（宿主自执行模式）下的 `StopChecker` 仅做确定性判定（P0 数量、schema 匹配），不做独立 LLM sanity check。LLM 级别的合理性扫描在 review 阶段由独立 Reviewer sub-agent 完成；若用户在 Brief gate 选择快速模式，则只执行 schema 与确定性检查。
 
 ### 4.4 E2E Eval Harness
 

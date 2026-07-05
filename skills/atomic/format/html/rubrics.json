@@ -2,7 +2,7 @@
   "rubrics": [
     {
       "id": "FMT-HTML-SL-001",
-      "applies_to": ["storyline_design"],
+      "applies_to": ["storyline"],
       "severity": "P1",
       "dimension": "format_adaptation",
       "criterion": "HTML 故事线应使用 module 颗粒度并形成摘要、导航和证据展开层级。",

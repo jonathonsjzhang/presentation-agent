@@ -2,7 +2,7 @@
   "rubrics": [
     {
       "id": "RPT-PROGRESS-SL-001",
-      "applies_to": ["storyline_design"],
+      "applies_to": ["storyline"],
       "severity": "P0",
       "dimension": "report_type_fit",
       "criterion": "业务进展汇报必须覆盖目标、进展、偏差、风险/卡点、支持请求和下一步。",

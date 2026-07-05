@@ -2,7 +2,7 @@
   "rules": [
     {
       "id": "FMT-DOC-SL-G01",
-      "applies_to": ["storyline_design"],
+      "applies_to": ["storyline"],
       "phase": ["generation", "review"],
       "level": "P0",
       "property": "unit_type",
@@ -10,7 +10,7 @@
     },
     {
       "id": "FMT-DOC-AS-G01",
-      "applies_to": ["argument_synthesis"],
+      "applies_to": ["analysis"],
       "phase": ["generation", "review"],
       "level": "P1",
       "property": "format_fit",
@@ -18,7 +18,7 @@
     },
     {
       "id": "FMT-DOC-PF-G01",
-      "applies_to": ["page_filling"],
+      "applies_to": ["report"],
       "phase": ["generation", "review"],
       "level": "P0",
       "property": "unit_type",

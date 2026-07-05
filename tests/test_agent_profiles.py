@@ -6,10 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from presentation_agent.agent_profiles import (
-    LEGACY_CONTRACT_PROFILE,
-    load_agent_profile,
-)
+from presentation_agent.agent_profiles import load_agent_profile
 from presentation_agent.loop import LoopRunner
 from presentation_agent.launch import normalize_brief
 from presentation_agent.manager import (
@@ -511,24 +508,9 @@ class AgentProfileLoaderTests(unittest.TestCase):
             ["analysis", "storyline", "report", "format"],
         )
         self.assertNotIn("evidence_harvester", profile.specs)
+        self.assertIn("evidence_harvester", profile.support_specs)
         self.assertIn("qa_preparation", profile.specs)
         self.assertIn("speaker_script", profile.specs)
-
-    def test_explicit_legacy_profile_remains_available(self) -> None:
-        profile = load_agent_profile(ROOT, LEGACY_CONTRACT_PROFILE)
-        self.assertEqual(profile.contract_profile, LEGACY_CONTRACT_PROFILE)
-        self.assertEqual(
-            [spec.id for spec in profile.ordered_specs],
-            [
-                "argument_synthesis",
-                "storyline_design",
-                "page_filling",
-                "format",
-                "qa_preparation",
-                "speaker_script",
-            ],
-        )
-        self.assertIn("evidence_harvester", profile.specs)
 
     def test_default_manager_entry_uses_four_public_stages(self) -> None:
         source = FIXTURES / "golden_cases" / "mixed_deep_dive" / "input.json"
@@ -558,10 +540,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
         )
         for spec in profile.ordered_specs:
             with self.subTest(agent=spec.id):
-                expected_skill = (
-                    "format_report" if spec.id == "format" else spec.id
-                )
-                self.assertEqual(spec.skill, expected_skill)
+                self.assertEqual(spec.skill, spec.id)
                 self.assertTrue(spec.memory_dimensions)
                 self.assertGreater(spec.max_revision_rounds, 0)
                 self.assertTrue(spec.loop_policy)

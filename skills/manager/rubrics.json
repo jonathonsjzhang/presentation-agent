@@ -1,53 +1,46 @@
 {
   "rubrics": [
     {
-      "id": "MGR-P0-001",
+      "id": "MGR03-P0-001",
       "severity": "P0",
-      "dimension": "任务定义",
-      "check": "planning 决策必须定义受众、decision_goal、expected_action、范围、约束和成功标准。",
-      "fix": "补齐 report_charter，并把无法合理假设的缺口列为 blocking_questions。"
+      "dimension": "主链",
+      "check": "初始计划是否严格为 analysis → storyline → report → format。",
+      "fix": "恢复固定四阶段，不把 Evidence 或扩展 Worker 放入初始计划。"
     },
     {
-      "id": "MGR-P0-002",
+      "id": "MGR03-P0-002",
       "severity": "P0",
-      "dimension": "任务派发",
-      "check": "dispatch/revise 必须包含可执行 task_packet，且目标 Worker 必须存在。",
-      "fix": "补齐 objective、输入、交付物、验收标准、依赖和 memory_dimensions。"
+      "dimension": "文档优先",
+      "check": "初始 delivery_targets 是否仅为 document。",
+      "fix": "先交付 document，再通过 delivery options gate 追加其他载体。"
     },
     {
-      "id": "MGR-P0-003",
+      "id": "MGR03-P0-003",
+      "severity": "P0",
+      "dimension": "输入依赖",
+      "check": "下游 task_packet 是否引用真实、已批准的必需上游 artifact。",
+      "fix": "使用 artifact_catalog 中的真实路径并保持阶段依赖。"
+    },
+    {
+      "id": "MGR03-P0-004",
       "severity": "P0",
       "dimension": "验收",
-      "check": "不得仅凭 schema 合格验收 Worker，必须逐条判断 acceptance_criteria 和项目目标。",
-      "fix": "在 acceptance_report 中给出逐条检查和证据。"
+      "check": "是否拒绝仍有 P0、阻塞状态、渲染失败或跨阶段硬冲突的产物。",
+      "fix": "派发返工或请求人工决策，不得按 schema 合格直接放行。"
     },
     {
-      "id": "MGR-P1-001",
-      "severity": "P1",
-      "dimension": "调度",
-      "check": "计划应避免不必要的固定阶段和重复工作，并保留合理依赖。",
-      "improvement": "按任务需要选择 Worker，而不是机械执行全部阶段。"
-    },
-    {
-      "id": "MGR-P1-002",
-      "severity": "P1",
-      "dimension": "跨阶段一致性",
-      "check": "下游不得弱化已接受结论、丢失证据边界或偏离 expected_action。",
-      "improvement": "返工当前 Worker，必要时回到上游重新规划。"
-    },
-    {
-      "id": "MGR-P0-004",
-      "severity": "P0",
-      "dimension": "证据调度",
-      "check": "deep_dive、多源材料或包含访谈/问卷时，计划是否在 argument 前安排 evidence_harvester，或明确说明 lightweight prepass 已足够。",
-      "fix": "增加 evidence_harvester 任务，并让 argument 依赖 evidence_catalog artifact。"
-    },
-    {
-      "id": "MGR-P0-005",
+      "id": "MGR03-P0-005",
       "severity": "P0",
       "dimension": "建议粒度",
-      "check": "report charter 与所有 task packet 是否传播 recommendation_granularity 和 unsupported_specificity_policy。",
-      "fix": "补齐项目级建议粒度，并在跨阶段验收中拦截 timeline、KPI、owner、预算和路线图。"
+      "check": "task packet 是否继承 Charter 的建议粒度和不支持细节政策。",
+      "fix": "原样继承并拦截无来源的执行化扩写。"
+    },
+    {
+      "id": "MGR03-P1-001",
+      "severity": "P1",
+      "dimension": "用户沟通",
+      "check": "是否用简洁自然语言说明当前产物、未决问题和下一步。",
+      "improvement": "只呈现用户决策所需信息，避免暴露内部 Evidence 子任务。"
     }
   ]
 }

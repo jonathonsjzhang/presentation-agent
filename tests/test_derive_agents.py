@@ -12,25 +12,29 @@ from presentation_agent.io import write_json
 def _config_with_two_stages() -> dict:
     return {
         "version": "agent-definition.v2",
-        "pipeline": {"stages": ["argument_synthesis", "format"]},
-        "agents": [
-            {
-                "id": "argument_synthesis",
-                "name": "核心论点提炼",
-                "skill": "argument_synthesis",
-                "output_schema": "argument_synthesis.v1",
-                "rubrics": ["r1", "r2"],
-            },
-            {
-                "id": "format",
-                "name": "format",
-                "skill": "format",
-                "output_schema": "formatted_material.v1",
-                "rubrics": ["fr1"],
-            },
-            # An agent NOT in stages must be ignored.
-            {"id": "legacy_agent", "name": "legacy", "skill": "legacy"},
-        ],
+        "active_contract_profile": "v0_3",
+        "contract_profiles": {
+            "v0_3": {
+                "canonical_stages": ["analysis", "format"],
+                "workers": [
+                    {
+                        "id": "analysis",
+                        "name": "分析",
+                        "skill": "analysis",
+                        "output_schema": "analysis.v1",
+                        "rubrics": ["r1", "r2"],
+                    },
+                    {
+                        "id": "format",
+                        "name": "可视化",
+                        "skill": "format",
+                        "output_schema": "formatted_material.v2",
+                        "rubrics": ["fr1"],
+                    },
+                    {"id": "unused", "name": "unused", "skill": "unused"},
+                ],
+            }
+        },
     }
 
 
@@ -48,11 +52,11 @@ class DeriveAgentsTests(unittest.TestCase):
         # 2 stages * 2 roles (worker/reviewer) * 3 hosts = 12
         self.assertEqual(len(derived), 12)
 
-    def test_legacy_agent_not_in_stages_excluded(self) -> None:
+    def test_agent_not_in_stages_is_excluded(self) -> None:
         derived = derive_all(_root())
         ids = {d.agent_id for d in derived}
-        self.assertNotIn("legacy_agent", ids)
-        self.assertEqual(ids, {"argument_synthesis", "format"})
+        self.assertNotIn("unused", ids)
+        self.assertEqual(ids, {"analysis", "format"})
 
     def test_claude_worker_is_writable_reviewer_is_read_only(self) -> None:
         derived = derive_all(_root())
@@ -76,7 +80,7 @@ class DeriveAgentsTests(unittest.TestCase):
         wb = {
             d.role: json.loads(d.content)
             for d in derived
-            if d.host == "workbuddy" and d.agent_id == "argument_synthesis"
+            if d.host == "workbuddy" and d.agent_id == "analysis"
         }
         self.assertEqual(wb["worker"]["subagent_type"], "general-purpose")
         self.assertEqual(wb["reviewer"]["subagent_type"], "Explore")

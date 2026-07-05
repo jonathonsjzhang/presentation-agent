@@ -77,15 +77,16 @@ class DerivedFile:
 
 
 def _stage_agents(config: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return the pipeline stage agents (those listed in pipeline.stages).
+    """Return the canonical workers from the active contract profile.
 
-    Only agents referenced by active pipeline stages are included; any agent
-    definition not listed in ``pipeline.stages`` is ignored. This keeps the
-    derived file set in lockstep with the real pipeline.
+    Internal Evidence and post-document extensions are not stage-level
+    sub-agents and therefore are not derived here.
     """
 
-    active = config.get("pipeline", {}).get("stages", [])
-    by_id = {a.get("id"): a for a in config.get("agents", [])}
+    profile_id = str(config.get("active_contract_profile") or "v0_3")
+    profile = config.get("contract_profiles", {}).get(profile_id, {})
+    active = profile.get("canonical_stages", [])
+    by_id = {a.get("id"): a for a in profile.get("workers", [])}
     return [by_id[s] for s in active if s in by_id]
 
 

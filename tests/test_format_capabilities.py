@@ -6,6 +6,7 @@ from itertools import product
 from pathlib import Path
 
 from presentation_agent.capabilities.compiler import compile_skill_package
+from presentation_agent.agent_profiles import load_agent_profile
 from presentation_agent.io import read_json
 from presentation_agent.models import AgentSpec
 from presentation_agent.renderers import render_material
@@ -17,12 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _specs() -> dict[str, AgentSpec]:
-    config = read_json(ROOT / "configs" / "agents.json")
-    return {
-        row["id"]: AgentSpec.from_dict(row)
-        for row in config["agents"]
-        if row["id"] in config["pipeline"]["stages"]
-    }
+    return load_agent_profile(ROOT).specs
 
 
 class FormatCapabilityTests(unittest.TestCase):
@@ -52,9 +48,9 @@ class FormatCapabilityTests(unittest.TestCase):
     def test_format_prompt_contains_only_selected_carrier_harness(self) -> None:
         spec = _specs()["format"]
         expectations = {
-            "ppt": ("mck_ppt_shape_native", ["docx_report_renderer", "html_renderer"]),
-            "document": ("docx_report_renderer", ["mck_ppt_shape_native", "html_renderer"]),
-            "html": ("html_renderer", ["mck_ppt_shape_native", "docx_report_renderer"]),
+            "ppt": ("renderer=ppt_renderer", ["renderer=docx_renderer", "renderer=html_renderer"]),
+            "document": ("renderer=docx_renderer", ["renderer=ppt_renderer", "renderer=html_renderer"]),
+            "html": ("renderer=html_renderer", ["renderer=ppt_renderer", "renderer=docx_renderer"]),
         }
         for output_format, (included, excluded) in expectations.items():
             package = compile_skill_package(
@@ -101,7 +97,7 @@ class FormatCapabilityTests(unittest.TestCase):
 
         self.assertTrue(any(obj.id == "P0-format-capability-mismatch" for obj in report.p0))
         self.assertEqual(result.status, "error")
-        self.assertIn("format mismatch", result.detail)
+        self.assertIn("delivery_target mismatch", result.detail)
 
 
 if __name__ == "__main__":

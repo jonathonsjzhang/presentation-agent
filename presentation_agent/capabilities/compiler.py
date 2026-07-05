@@ -19,12 +19,14 @@ def compile_skill_package(
     spec: AgentSpec,
     input_data: dict[str, Any],
     *,
-    legacy_fallback: bool = True,
+    legacy_fallback: bool = False,
 ) -> SkillPackage:
     registry = CapabilityRegistry(root)
-    legacy = load_skill_package(root, spec.skill)
+    core = load_skill_package(root, spec.skill)
     if not registry.enabled_for(spec.id):
-        return legacy
+        return core
+    if not _has_profile_context(input_data):
+        return core
 
     canonical_format = _is_report_v1_format(spec, input_data)
     try:
@@ -35,17 +37,9 @@ def compile_skill_package(
             ("report_type", profile.report_type),
             ("format", profile.output_format),
         )
-        core_instructions = _core_instructions(
-            legacy.instructions, canonical_format=canonical_format
-        )
-        if spec.id == "format":
-            for marker in (
-                "## Format capabilities",
-                "===== BUNDLED REFERENCES",
-            ):
-                core_instructions = core_instructions.split(marker, 1)[0].rstrip()
+        core_instructions = core.instructions
         instruction_sections = [core_instructions]
-        rubrics = _core_rubrics(legacy.rubrics, canonical_format=canonical_format)
+        rubrics = list(core.rubrics)
         tools: list[str] = []
         context_requirements: list[str] = []
         atomic_specs = []
@@ -104,30 +98,24 @@ def compile_skill_package(
 
         instructions = "\n\n".join(section for section in instruction_sections if section)
         fingerprint = _fingerprint(
-            selection.to_dict(), instructions, rubrics, legacy.schemas, tools
+            selection.to_dict(), instructions, rubrics, core.schemas, tools
         )
         return SkillPackage(
             agent_id=spec.id,
-            path=legacy.path,
+            path=core.path,
             instructions=instructions,
             rubrics=rubrics,
-            schemas=legacy.schemas,
+            schemas=core.schemas,
             selected_capabilities=list(selection.capability_ids),
             tools=list(dict.fromkeys(tools)),
             context_requirements=list(dict.fromkeys(context_requirements)),
             fingerprint=fingerprint,
             budget=prompt_budget(
-                instructions=instructions, rubrics=rubrics, schemas=legacy.schemas
+                instructions=instructions, rubrics=rubrics, schemas=core.schemas
             ),
             legacy=False,
         )
     except (CapabilityError, OSError, ValueError, KeyError):
-        # A v0.3 Format task must never be handed to the page_content legacy
-        # prompt. Contract errors are surfaced to the caller instead.
-        if canonical_format:
-            raise
-        if legacy_fallback and registry.runtime.get("legacy_fallback", True):
-            return legacy
         raise
 
 
@@ -139,34 +127,17 @@ def _is_report_v1_format(spec: AgentSpec, input_data: dict[str, Any]) -> bool:
     )
 
 
-def _core_instructions(instructions: str, *, canonical_format: bool) -> str:
-    marker = "## Legacy v0.2 compatibility"
-    canonical, separator, legacy = instructions.partition(marker)
-    if canonical_format:
-        return canonical.rstrip()
-    if separator:
-        return f"# Format Core Skill\n\n{marker}\n{legacy}".strip()
-    return instructions.strip()
-
-
-def _core_rubrics(
-    rubrics: list[Any], *, canonical_format: bool
-) -> list[Any]:
-    if not canonical_format:
-        return list(rubrics)
-    allowed = {
-        "FMT-CORE-001",
-        "FMT-CORE-002",
-        "FMT-CORE-003",
-        "FMT-CORE-004",
-        "FMT-CAVEAT-001",
-        "FMT-NO-AMPLIFICATION",
-    }
-    return [
-        rubric
-        for rubric in rubrics
-        if not isinstance(rubric, dict) or rubric.get("id") in allowed
-    ]
+def _has_profile_context(input_data: dict[str, Any]) -> bool:
+    """Only compose atomic capabilities when the task carries profile data."""
+    report = input_data.get("report")
+    if isinstance(report, dict) and report.get("schema") == "report.v1":
+        return True
+    charter = input_data.get("report_charter")
+    source = charter if isinstance(charter, dict) else input_data
+    return any(
+        source.get(key) not in (None, "", [], {})
+        for key in ("audience", "report_type", "delivery_target", "output_format")
+    )
 
 
 def _canonical_format_rule(delivery_target: str) -> dict[str, Any]:

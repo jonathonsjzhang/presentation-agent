@@ -184,17 +184,5 @@ class WP8CrossReviewTests(unittest.TestCase):
         self.assertIn("E-404", retention["unknown_evidence_refs"])
         self.assertIn("34", retention["missing_numbers"])
 
-    def test_legacy_cross_review_is_unchanged(self) -> None:
-        upstream = {
-            "schema": "page_content.v2",
-            "pages": [{"leadline": "必须保留的标题"}],
-        }
-        artifact = {"material_units": []}
-        self.assertEqual(
-            self.reviewer._check_report_to_format(upstream, artifact),
-            self.reviewer._check_format(upstream, artifact),
-        )
-
-
 if __name__ == "__main__":
     unittest.main()

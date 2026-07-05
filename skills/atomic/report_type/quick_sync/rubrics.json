@@ -2,7 +2,7 @@
   "rubrics": [
     {
       "id": "RPT-QUICK-SL-001",
-      "applies_to": ["storyline_design"],
+      "applies_to": ["storyline"],
       "severity": "P1",
       "dimension": "report_type_fit",
       "criterion": "快速同步应克制，只保留变化、影响、动作和观察点。",

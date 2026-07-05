@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from presentation_agent.agent_profiles import (
-    LEGACY_CONTRACT_PROFILE,
+    DEFAULT_CONTRACT_PROFILE,
     load_agent_profile,
 )
 from presentation_agent.analysis import decide_evidence
@@ -86,11 +86,14 @@ class StepRunner:
         state = self._load_state()
         requested_profile = contract_profile or state.get("contract_profile")
         if requested_profile is None and state:
-            requested_profile = LEGACY_CONTRACT_PROFILE
+            requested_profile = DEFAULT_CONTRACT_PROFILE
         self.agent_profile = load_agent_profile(root, requested_profile)
         self.contract_profile = self.agent_profile.contract_profile
         self.config = self.agent_profile.config
-        self.specs = self.agent_profile.specs
+        self.specs = {
+            **self.agent_profile.specs,
+            **self.agent_profile.support_specs,
+        }
 
         state_profile = state.get("contract_profile")
         if state_profile and state_profile != self.contract_profile:
@@ -823,13 +826,10 @@ class StepRunner:
             asset["render_status"] = "rendered" if succeeded else "error"
 
     def _render_deliverable(self, artifact: dict[str, Any]):
-        """Render report or legacy page_filling/format deliverable files.
+        """Render v0.3 report or format deliverables.
 
-        - v0.3 report: renders semantic `report.v1` into the content DOCX.
-        - page_filling (agent4): renders `artifact["draft_material"]` at draft
-          fidelity (wireframe-level PPT/HTML/docx).
-        - format (agent5): renders the artifact itself at final fidelity
-          (McKinsey-grade PPT/HTML/docx).
+        - report renders semantic `report.v1` into the content DOCX.
+        - format renders `formatted_material.v2` into the selected carrier.
 
         Returns a RenderResult, or None when this agent has no deliverable to
         render. Missing optional deps never crash: the RenderResult carries a
@@ -879,48 +879,7 @@ class StepRunner:
                     fidelity="formatted",
                     detail=str(exc),
                 )
-        if self.spec.id == "page_filling":
-            material = artifact.get("draft_material")
-            fidelity = "draft"
-        elif self.spec.id == "format":
-            material = artifact
-            fidelity = "final"
-        else:
-            return None
-        if not isinstance(material, dict) or not material.get("material_units"):
-            return None
-
-        try:
-            from presentation_agent.renderers import render_material
-        except Exception:
-            return None
-
-        topic = artifact.get("topic") or material.get("topic") or "deliverable"
-        stem = self._safe_stem(topic)
-        package = getattr(self, "skill_package", None)
-        selected_capabilities = (
-            package.selected_capabilities if package is not None else []
-        )
-        selected_formats = [
-            item.removeprefix("format.")
-            for item in selected_capabilities
-            if item.startswith("format.")
-        ]
-        expected_format = selected_formats[0] if len(selected_formats) == 1 else None
-        try:
-            return render_material(
-                material,
-                self.run_dir,
-                fidelity=fidelity,
-                file_stem=stem,
-                expected_format=expected_format,
-                selected_capabilities=selected_capabilities,
-            )
-        except Exception as exc:  # never let rendering break the stage commit
-            from presentation_agent.renderers.base import RenderResult
-
-            fmt = str(material.get("format") or "ppt").lower()
-            return RenderResult(status="error", fmt=fmt, fidelity=fidelity, detail=str(exc))
+        return None
 
     @staticmethod
     def _source_report_from_input(input_data: dict[str, Any]) -> dict[str, Any] | None:
@@ -1034,7 +993,7 @@ class StepRunner:
                 updated[key] = artifact[key]
                 applied = True
 
-        # state_revisions: storyline_design (and potentially later stages)
+        # state_revisions: storyline (and potentially later stages)
         # can revise upstream state values after the full story emerges
         if "state_revisions" in writes:
             revisions = artifact.get("state_revisions") or {}
@@ -1480,7 +1439,7 @@ class PipelineStepper:
             "contract_profile"
         )
         if requested_profile is None and pipeline_state:
-            requested_profile = LEGACY_CONTRACT_PROFILE
+            requested_profile = DEFAULT_CONTRACT_PROFILE
         self.agent_profile = load_agent_profile(root, requested_profile)
         self.contract_profile = self.agent_profile.contract_profile
         self.specs = self.agent_profile.specs

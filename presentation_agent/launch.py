@@ -4,12 +4,11 @@ from __future__ import annotations
 
 Three hosts — Claude Code (subagent), WorkBuddy (skill), Codex (prompt) — all
 need to do the same thing: take a user's spoken request, turn it into a
-`raw_brief.v1`, and kick off a report run. As of v0.2 the default path is
-Manager-orchestrated; set ``use_manager=False`` for legacy direct Pipeline.
+`raw_brief.v1`, and kick off a report run. The only supported path is the
+v0.3 Manager-orchestrated workflow.
 
 Design choices baked in here:
-  - default provider is "cli" (decision 1A) when using legacy Pipeline; Manager
-    path is host-self-execution and does not use a provider.
+  - Manager path is host-self-execution and does not use a provider.
   - brief normalization is forgiving: accepts a dict, a JSON string, or a path,
     fills sane defaults, and fails loudly only on the few truly-required fields.
   - stepwise by default (human-in-the-loop); hosts pass auto=True for dry runs.
@@ -19,7 +18,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional, Union
 
-from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE, load_agent_profile
+from presentation_agent.agent_profiles import load_agent_profile
 from presentation_agent.capabilities.profile import normalize_report_profile
 from presentation_agent.io import write_json
 from presentation_agent.models import now_iso
@@ -171,34 +170,24 @@ def launch_report(
     This is THE function every host wrapper calls. Returns run metadata so the
     host can show the user what was run and where the artifacts landed.
 
-    **Manager path** (``use_manager=True``, default since v0.2):
+    **Manager path** (``use_manager=True``):
         Initializes a ManagerOrchestrator run, writes the brief, and returns
         the first instruction (Manager planning).  The host then drives the
         run step-by-step via the ``report next → submit → approve/feedback``
         protocol — no provider needed (host self-execution).
 
-    **Legacy Pipeline** (``use_manager=False``):
-        Runs the direct six-Worker Pipeline via LoopRunner.  Requires a
-        ``provider`` (defaults to ``"cli"`` when omitted).  Kept for
-        compatibility and headless debugging.
-
-    When ``init_only=True`` (legacy only), only writes the brief and creates
-    stage 1's run_dir without running any agent.
+    ``use_manager=False`` is rejected. ``init_only`` remains in the public
+    signature for callers migrating to the Manager protocol.
     """
     root_path = Path(root).resolve()
-    profile_request = (
-        contract_profile
-        if use_manager
-        else (contract_profile or LEGACY_CONTRACT_PROFILE)
-    )
+    if not use_manager:
+        raise BriefError(
+            "Direct Pipeline 已移除；请使用默认 Manager 路径"
+        )
+    profile_request = contract_profile
     selected_profile = load_agent_profile(
         root_path, profile_request
     ).contract_profile
-    if not use_manager and selected_profile != LEGACY_CONTRACT_PROFILE:
-        raise BriefError(
-            "Legacy Pipeline 仅支持 contract_profile='legacy.v0_2'；"
-            "v0_3 请使用默认 Manager 路径"
-        )
     normalized = normalize_brief(brief, root_path, selected_profile)
 
     run_id = f"report-{now_iso().replace(':', '').replace('+', 'Z')}"
@@ -211,7 +200,7 @@ def launch_report(
     # ---- Manager path (default) ---------------------------------------------
     if use_manager:
         if init_only:
-            raise BriefError("init_only 仅支持 Legacy Pipeline 路径")
+            raise BriefError("init_only 已随 Direct Pipeline 一并移除")
         from presentation_agent.manager import ManagerOrchestrator
 
         orchestrator = ManagerOrchestrator(
@@ -231,31 +220,4 @@ def launch_report(
             "instruction": instruction,
         }
 
-    # ---- Legacy Pipeline (deprecated since v0.2) ----------------------------
-    used_provider = provider or "cli"
-
-    if init_only:
-        from presentation_agent.step import PipelineStepper
-
-        stepper = PipelineStepper(
-            root_path,
-            out_root,
-            contract_profile=selected_profile,
-        )
-        stage1 = stepper.init_pipeline(brief_path)
-        return {
-            "brief_path": str(brief_path),
-            "output_dir": str(out_root),
-            "stage_1_dir": stage1["stage_dir"],
-        }
-
-    from presentation_agent.pipeline import Pipeline
-
-    pipeline = Pipeline(root_path, provider_override=used_provider)
-    summary = pipeline.run(brief_path, run_dir=out_root, auto=auto)
-
-    return {
-        "brief_path": str(brief_path),
-        "provider": used_provider,
-        **summary,
-    }
+    raise BriefError("Manager 路径未能启动")

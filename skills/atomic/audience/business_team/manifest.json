@@ -2,7 +2,7 @@
   "id": "audience.business_team",
   "kind": "audience",
   "select_when": {"audience": "business_team"},
-  "applies_to": ["argument_synthesis", "storyline_design", "page_filling", "format", "qa_preparation", "speaker_script"],
+  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation", "speaker_script"],
   "owns": ["action_lens", "metric_lens"],
   "incompatible_with": [],
   "prompt_budget_tokens": 220
