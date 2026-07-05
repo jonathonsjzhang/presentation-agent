@@ -1376,13 +1376,27 @@ class StepRunner:
 
     def _last_instruction_path(self, state: dict[str, Any]) -> Optional[str]:
         step = state.get("current_step", "")
-        if step in ("awaiting_gen_output", "awaiting_review_output", "awaiting_revise_output"):
-            return str(self.handoff_dir / StepRunner._instruction_path_for(step).name)
+        if step in (
+            "awaiting_gen_output", "awaiting_review_output", "awaiting_revise_output",
+            "awaiting_evidence_output",
+        ):
+            kind = {
+                "awaiting_gen_output": "gen",
+                "awaiting_review_output": "review",
+                "awaiting_revise_output": "revise",
+                "awaiting_evidence_output": "gen",  # Evidence subtask uses gen handoff
+            }.get(step, "gen")
+            return str(self.handoff_dir / f"instruction_{kind}.md")
         return None
 
     def _last_output_path(self, state: dict[str, Any]) -> Optional[str]:
         step = state.get("current_step", "")
-        kind_map = {"awaiting_gen_output": "gen", "awaiting_review_output": "review", "awaiting_revise_output": "revise"}
+        kind_map = {
+            "awaiting_gen_output": "gen",
+            "awaiting_review_output": "review",
+            "awaiting_revise_output": "revise",
+            "awaiting_evidence_output": "gen",  # Evidence subtask outputs to gen
+        }
         kind = kind_map.get(step)
         if kind:
             return str(self.handoff_dir / f"output_{kind}.json")

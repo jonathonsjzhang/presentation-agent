@@ -44,9 +44,9 @@
       "id": "FMT-NO-AMPLIFICATION",
       "severity": "P0",
       "dimension": "recommendation_scope",
-      "criterion": "Format 不得新增上游不存在的 timeline、KPI、owner、预算、组织调整、里程碑或路线图。",
-      "check": "检查 headline、finalized_content、visual_object、layout_type 和 render plan。",
-      "fix": "删除执行化细节；上游未提供时间计划时不得使用 timeline layout。",
+      "criterion": "Format 不得新增上游 report.v1 中不存在的 timeline、KPI、owner、预算、组织调整、里程碑或路线图。忠实复现上游已有的执行细节（如 'Q1 KPI 超出预期'）不判定为违规。判断标准：新增 vs 上游已有的 diff。",
+      "check": "对照 report.v1 原文检查 headline、finalized_content、visual_object 中的执行化措辞。正则为初筛信号——命中后需与上游交叉比对，只标记新增内容。",
+      "fix": "删除 Format 新增的执行化细节；忠实复现的上游内容保留。",
       "machine_check": {
         "each": "delivery_units",
         "rules": [

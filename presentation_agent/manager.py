@@ -515,8 +515,8 @@ class WorkerExecutor:
             task_dir=request_task_dir,
             agent_id=agent_id,
             role=role,
-            instruction_path=Path(instruction.get("instruction_path", "")),
-            output_path=Path(instruction.get("output_path", "")),
+            instruction_path=Path(instruction.get("instruction_path") or ""),
+            output_path=Path(instruction.get("output_path") or ""),
             input_path=Path(
                 str(instruction.get("input_path") or request_task_dir / "input.json")
             ),
@@ -671,6 +671,23 @@ class ManagerOrchestrator:
                 contract_profile=self.contract_profile,
             )
             status = runner.status()
+
+            # Evidence Harvester subtask routing: when Analysis is in
+            # awaiting_evidence_output, the actual instruction files live under
+            # the Evidence subtask's own StepRunner at subtasks/evidence_harvester/.
+            # Switch to it so instruction_path/output_path resolve correctly.
+            if status.get("current_step") == "awaiting_evidence_output":
+                evidence_dir = task_dir / "subtasks" / "evidence_harvester"
+                if evidence_dir.exists():
+                    evidence_runner = StepRunner(
+                        self.root,
+                        evidence_dir,
+                        data_root=self.data_root,
+                        contract_profile=self.contract_profile,
+                    )
+                    status = evidence_runner.status()
+                    task_dir = evidence_dir
+
             if str(status.get("current_step", "")).startswith("awaiting_"):
                 instruction = {
                     "actor": "worker",
@@ -741,6 +758,32 @@ class ManagerOrchestrator:
                 if isinstance(item, dict)
                 and item.get("blocking_level") == "blocking"
             ]
+            # Not every blocking request should actually block the pipeline.
+            # Storyline may have narrowed scope to work around a gap: if the
+            # affected findings are all in editorial_decisions with disposition
+            # "omitted" or "appendix", the gap has been handled and the request
+            # is no longer blocking.
+            editorial_decisions = artifact.get("editorial_decisions", [])
+            main_story_fids: set[str] = set()
+            for ed in editorial_decisions:
+                if isinstance(ed, dict) and ed.get("disposition") == "main_story":
+                    fid = ed.get("finding_id")
+                    if isinstance(fid, str):
+                        main_story_fids.add(fid)
+            truly_blocking = [
+                req
+                for req in blocking_requests
+                if any(
+                    fid in main_story_fids
+                    for fid in (req.get("finding_refs") or [])
+                )
+            ] or (
+                # If there is no editorial_decisions at all (edge case:
+                # zero-finding analysis), *all* blocking requests are real.
+                blocking_requests
+                if not editorial_decisions
+                else []
+            )
             cross_issues = (
                 worker_result.get("cross_stage_review", {}).get("issues", [])
             )
@@ -750,10 +793,11 @@ class ManagerOrchestrator:
                 if isinstance(item, dict) and item.get("severity") == "P0"
             ]
             if action in ("dispatch", "complete") and (
-                blocking_requests or blocking_cross_issues
+                truly_blocking or blocking_cross_issues
             ):
                 raise StepError(
-                    "当前 Worker 存在 blocking 上游返工请求或跨阶段 P0，"
+                    "当前 Worker 存在真正阻断性的上游返工请求或跨阶段 P0 "
+                    "（已排除通过 editorial_decisions 缩窄范围的 gap），"
                     "Manager 必须 action=revise 并派发相应上游 Worker"
                 )
         self._archive_decision(decision)
@@ -1003,6 +1047,11 @@ class ManagerOrchestrator:
         """
         adapter = self.workers.spawn_adapter
         if adapter.kind == "inline":
+            return
+        # Guard: spawn is meaningless without resolved instruction/output paths
+        inst_path = str(instruction.get("instruction_path") or "")
+        out_path = str(instruction.get("output_path") or "")
+        if not inst_path or not out_path:
             return
         previous = (
             read_json(self.state_path, default={}).get("last_instruction")
