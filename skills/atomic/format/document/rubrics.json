@@ -2,7 +2,7 @@
   "rubrics": [
     {
       "id": "FMT-DOC-SL-001",
-      "applies_to": ["storyline_design"],
+      "applies_to": ["storyline"],
       "severity": "P1",
       "dimension": "format_adaptation",
       "criterion": "文档故事线应使用 section 颗粒度并支持独立阅读。",

@@ -2,7 +2,7 @@
   "rubrics": [
     {
       "id": "FMT-PPT-SL-001",
-      "applies_to": ["storyline_design"],
+      "applies_to": ["storyline"],
       "severity": "P1",
       "dimension": "format_adaptation",
       "criterion": "PPT 故事线应使用 page 颗粒度并坚持一页一问一结论。",
@@ -11,7 +11,7 @@
     },
     {
       "id": "FMT-PPT-SL-002",
-      "applies_to": ["storyline_design"],
+      "applies_to": ["storyline"],
       "severity": "P0",
       "dimension": "length_control",
       "criterion": "board、exec_office、strategy_lead 的 PPT 正文不得超过 15 页。",

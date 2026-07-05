@@ -56,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     report_start.add_argument("--brief-file", required=True, help="raw_brief JSON file path.")
     report_start.add_argument(
         "--contract-profile",
-        choices=["legacy.v0_2", "v0_3"],
+        choices=["v0_3"],
         default="v0_3",
         help="Runtime contract profile. Defaults to the document-first v0_3 user flow.",
     )
@@ -171,7 +171,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--out", help="Optional output directory.")
     run.add_argument("--provider", help="Override LLM provider (mock/cli/codex/inline).")
 
-    pipe = sub.add_parser("pipeline", help="Run the legacy direct six-Worker pipeline.")
+    pipe = sub.add_parser("pipeline", help="Run the four-stage v0.3 debug pipeline.")
     pipe.add_argument("--input", required=True, help="Initial raw brief JSON path.")
     pipe.add_argument("--out", help="Optional output directory.")
     pipe.add_argument("--auto", action="store_true", help="Run all stages back to back.")
@@ -190,7 +190,7 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument("--out", help="Optional output directory.")
     launch.add_argument(
         "--contract-profile",
-        choices=["legacy.v0_2", "v0_3"],
+        choices=["v0_3"],
         default="v0_3",
         help="Runtime contract profile. Defaults to the document-first v0_3 user flow.",
     )
@@ -424,7 +424,7 @@ def main() -> None:
             return
         if result.get("mode") == "manager_controlled":
             print(f"brief: {result['brief_path']}")
-            print(f"contract profile: {result.get('contract_profile', 'legacy.v0_2')}")
+            print(f"contract profile: {result.get('contract_profile', 'v0_3')}")
             print(f"run dir: {result['run_dir']}")
             print(json.dumps(result["instruction"], ensure_ascii=False, indent=2))
             return

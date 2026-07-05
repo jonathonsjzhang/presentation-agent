@@ -118,11 +118,6 @@
     },
     "global_state_seed": { "type": "object" },
     "blocking_questions": { "type": "array", "items": { "type": "string" } },
-    "assumptions": { "type": "array", "items": { "type": "string" } },
-    "legacy_output_format": {
-      "type": "string",
-      "enum": ["document", "ppt", "html"],
-      "description": "只读迁移字段；新任务以 delivery_targets 为准。"
-    }
+    "assumptions": { "type": "array", "items": { "type": "string" } }
   }
 }

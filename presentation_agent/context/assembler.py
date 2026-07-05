@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+from presentation_agent.agent_profiles import load_agent_profile
 from presentation_agent.io import read_json
 
 
@@ -13,11 +14,11 @@ class ContextAssembler:
     def __init__(self, root: Path, contract_profile: Optional[str] = None) -> None:
         self.root = root
         config = read_json(root / "configs" / "context_requirements.json", default={})
-        self.contract_profile = contract_profile or "legacy.v0_2"
+        self.contract_profile = load_agent_profile(
+            root, contract_profile
+        ).contract_profile
         profile = (
             config.get("contract_profiles", {}).get(self.contract_profile, {})
-            if self.contract_profile != "legacy.v0_2"
-            else {}
         )
         profile_workers = dict(profile.get("workers", {}))
         if profile_workers:

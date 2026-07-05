@@ -94,7 +94,7 @@ def prepare_evidence_subtask(
             run_state_path,
             {
                 "run_id": f"evidence-{now_iso().replace(':', '')}",
-                "contract_profile": "legacy.v0_2",
+                "contract_profile": "v0_3",
                 "agent_id": "evidence_harvester",
                 "agent_name": "证据完整盘点",
                 "stage": 0,
@@ -112,7 +112,7 @@ def prepare_evidence_subtask(
             },
         )
     runner = StepRunner(
-        root, subtask_dir, data_root=data_root, contract_profile="legacy.v0_2"
+        root, subtask_dir, data_root=data_root, contract_profile="v0_3"
     )
     state = read_json(run_state_path, default={})
     if state.get("current_step") == "init":
@@ -158,8 +158,8 @@ def commit_evidence_subtask(
         catalog = extract_json(output_path.read_text(encoding="utf-8"))
     except ValueError as exc:
         raise StepError(f"Evidence 输出不是合法 JSON: {exc}") from exc
-    profile = load_agent_profile(root, "legacy.v0_2")
-    spec = profile.specs["evidence_harvester"]
+    profile = load_agent_profile(root, "v0_3")
+    spec = profile.support_specs["evidence_harvester"]
     input_data = read_json(subtask_dir / "input.json", default={})
     package = compile_skill_package(root, spec, input_data)
     objections = ArtifactReviewer(llm=None)._schema_gate(

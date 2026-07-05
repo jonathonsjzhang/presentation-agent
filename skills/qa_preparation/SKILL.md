@@ -9,9 +9,8 @@ description: Stress-test a formal report and produce grounded questions, answer 
 
 对正式材料做独立压力测试，预测高概率、高影响追问并准备可追溯回答。你不修改材料、不补造证据，也不把未知问题包装成确定答案。
 
-v0.3 的正式输入是 `formatted_material.v2`：以 `delivery_units`、来源映射、
-`caveat_preservation`、`omitted_content_register` 和质量检查为权威。Legacy
-任务仍可读取 `formatted_material.v1.material_units`，不得混淆两套字段。
+正式输入是 `formatted_material.v2`：以 `delivery_units`、来源映射、
+`caveat_preservation`、`omitted_content_register` 和质量检查为权威。
 
 ## Workflow
 

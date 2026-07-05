@@ -5,9 +5,7 @@ import unittest
 from pathlib import Path
 
 from presentation_agent.connectors.registry import load_with_connector
-from presentation_agent.context import ContextAssembler
 from presentation_agent.io import read_json
-from presentation_agent.machine_check import run_machine_checks
 from presentation_agent.models import AgentSpec
 from presentation_agent.review import ArtifactReviewer
 
@@ -55,97 +53,6 @@ class StrategyQualityGuardTests(unittest.TestCase):
             all(unit["source_unit_id"].startswith("SOURCE-") for unit in units)
         )
         self.assertEqual(loaded["source_unit_summary"]["unresolved"], 0)
-
-    def test_argument_long_evidence_preview_blocks_readiness(self) -> None:
-        assembler = ContextAssembler(ROOT)
-        large_evidence = [
-            {"evidence_id": f"EV-{index}", "raw_content": "x" * 2500}
-            for index in range(100)
-        ]
-        context = assembler.assemble(
-            worker_id="argument_synthesis",
-            report_charter={},
-            manager_task={},
-            raw_brief={"evidence_items": large_evidence},
-            raw_brief_path=Path("/tmp/raw_brief.json"),
-            artifacts=[],
-        )
-        self.assertEqual(context["input_readiness"]["status"], "blocked")
-        self.assertEqual(
-            context["input_readiness"]["blocking_issues"][0]["field"],
-            "evidence_items",
-        )
-
-    def test_argument_roadmap_is_machine_blocked(self) -> None:
-        rubrics = read_json(
-            ROOT / "skills" / "argument_synthesis" / "rubrics.json"
-        )["rubrics"]
-        artifact = {
-            "executive_summary": {
-                "urgency_basis": None,
-                "decision_request": {
-                    "specificity_level": "execution_plan",
-                    "recommended_direction": "2-4周完成评估并进入Q3路线图",
-                },
-                "decision_relevance": "支持管理层讨论",
-            },
-            "core_thesis": "建议形成路线图",
-            "expected_action": "明确负责人和KPI",
-            "key_arguments": [],
-            "evidence_bank": [],
-            "evidence_disposition": {},
-        }
-        objections = run_machine_checks(artifact, rubrics)
-        ids = [objection.id for objection in objections]
-        self.assertTrue(any(item.endswith("ARG-RECOMMENDATION-SCOPE") for item in ids))
-
-    def test_historical_time_window_is_not_treated_as_roadmap(self) -> None:
-        rubrics = read_json(
-            ROOT / "skills" / "argument_synthesis" / "rubrics.json"
-        )["rubrics"]
-        artifact = {
-            "executive_summary": {
-                "urgency_basis": None,
-                "decision_request": {
-                    "specificity_level": "strategic_direction",
-                    "recommended_direction": "聚焦高价值场景",
-                },
-                "decision_relevance": "支持管理层讨论",
-            },
-            "core_thesis": "过去3-6个月用户时长呈上升趋势",
-            "expected_action": "确认分析方向",
-            "key_arguments": [],
-            "evidence_bank": [],
-            "evidence_disposition": {},
-        }
-        objections = run_machine_checks(artifact, rubrics)
-        self.assertFalse(
-            any(item.id.endswith("ARG-RECOMMENDATION-SCOPE") for item in objections)
-        )
-
-    def test_disposition_must_cover_evidence_bank(self) -> None:
-        rubrics = read_json(
-            ROOT / "skills" / "argument_synthesis" / "rubrics.json"
-        )["rubrics"]
-        artifact = {
-            "executive_summary": {
-                "urgency_basis": None,
-                "decision_request": {
-                    "specificity_level": "strategic_direction",
-                    "recommended_direction": "聚焦高价值场景",
-                },
-                "decision_relevance": "支持管理层讨论",
-            },
-            "core_thesis": "聚焦高价值场景",
-            "expected_action": "确认方向",
-            "key_arguments": [],
-            "evidence_bank": [{"id": "E1"}],
-            "evidence_disposition": {},
-        }
-        objections = run_machine_checks(artifact, rubrics)
-        self.assertTrue(
-            any(item.id.endswith("ARG-EVIDENCE-DISPOSITION") for item in objections)
-        )
 
     def test_reviewer_snapshot_contains_evidence_index(self) -> None:
         snapshot = ArtifactReviewer._signal_snapshot(

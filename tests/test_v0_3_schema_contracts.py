@@ -81,11 +81,24 @@ class V03SchemaContractTests(unittest.TestCase):
             self.assertLessEqual(set(unit["source_section_ids"]), report_sections)
             self.assertLessEqual(set(unit["source_claim_ids"]), report_claims)
 
-    def test_v03_agent_contract_is_default_user_entry_but_legacy_api_is_preserved(self) -> None:
+    def test_v03_agent_contract_is_the_only_active_api(self) -> None:
         config = read_json(ROOT / "configs/agents.json")
         profile = config["contract_profiles"]["v0_3"]
-        self.assertEqual(config["active_contract_profile"], "legacy.v0_2")
-        self.assertEqual(profile["status"], "frozen")
+        self.assertEqual(config["active_contract_profile"], "v0_3")
+        self.assertEqual(profile["status"], "active")
+        self.assertEqual(profile["activated_at"], "2026-07-05")
+        self.assertEqual(
+            read_json(ROOT / "configs/context_requirements.json")[
+                "contract_profiles"
+            ]["v0_3"]["status"],
+            "active",
+        )
+        self.assertEqual(
+            read_json(ROOT / "configs/capabilities.json")[
+                "contract_profiles"
+            ]["v0_3"]["status"],
+            "active",
+        )
         self.assertEqual(profile["activation"], "default_user_entry")
         self.assertEqual(
             profile["canonical_stages"],
@@ -245,24 +258,6 @@ class FormatCoreCompilationTests(unittest.TestCase):
                 with self.assertRaises(CapabilityError):
                     compile_skill_package(ROOT, self.spec, input_data)
 
-    def test_legacy_page_content_compilation_remains_available(self) -> None:
-        legacy_spec = load_agent_profile(ROOT).specs["format"]
-        package = compile_skill_package(
-            ROOT,
-            legacy_spec,
-            {
-                "schema": "page_content.v2",
-                "audience": "business_team",
-                "report_type": "deep_dive",
-                "output_format": "ppt",
-            },
-            legacy_fallback=False,
-        )
-        self.assertFalse(package.legacy)
-        self.assertIn("format.ppt", package.selected_capabilities)
-        self.assertIn("Format Skill v3.12", package.instructions)
-        self.assertIn("formatted_material.v1", package.schemas)
-
     def test_fixture_records_mapping_and_all_translation_audits(self) -> None:
         report_sections = {row["section_id"] for row in self.report["sections"]}
         report_claims = {row["claim_id"] for row in self.report["claims"]}
@@ -281,7 +276,7 @@ class FormatCoreCompilationTests(unittest.TestCase):
         schema = read_json(
             ROOT
             / "skills"
-            / "format_report"
+            / "format"
             / "schemas"
             / "formatted_material.v2.json"
         )

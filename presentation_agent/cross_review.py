@@ -37,9 +37,6 @@ class CrossStageReviewer:
         checks = {
             "storyline": self._check_analysis_to_storyline,
             "report": self._check_storyline_to_report,
-            # Legacy worker IDs remain supported during the migration window.
-            "storyline_design": self._check_storyline,
-            "page_filling": self._check_page_filling,
             "format": self._check_report_to_format,
             "qa_preparation": self._check_qa,
             "speaker_script": self._check_speaker_script,
@@ -158,9 +155,6 @@ class CrossStageReviewer:
     def _check_report_to_format(
         self, upstream: dict[str, Any], artifact: dict[str, Any]
     ) -> dict[str, Any]:
-        # Old page-content artifacts still use the legacy retention check.
-        if upstream.get("schema") not in {"report.v1", "report"}:
-            return self._check_format(upstream, artifact)
         issues: list[dict[str, Any]] = []
         target = str(artifact.get("delivery_target") or "document")
         permits_omission = target in {"ppt", "html"}
@@ -328,60 +322,6 @@ class CrossStageReviewer:
         ):
             canonical = data.get("formatted_material")
         return canonical if isinstance(canonical, dict) else None
-
-    def _check_storyline(self, upstream: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
-        issues: list[dict[str, Any]] = []
-        current_text = flatten_text(artifact)
-        for key in ("core_conclusion", "expected_action"):
-            value = str(upstream.get(key) or "").strip()
-            if value and value not in current_text:
-                issues.append({
-                    "severity": "P1",
-                    "dimension": "cross_stage_consistency",
-                    "message": f"storyline 可能未显式承接上游 {key}",
-                    "suggested_owner": "storyline_design",
-                })
-        issues.extend(self._execution_amplification_issues(upstream, artifact, "storyline_design"))
-        return self._result("warn" if issues else "pass", issues, "storyline upstream alignment checked")
-
-    def _check_page_filling(self, upstream: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
-        issues: list[dict[str, Any]] = []
-        current_text = flatten_text(artifact)
-        missing_titles = []
-        for page in upstream.get("pages", []) if isinstance(upstream.get("pages"), list) else []:
-            leadline = str(page.get("leadline") or page.get("title") or "").strip() if isinstance(page, dict) else ""
-            if leadline and leadline not in current_text:
-                missing_titles.append(leadline)
-        if missing_titles:
-            issues.append({
-                "severity": "P1",
-                "dimension": "cross_stage_consistency",
-                "message": f"page_filling 可能丢失或改写 {len(missing_titles)} 个受保护的 storyline leadline",
-                "evidence": missing_titles[:3],
-                "suggested_owner": "page_filling",
-            })
-        issues.extend(self._execution_amplification_issues(upstream, artifact, "page_filling"))
-        return self._result("warn" if issues else "pass", issues, "page filling storyline retention checked")
-
-    def _check_format(self, upstream: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
-        issues: list[dict[str, Any]] = []
-        current_text = flatten_text(artifact)
-        if "source_notes" in upstream and "source" not in current_text and "来源" not in current_text:
-            issues.append({
-                "severity": "P1",
-                "dimension": "source_retention",
-                "message": "format 产物可能未保留上游 source_notes / 来源说明",
-                "suggested_owner": "format",
-            })
-        if "open_questions" in upstream and "open" not in current_text and "待补" not in current_text:
-            issues.append({
-                "severity": "P1",
-                "dimension": "open_question_retention",
-                "message": "format 产物可能未保留上游 open_questions / 待补问题",
-                "suggested_owner": "format",
-            })
-        issues.extend(self._execution_amplification_issues(upstream, artifact, "format"))
-        return self._result("warn" if issues else "pass", issues, "format retention checked")
 
     @staticmethod
     def _execution_amplification_issues(

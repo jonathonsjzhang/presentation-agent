@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional
 
 from presentation_agent.capabilities.profile import normalize_report_profile
-from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE, load_agent_profile
+from presentation_agent.agent_profiles import (
+    DEFAULT_CONTRACT_PROFILE,
+    load_agent_profile,
+)
 from presentation_agent.capabilities.registry import CapabilityRegistry
 from presentation_agent.context import ContextAssembler
 from presentation_agent.cross_review import CrossStageReviewer
@@ -40,24 +42,18 @@ class ManagerAgentRuntime:
         root: Path,
         run_dir: Path,
         data_root: Path,
-        contract_profile: str = LEGACY_CONTRACT_PROFILE,
+        contract_profile: Optional[str] = None,
     ) -> None:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root
-        self.contract_profile = contract_profile
+        self.contract_profile = load_agent_profile(
+            root, contract_profile
+        ).contract_profile
         self.manager_dir = run_dir / "manager"
         self.handoff_dir = self.manager_dir / "handoff"
         self.handoff_dir.mkdir(parents=True, exist_ok=True)
         self.package = load_skill_package(root, "manager")
-        if contract_profile == "v0_3":
-            behavior = load_skill_package(root, "manager_v03")
-            self.package = replace(
-                self.package,
-                path=behavior.path,
-                instructions=behavior.instructions,
-                rubrics=behavior.rubrics,
-            )
         self.memory = MemoryStore(root, "manager", data_root=data_root)
 
     def prepare(self, context: dict[str, Any], phase: str) -> dict[str, Any]:
@@ -116,61 +112,21 @@ class ManagerAgentRuntime:
         }
 
     def _required_fields_reference(self) -> list[str]:
-        if self.contract_profile == "v0_3":
-            return [
-                "",
-                "## v0.3 planning 契约速查",
-                "",
-                "- report_charter 使用 report_charter.v2；不得添加 run_mode 或 output_format。",
-                "- delivery_targets 固定为 [\"document\"]。",
-                "- execution_plan 的主链严格为 analysis → storyline → report → format。",
-                "- 首个 task_packet 必须派发 analysis。",
-                "- task_packet 使用 task_packet.v2，并继承 recommendation_granularity 与 unsupported_specificity_policy。",
-                "- Evidence 由 Analysis 内部调用，不得进入 execution_plan。",
-                "- PPT、HTML、QA 和逐字稿只允许在 document 完成后的 delivery options gate 追加。",
-                "",
-                "### acceptance_report 必填字段",
-                "- task_id: 必须等于当前 task_id",
-                "- verdict: accept / revise / blocked",
-                "- criteria_results: array",
-                "- cross_stage_findings: array",
-                "- reason: string",
-            ]
         return [
             "",
-            "## 必填字段速查（planning 阶段须写入以下所有嵌套字段）",
+            "## v0.3 planning 契约速查",
             "",
-            "### report_charter 必填字段（除 material_inventory/assumptions 外全部 required）",
-            "- topic: string",
-            "- audience: string (board / exec_office / strategy_lead / business_team / external)",
-            "- report_type: string (deep_dive / business_progress / quick_sync)",
-            "- output_format: string (document / ppt / html)",
-            "- decision_goal: string",
-            "- expected_action: string",
-            "- scope: string[]  ← 字符串数组，不是 {included,excluded} 对象",
-            "- out_of_scope: string[]",
-            "- constraints: string[]",
-            "- success_criteria: string[]",
-            "- recommendation_granularity: strategic_direction / strategic_choice / execution_plan",
-            "- unsupported_specificity_policy: forbid / source_backed_only / allow",
-            "- evidence_inventory_policy: full_catalog_for_deep_dive / full_catalog / lightweight_prepass",
-            "- global_state_seed: object",
-            "- blocking_questions: string[]",
-            "",
-            "### execution_plan 每项 task 必填字段",
-            "- plan_id: string",
-            "- tasks: object[]  每项必填: task_id, agent_id, objective, dependencies, status",
-            "  - task_id: string  (如 t1, t2, task-argument_synthesis)",
-            "  - agent_id: string  (evidence_harvester / argument_synthesis / storyline_design / page_filling / format / qa_preparation / speaker_script)",
-            "  - objective: string  单句描述本任务要产出什么",
-            "  - dependencies: string[]  依赖的 task_id 列表, 无依赖则为 []",
-            "  - status: string  枚举值 planned / dispatched / completed / accepted / revision_required / skipped",
-            "- human_gates: array",
-            "- completion_criteria: string[]",
+            "- report_charter 使用 report_charter.v2；不得添加 run_mode 或 output_format。",
+            "- delivery_targets 固定为 [\"document\"]。",
+            "- execution_plan 的主链严格为 analysis → storyline → report → format。",
+            "- 首个 task_packet 必须派发 analysis。",
+            "- task_packet 使用 task_packet.v2，并继承 recommendation_granularity 与 unsupported_specificity_policy。",
+            "- Evidence 由 Analysis 内部调用，不得进入 execution_plan。",
+            "- PPT、HTML、QA 和逐字稿只允许在 document 完成后的 delivery options gate 追加。",
             "",
             "### acceptance_report 必填字段（acceptance 阶段）",
-            "- task_id: string  ← 必须精确等于当前验收的 task_id, 不能为 null",
-            "- verdict: string  (accept / revise / blocked)",
+            "- task_id: 必须等于当前 task_id",
+            "- verdict: accept / revise / blocked",
             "- criteria_results: array",
             "- cross_stage_findings: array",
             "- reason: string",
@@ -193,16 +149,8 @@ class ManagerAgentRuntime:
 
         action = decision.get("action")
         if phase == "planning":
-            charter_schema = (
-                "report_charter.v2"
-                if self.contract_profile == "v0_3"
-                else "report_charter.v1"
-            )
-            packet_schema = (
-                "task_packet.v2"
-                if self.contract_profile == "v0_3"
-                else "task_packet.v1"
-            )
+            charter_schema = "report_charter.v2"
+            packet_schema = "task_packet.v2"
             for key, schema_name in (
                 ("report_charter", charter_schema),
                 ("execution_plan", "execution_plan.v1"),
@@ -219,20 +167,7 @@ class ManagerAgentRuntime:
             plan = decision.get("execution_plan")
             packet = decision.get("task_packet")
             if (
-                self.contract_profile != "v0_3"
-                and isinstance(charter, dict)
-                and isinstance(packet, dict)
-            ):
-                errors.extend(self._policy_inheritance_errors(charter, packet))
-            if (
-                self.contract_profile != "v0_3"
-                and isinstance(charter, dict)
-                and isinstance(plan, dict)
-            ):
-                errors.extend(self._evidence_route_errors(charter, plan, packet))
-            if (
-                self.contract_profile == "v0_3"
-                and isinstance(charter, dict)
+                isinstance(charter, dict)
                 and charter.get("delivery_targets") != ["document"]
             ):
                 errors.append(
@@ -240,8 +175,7 @@ class ManagerAgentRuntime:
                     "['document']; PPT/HTML are offered after document delivery"
                 )
             if (
-                self.contract_profile == "v0_3"
-                and isinstance(charter, dict)
+                isinstance(charter, dict)
                 and isinstance(plan, dict)
                 and isinstance(packet, dict)
             ):
@@ -259,30 +193,20 @@ class ManagerAgentRuntime:
                 if not isinstance(packet, dict):
                     errors.append(f"$: {action} decision missing object 'task_packet'")
                 else:
-                    packet_schema = (
-                        "task_packet.v2"
-                        if self.contract_profile == "v0_3"
-                        else "task_packet.v1"
-                    )
+                    packet_schema = "task_packet.v2"
                     errors.extend(validate(packet, self._schema(packet_schema), "$.task_packet"))
-                    charter = read_json(
-                        self.run_dir / "report_charter.json", default={}
-                    )
-                    if isinstance(charter, dict) and self.contract_profile != "v0_3":
-                        errors.extend(self._policy_inheritance_errors(charter, packet))
             if action == "complete" and phase != "acceptance":
                 errors.append("$.action: complete is only valid during acceptance")
-            if self.contract_profile == "v0_3":
-                state = read_json(
-                    self.run_dir / "manager_state.json", default={}
+            state = read_json(
+                self.run_dir / "manager_state.json", default={}
+            )
+            errors.extend(
+                self._v03_acceptance_route_errors(
+                    action,
+                    state,
+                    decision.get("task_packet"),
                 )
-                errors.extend(
-                    self._v03_acceptance_route_errors(
-                        action,
-                        state,
-                        decision.get("task_packet"),
-                    )
-                )
+            )
 
         if errors:
             raise StepError("Manager decision 校验失败:\n- " + "\n- ".join(errors))
@@ -381,43 +305,6 @@ class ManagerAgentRuntime:
                 )
         return errors
 
-    @staticmethod
-    def _evidence_route_errors(
-        charter: dict[str, Any],
-        plan: dict[str, Any],
-        packet: Any,
-    ) -> list[str]:
-        if (
-            charter.get("report_type") != "deep_dive"
-            or charter.get("evidence_inventory_policy")
-            != "full_catalog_for_deep_dive"
-        ):
-            return []
-        tasks = plan.get("tasks", [])
-        agent_ids = [
-            str(item.get("agent_id") or "")
-            for item in tasks
-            if isinstance(item, dict)
-        ]
-        errors: list[str] = []
-        if "evidence_harvester" not in agent_ids:
-            errors.append(
-                "$.execution_plan.tasks: deep_dive with full catalog policy "
-                "must include evidence_harvester"
-            )
-        if "argument_synthesis" in agent_ids and "evidence_harvester" in agent_ids:
-            if agent_ids.index("evidence_harvester") > agent_ids.index("argument_synthesis"):
-                errors.append(
-                    "$.execution_plan.tasks: evidence_harvester must precede "
-                    "argument_synthesis"
-                )
-        if isinstance(packet, dict) and packet.get("agent_id") != "evidence_harvester":
-            errors.append(
-                "$.task_packet.agent_id: deep_dive full catalog plan must "
-                "dispatch evidence_harvester first"
-            )
-        return errors
-
     def output_path(self, phase: str) -> Path:
         return self.handoff_dir / f"output_{phase}.json"
 
@@ -437,15 +324,17 @@ class WorkerExecutor:
         run_dir: Path,
         data_root: Path,
         spawn_adapter: Optional[str] = None,
-        contract_profile: str = LEGACY_CONTRACT_PROFILE,
+        contract_profile: Optional[str] = None,
     ) -> None:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root
         self.spawn_adapter = build_spawn_adapter(root, override=spawn_adapter)
-        self.contract_profile = contract_profile
         profile = load_agent_profile(root, contract_profile)
-        self.context_assembler = ContextAssembler(root, contract_profile=contract_profile)
+        self.contract_profile = profile.contract_profile
+        self.context_assembler = ContextAssembler(
+            root, contract_profile=self.contract_profile
+        )
         self.specs = dict(profile.specs)
 
     def capabilities(self) -> list[dict[str, Any]]:
@@ -680,11 +569,14 @@ class ManagerOrchestrator:
         self.decisions_path = run_dir / "manager_decisions.jsonl"
         self.raw_brief_path = run_dir / "raw_brief.json"
         persisted_state = read_json(self.state_path, default={}) if self.state_path.exists() else {}
-        self.contract_profile = str(
-            contract_profile
-            or persisted_state.get("contract_profile")
-            or LEGACY_CONTRACT_PROFILE
+        requested_profile = contract_profile or persisted_state.get(
+            "contract_profile"
         )
+        if requested_profile is None and persisted_state:
+            requested_profile = DEFAULT_CONTRACT_PROFILE
+        self.contract_profile = load_agent_profile(
+            root, requested_profile
+        ).contract_profile
         self.agent = ManagerAgentRuntime(
             root, run_dir, self.data_root, contract_profile=self.contract_profile
         )
@@ -750,28 +642,10 @@ class ManagerOrchestrator:
                 missing.append("topic（汇报主题）")
             if not brief.get("audience"):
                 missing.append("audience（汇报对象）")
-            if self.contract_profile != "v0_3" and not brief.get("output_format"):
-                missing.append("output_format（交付格式，如 ppt/html/docx）")
-            # Available workers for user to choose from
-            available_workers = (
-                ["analysis", "storyline", "report", "format"]
-                if self.contract_profile == "v0_3"
-                else [
-                    "evidence_harvester", "argument_synthesis",
-                    "storyline_design", "page_filling", "format",
-                    "qa_preparation", "speaker_script"
-                ]
-            )
+            available_workers = ["analysis", "storyline", "report", "format"]
             selected_workers = brief.get("selected_workers")
             if not selected_workers:
-                selected_workers = (
-                    available_workers
-                    if brief.get("report_type", "deep_dive") == "deep_dive"
-                    else [
-                        worker for worker in available_workers
-                        if worker != "evidence_harvester"
-                    ]
-                )
+                selected_workers = available_workers
             user_message = self._format_brief_confirmation(brief, selected_workers)
             state["current_actor"] = "human"
             state["human_gate"] = "brief"
@@ -1466,53 +1340,18 @@ class ManagerOrchestrator:
     @staticmethod
     def _recommended_routes(
         report_type: str,
-        contract_profile: str = LEGACY_CONTRACT_PROFILE,
+        contract_profile: str,
     ) -> dict[str, Any]:
-        if contract_profile == "v0_3":
-            return {
-                "default": ["analysis", "storyline", "report", "format"],
-                "optional_after_document": [
-                    "format(ppt)",
-                    "format(html)",
-                    "qa_preparation",
-                    "speaker_script",
-                ],
-                "internal_subagents": {"analysis": ["evidence_harvester"]},
-            }
-        routes = {
-            "deep_dive": {
-                "default": [
-                    "evidence_harvester",
-                    "argument_synthesis",
-                    "storyline_design",
-                    "page_filling",
-                    "format",
-                    "qa_preparation",
-                    "speaker_script",
-                ],
-                "optional": [],
-            },
-            "business_progress": {
-                "default": [
-                    "argument_synthesis",
-                    "storyline_design",
-                    "page_filling",
-                    "format",
-                ],
-                "optional": ["evidence_harvester", "qa_preparation", "speaker_script"],
-            },
-            "quick_sync": {
-                "default": [
-                    "argument_synthesis",
-                    "storyline_design",
-                    "page_filling",
-                    "format",
-                ],
-                "optional": ["evidence_harvester"],
-                "skip_by_default": ["qa_preparation", "speaker_script"],
-            },
+        return {
+            "default": ["analysis", "storyline", "report", "format"],
+            "optional_after_document": [
+                "format(ppt)",
+                "format(html)",
+                "qa_preparation",
+                "speaker_script",
+            ],
+            "internal_subagents": {"analysis": ["evidence_harvester"]},
         }
-        return routes.get(report_type, routes["deep_dive"])
 
     @staticmethod
     def _profile_inheritance(
@@ -1606,9 +1445,6 @@ class ManagerOrchestrator:
 
         # ---- Worker pipeline label ----
         worker_labels = {
-            "argument_synthesis": "核心论点提炼",
-            "storyline_design": "故事线设计",
-            "page_filling": "草稿填充",
             "format": "可视化",
             "qa_preparation": "QA 梳理",
             "speaker_script": "逐字稿生成",

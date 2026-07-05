@@ -2,7 +2,7 @@
   "rubrics": [
     {
       "id": "AUD-EXEC-SL-001",
-      "applies_to": ["storyline_design"],
+      "applies_to": ["storyline"],
       "severity": "P1",
       "dimension": "audience_fit",
       "criterion": "总办故事线应清楚呈现待拍板、协调卡点和责任关系。",

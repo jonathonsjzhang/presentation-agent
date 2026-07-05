@@ -1,11 +1,12 @@
 {
   "version": "agent-definition.v2",
-  "active_contract_profile": "legacy.v0_2",
+  "active_contract_profile": "v0_3",
   "contract_profiles": {
     "v0_3": {
-      "status": "frozen",
+      "status": "active",
       "activation": "default_user_entry",
-      "frozen_at": "2026-07-02",
+      "contract_frozen_at": "2026-07-02",
+      "activated_at": "2026-07-05",
       "manager_charter_schema": "report_charter.v2",
       "canonical_stages": [
         "analysis",
@@ -279,7 +280,7 @@
           "id": "format",
           "name": "可视化",
           "stage": 4,
-          "skill": "format_report",
+          "skill": "format",
           "description": "把 report.v1 转译为单一目标载体，维护来源映射并记录压缩、省略、caveat 与渲染状态。",
           "previous_agent_id": "report",
           "next_agent_id": null,
@@ -342,7 +343,7 @@
             ]
           },
           "harness": {
-            "skill_package": "skills/format_report",
+            "skill_package": "skills/format",
             "runtime_adapter": "generic_llm_skill_runtime",
             "review_policy": "schema_validation + machine_check + llm_p1",
             "connectors": [
@@ -387,20 +388,22 @@
   "pipeline": {
     "mode": "manager_controlled",
     "stages": [
-      "argument_synthesis",
-      "storyline_design",
-      "page_filling",
-      "format",
-      "qa_preparation",
-      "speaker_script"
+      "analysis",
+      "storyline",
+      "report",
+      "format"
     ],
     "optional_workers": [
-      "evidence_harvester"
+      "qa_preparation",
+      "speaker_script"
     ],
     "human_review_required": true,
     "automatic_backtracking": false,
     "automation_policy": "no_self_triggered_automation; memory update may be assisted after human feedback",
-    "default_max_revision_rounds": 2
+    "default_max_revision_rounds": 2,
+    "internal_subagents": [
+      "evidence_harvester"
+    ]
   },
   "orchestration": {
     "spawn": {
@@ -464,8 +467,8 @@
       "stage": 0,
       "skill": "evidence_harvester",
       "description": "对原始材料做完整、原子化、可追溯的证据盘点，产出 Evidence Catalog，不形成战略结论。",
-      "previous_agent_id": "manager",
-      "next_agent_id": "argument_synthesis",
+      "previous_agent_id": "analysis",
+      "next_agent_id": "analysis",
       "input_schema": "manager_task.v1",
       "output_schema": "evidence_catalog.v1",
       "input_contract": {
@@ -501,7 +504,7 @@
           "unresolved_units",
           "coverage_summary"
         ],
-        "downstream_use": "argument_synthesis 基于完整证据目录选择证据、形成论证并说明未使用原因"
+        "downstream_use": "analysis 基于完整证据目录形成发现、反证、替代解释与置信度"
       },
       "memory_dimensions": [
         "证据完整性",
@@ -553,399 +556,6 @@
       "optional_features": {}
     },
     {
-      "id": "argument_synthesis",
-      "name": "核心论点提炼",
-      "stage": 1,
-      "skill": "argument_synthesis",
-      "description": "基于研究结论、完整论据和希望推动的方向，形成 Executive Summary：核心结论、关键论点和预期 action。",
-      "previous_agent_id": "manager",
-      "next_agent_id": "storyline_design",
-      "input_schema": "manager_task.v1",
-      "output_schema": "argument_synthesis.v1",
-      "input_contract": {
-        "required_inputs": [
-          "汇报 brief",
-          "研究结论与完整论据",
-          "希望推动的方向"
-        ],
-        "optional_inputs": [
-          "补充数据",
-          "竞品材料",
-          "管理层已知观点",
-          "不确定问题"
-        ],
-        "accepted_material_formats": [
-          "json",
-          "text",
-          "docx",
-          "xlsx",
-          "csv"
-        ],
-        "input_preparation_focus": "区分事实、判断、推论和建议，并标记每个核心论点的证据强度"
-      },
-      "output_contract": {
-        "primary_artifact": "Executive Summary",
-        "required_handoff_fields": [
-          "core_conclusion",
-          "expected_action",
-          "key_arguments",
-          "evidence_map",
-          "assumptions",
-          "open_questions"
-        ],
-        "downstream_use": "storyline_design 以 Executive Summary 作为塔尖，用完整论据展开每页/模块"
-      },
-      "memory_dimensions": [
-        "结论",
-        "证据",
-        "反直觉",
-        "Action",
-        "风险边界"
-      ],
-      "rubrics": [
-        "必须区分事实、判断、建议和待验证假设",
-        "必须形成一个可被 storyline 承接的塔尖结论",
-        "必须明确预期推动的 action，不能只总结现状"
-      ],
-      "max_revision_rounds": 2,
-      "loop": {
-        "trigger": "human_or_upstream_artifact",
-        "workflow_owner": "skill",
-        "reviewer": "clean_context_review_sub_agent",
-        "stop_checker": "schema_and_p0_gate",
-        "human_review_required": true,
-        "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
-      },
-      "state": {
-        "global_reads": [
-          "audience_profile",
-          "presentation_preferences",
-          "target_action"
-        ],
-        "global_writes": [
-          "executive_summary"
-        ],
-        "agent_memory_scope": "argument_synthesis_only",
-        "generation_memory_dimensions": [
-          "结论",
-          "证据",
-          "Action"
-        ]
-      },
-      "harness": {
-        "skill_package": "skills/argument_synthesis",
-        "runtime_adapter": "generic_llm_skill_runtime",
-        "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": [
-          "docx_reader",
-          "xlsx_reader",
-          "csv_reader"
-        ],
-        "implementation_status": "implemented"
-      },
-      "optional_features": {
-        "multi_candidate": {
-          "enabled_by_default": true,
-          "max_candidates": 3,
-          "selection_owner": "review_sub_agent_then_human"
-        }
-      }
-    },
-    {
-      "id": "storyline_design",
-      "name": "storyline 设计",
-      "stage": 2,
-      "skill": "storyline_design",
-      "description": "把 Executive Summary 和完整论据转成动态 message pyramid，以及每页/模块的 leadline、page question、points to make 和逻辑转场。",
-      "previous_agent_id": "argument_synthesis",
-      "next_agent_id": "page_filling",
-      "input_schema": "argument_synthesis.v1",
-      "output_schema": "storyline.v2",
-      "input_contract": {
-        "required_inputs": [
-          "Executive Summary",
-          "完整论据"
-        ],
-        "optional_inputs": [
-          "模板页数限制",
-          "历史故事线",
-          "附录素材",
-          "备选切入角度"
-        ],
-        "accepted_material_formats": [
-          "json",
-          "docx"
-        ],
-        "input_preparation_focus": "围绕 governing question 和塔尖结论建立动态 message pyramid，再按论点依赖和关键张力决定内容单元顺序"
-      },
-      "output_contract": {
-        "primary_artifact": "storyline",
-        "required_handoff_fields": [
-          "message_pyramid",
-          "ordering_rationale",
-          "title_read_test",
-          "pages",
-          "appendix_plan",
-          "open_questions"
-        ],
-        "downstream_use": "page_filling 按每页/模块受保护的 leadline、page_question、points_to_make 和 evidence_refs 生成 dummy page"
-      },
-      "memory_dimensions": [
-        "Wording",
-        "Leadline",
-        "结构",
-        "证据",
-        "受众适配",
-        "篇幅控制"
-      ],
-      "rubrics": [
-        "leadline 必须是完整、原子的结论，不能只是主题词",
-        "必须一页一问一结论，points_to_make 共同支撑 leadline",
-        "页面顺序来自 message pyramid 的真实论证关系，不套固定 Story Arc",
-        "高层 PPT 正文默认控制在 15 页以内，主线 8-12 页，其余进附录",
-        "结尾不能超出上游论据支持的判断、讨论或 action"
-      ],
-      "max_revision_rounds": 2,
-      "loop": {
-        "trigger": "human_or_upstream_artifact",
-        "workflow_owner": "skill",
-        "reviewer": "clean_context_review_sub_agent",
-        "stop_checker": "schema_and_p0_gate",
-        "human_review_required": true,
-        "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
-      },
-      "state": {
-        "global_reads": [
-          "audience_profile",
-          "presentation_preferences",
-          "executive_summary",
-          "target_action",
-          "page_limit"
-        ],
-        "global_writes": [
-          "state_revisions"
-        ],
-        "agent_memory_scope": "storyline_design_only",
-        "generation_memory_dimensions": [
-          "Leadline",
-          "Wording",
-          "结构",
-          "证据"
-        ]
-      },
-      "harness": {
-        "skill_package": "skills/storyline_design",
-        "runtime_adapter": "generic_llm_skill_runtime",
-        "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": [
-          "docx_to_storyline_input"
-        ],
-        "implementation_status": "implemented"
-      },
-      "optional_features": {
-        "multi_candidate": {
-          "enabled_by_default": false,
-          "max_candidates": 3,
-          "selection_owner": "review_sub_agent_then_human"
-        }
-      }
-    },
-    {
-      "id": "page_filling",
-      "name": "单页内容填充",
-      "stage": 3,
-      "skill": "page_filling",
-      "description": "基于 storyline 生成 dummy page：每页 page brief、页内结构、图表信息、证据摆放和缺口标记。",
-      "previous_agent_id": "storyline_design",
-      "next_agent_id": "format",
-      "input_schema": "storyline.v2",
-      "output_schema": "page_content.v2",
-      "input_contract": {
-        "required_inputs": [
-          "storyline.pages",
-          "每页 leadline、page_question 和 points_to_make"
-        ],
-        "optional_inputs": [
-          "原始数据表",
-          "图表偏好",
-          "模板组件",
-          "可复用图形"
-        ],
-        "accepted_material_formats": [
-          "json",
-          "xlsx",
-          "csv",
-          "image"
-        ],
-        "input_preparation_focus": "保留 storyline leadline 和 points_to_make，把每页结论展开为页面叙事、图表 brief、证据引用和待补素材"
-      },
-      "output_contract": {
-        "primary_artifact": "dummy page content",
-        "required_handoff_fields": [
-          "pages",
-          "global_sources",
-          "global_data_gaps",
-          "format_handoff_summary",
-          "open_questions",
-          "storyline_change_requests"
-        ],
-        "downstream_use": "format 按 dummy page 内容制作正式 PPT/HTML/文档"
-      },
-      "memory_dimensions": [
-        "证据",
-        "图表",
-        "页内叙事",
-        "信息密度",
-        "来源标注"
-      ],
-      "rubrics": [
-        "每页必须逐字保留原 storyline leadline，并覆盖全部 points_to_make",
-        "图表 brief 必须说明指标、维度、口径、来源和想证明的判断",
-        "缺证据时必须标记 open question，不得编造数据"
-      ],
-      "max_revision_rounds": 2,
-      "loop": {
-        "trigger": "human_or_upstream_artifact",
-        "workflow_owner": "skill",
-        "reviewer": "clean_context_review_sub_agent",
-        "stop_checker": "schema_and_p0_gate",
-        "human_review_required": true,
-        "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
-      },
-      "state": {
-        "global_reads": [
-          "audience_profile",
-          "presentation_preferences",
-          "target_action",
-          "page_limit"
-        ],
-        "global_writes": [],
-        "agent_memory_scope": "page_filling_only",
-        "generation_memory_dimensions": [
-          "证据",
-          "图表",
-          "页内叙事",
-          "来源标注"
-        ]
-      },
-      "harness": {
-        "skill_package": "skills/page_filling",
-        "runtime_adapter": "generic_llm_skill_runtime",
-        "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": [
-          "xlsx_reader",
-          "csv_reader"
-        ],
-        "implementation_status": "implemented"
-      },
-      "optional_features": {
-        "multi_candidate": {
-          "enabled_by_default": true,
-          "max_candidates": 3,
-          "selection_owner": "review_sub_agent_then_human"
-        }
-      }
-    },
-    {
-      "id": "format",
-      "name": "format",
-      "stage": 4,
-      "skill": "format",
-      "description": "把 dummy page 转成对应格式的正式材料，支持 PPT、HTML 或文档，并保持结论与证据不变形。",
-      "previous_agent_id": "page_filling",
-      "next_agent_id": "qa_preparation",
-      "input_schema": "page_content.v2",
-      "output_schema": "formatted_material.v1",
-      "input_contract": {
-        "required_inputs": [
-          "page_content.pages",
-          "目标材料格式"
-        ],
-        "optional_inputs": [
-          "模板文件",
-          "品牌规范",
-          "图表数据",
-          "导出偏好"
-        ],
-        "accepted_material_formats": [
-          "json",
-          "pptx",
-          "html",
-          "docx",
-          "xlsx",
-          "csv"
-        ],
-        "input_preparation_focus": "识别目标载体的表达方式，保留结论、证据、来源和页间叙事"
-      },
-      "output_contract": {
-        "primary_artifact": "formatted material",
-        "required_handoff_fields": [
-          "material_format",
-          "pages_or_sections",
-          "asset_manifest",
-          "source_notes",
-          "export_path",
-          "open_questions"
-        ],
-        "downstream_use": "qa_preparation 基于正式材料逐页压力测试可能追问"
-      },
-      "memory_dimensions": [
-        "版式",
-        "视觉层级",
-        "一致性",
-        "载体适配",
-        "可读性"
-      ],
-      "rubrics": [
-        "不得改变原始结论含义或证据口径",
-        "必须按材料格式采用不同表达方式，不能把文档/PPT/HTML 简单互相复制",
-        "必须保留来源标注、图表口径和未解决问题"
-      ],
-      "max_revision_rounds": 2,
-      "loop": {
-        "trigger": "human_or_upstream_artifact",
-        "workflow_owner": "skill",
-        "reviewer": "clean_context_review_sub_agent",
-        "stop_checker": "schema_and_p0_gate",
-        "human_review_required": true,
-        "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
-      },
-      "state": {
-        "global_reads": [
-          "audience_profile",
-          "presentation_preferences",
-          "target_action",
-          "page_limit"
-        ],
-        "global_writes": [],
-        "agent_memory_scope": "format_only",
-        "generation_memory_dimensions": [
-          "版式",
-          "视觉层级",
-          "载体适配",
-          "可读性"
-        ]
-      },
-      "harness": {
-        "skill_package": "skills/format",
-        "runtime_adapter": "generic_llm_skill_runtime",
-        "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": [
-          "pptx_writer",
-          "html_writer",
-          "docx_writer"
-        ],
-        "implementation_status": "implemented"
-      },
-      "optional_features": {
-        "multi_candidate": {
-          "enabled_by_default": true,
-          "max_candidates": 3,
-          "selection_owner": "review_sub_agent_then_human"
-        }
-      }
-    },
-    {
       "id": "qa_preparation",
       "name": "Q&A 梳理",
       "stage": 5,
@@ -953,7 +563,7 @@
       "description": "基于正式材料和汇报对象，梳理可能提问、挑战角度、回答策略，以及需要汇报人补充的信息。",
       "previous_agent_id": "format",
       "next_agent_id": "speaker_script",
-      "input_schema": "formatted_material.v1",
+      "input_schema": "formatted_material.v2",
       "output_schema": "qa_pack.v1",
       "input_contract": {
         "required_inputs": [
@@ -1047,7 +657,7 @@
       "description": "基于正式材料和 Q&A 包生成完整汇报逐字稿，逐页/逐模块对应材料，默认控制在 30 分钟以内。",
       "previous_agent_id": "qa_preparation",
       "next_agent_id": null,
-      "input_schema": "qa_pack.v1",
+      "input_schema": "formatted_material.v2",
       "output_schema": "speaker_script.v1",
       "input_contract": {
         "required_inputs": [

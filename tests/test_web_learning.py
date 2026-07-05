@@ -19,7 +19,7 @@ class WebLearningTests(unittest.TestCase):
         shutil.copytree(ROOT / "configs", self.root / "configs")
         shutil.copytree(RUNTIME_DATA, self.root / "data")
         shutil.copytree(ROOT / "skills", self.root / "skills")
-        story_memory_dir = self.root / "data" / "agents" / "storyline_design"
+        story_memory_dir = self.root / "data" / "agents" / "storyline"
         write_json(story_memory_dir / "memory.json", {"items": []})
         log_path = story_memory_dir / "learning_log.jsonl"
         if log_path.exists():
@@ -30,7 +30,7 @@ class WebLearningTests(unittest.TestCase):
             self.run_dir / "run_state.json",
             {
                 "run_id": "sample-run",
-                "agent_id": "storyline_design",
+                "agent_id": "storyline",
                 "status": "pending_human_review",
                 "current_step": "human_review",
                 "next_action": "await_human_decision",
@@ -48,7 +48,7 @@ class WebLearningTests(unittest.TestCase):
         result = self.app.record_human_review(
             {
                 "run_state_path": "artifacts/sample_run/run_state.json",
-                "agent_id": "storyline_design",
+                "agent_id": "storyline",
                 "decision": "approve",
                 "notes": "标题需要更像结论",
                 "feedback": {
@@ -68,11 +68,11 @@ class WebLearningTests(unittest.TestCase):
         self.assertEqual(run_state["human_decision"]["decision"], "approve")
         self.assertEqual(run_state["feedback_logged"], ["L-001"])
 
-        memory = read_json(self.root / "data" / "agents" / "storyline_design" / "memory.json")
+        memory = read_json(self.root / "data" / "agents" / "storyline" / "memory.json")
         self.assertTrue(
             any(item["suggestion"] == "标题写成完整判断句，并带出 so what" for item in memory["items"])
         )
-        learning_log = (self.root / "data" / "agents" / "storyline_design" / "learning_log.jsonl").read_text(
+        learning_log = (self.root / "data" / "agents" / "storyline" / "learning_log.jsonl").read_text(
             encoding="utf-8"
         )
         self.assertIn('"source": "human-review"', learning_log)
@@ -81,26 +81,26 @@ class WebLearningTests(unittest.TestCase):
     def test_learning_overview_summarizes_memory_and_state(self) -> None:
         self.app.record_success_memory(
             {
-                "agent_id": "storyline_design",
+                "agent_id": "storyline",
                 "dimension": "Leadline",
                 "pattern": "标题写成完整判断句",
             }
         )
         overview = self.app.learning_overview()
         self.assertIn("global_state", overview)
-        self.assertEqual(len(overview["agents"]), 7)
+        self.assertEqual(len(overview["agents"]), 5)
         self.assertIn("memory_items", overview["totals"])
         self.assertIn("learning_events", overview["totals"])
         self.assertGreaterEqual(overview["event_counts"].get("feedback", 0), 1)
 
-    def test_overview_exposes_six_core_and_eleven_atomic_capability_packages(self) -> None:
+    def test_overview_exposes_four_core_and_eleven_atomic_capability_packages(self) -> None:
         overview = self.app.overview()
         packages = overview["capabilities"]["packages"]
 
-        self.assertEqual(len(packages), 17)
+        self.assertEqual(len(packages), 15)
         self.assertEqual(
             len([item for item in packages if item["kind"] == "core"]),
-            6,
+            4,
         )
         self.assertTrue(all(agent["implemented"] for agent in overview["agents"]))
 

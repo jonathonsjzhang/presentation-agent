@@ -753,7 +753,7 @@ function fallbackOverview() {
       },
       harness: {
         skill_package: `skills/${stage[0]}`,
-        runtime_adapter: index === 2 ? "storyline_design_python_adapter" : "generic_llm_skill_runtime",
+        runtime_adapter: "generic_llm_skill_runtime",
         review_policy: "schema_validation + rubric_p0 + llm_p1",
         connectors: ["docx", "xlsx", "csv"],
         implementation_status: index === 2 ? "sample_runtime_available" : "skill_package_ready_runtime_pending",
@@ -991,7 +991,7 @@ function renderInlineReview(review) {
 function renderInlineRendered(files) {
   const host = $("inlineRendered");
   if (!files || !files.length) {
-    host.textContent = "尚无渲染产物（page_filling 出草稿、format 出正式版）。";
+    host.textContent = "尚无渲染产物（report 出内容文档、format 出可视化版本）。";
     return;
   }
   host.innerHTML = files.map((f) =>

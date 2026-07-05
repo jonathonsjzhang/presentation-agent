@@ -2,7 +2,7 @@
   "rules": [
     {
       "id": "RPT-DEEP-SL-G01",
-      "applies_to": ["storyline_design"],
+      "applies_to": ["storyline"],
       "phase": ["generation", "review"],
       "level": "P1",
       "property": "analysis_depth",
@@ -10,7 +10,7 @@
     },
     {
       "id": "RPT-DEEP-AS-G01",
-      "applies_to": ["argument_synthesis"],
+      "applies_to": ["analysis"],
       "phase": ["generation", "review"],
       "level": "P1",
       "property": "analysis_depth",
@@ -18,7 +18,7 @@
     },
     {
       "id": "RPT-DEEP-PF-G01",
-      "applies_to": ["page_filling"],
+      "applies_to": ["report"],
       "phase": ["generation", "review"],
       "level": "P1",
       "property": "analysis_depth",

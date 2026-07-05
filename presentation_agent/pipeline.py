@@ -9,7 +9,7 @@ from presentation_agent.models import now_iso
 
 
 class Pipeline:
-    """Legacy direct pipeline for the six specialist workers.
+    """Direct pipeline for the active specialist workers.
 
     Each stage's approved artifact becomes the next stage's input. Two modes,
     both honoring the design's human-in-the-loop principle:
@@ -26,7 +26,10 @@ class Pipeline:
 
     def __init__(self, root: Path, provider_override: Optional[str] = None) -> None:
         self.root = root
-        self.runner = LoopRunner(root, provider_override=provider_override)
+        self.runner = LoopRunner(
+            root,
+            provider_override=provider_override,
+        )
         self.stages = self._ordered_stages()
 
     def _ordered_stages(self):

@@ -2,7 +2,7 @@
   "id": "format.html",
   "kind": "format",
   "select_when": {"output_format": "html"},
-  "applies_to": ["argument_synthesis", "storyline_design", "page_filling", "format", "qa_preparation", "speaker_script"],
+  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation", "speaker_script"],
   "owns": ["unit_type", "information_architecture"],
   "incompatible_with": [],
   "prompt_budget_tokens": 240
