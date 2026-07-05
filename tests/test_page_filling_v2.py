@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.capabilities.compiler import compile_skill_package
 from presentation_agent.context import ContextAssembler
 from presentation_agent.io import read_json
@@ -123,7 +124,9 @@ class PageFillingV2Tests(unittest.TestCase):
         self.assertEqual(contract["must_keep_caveats"], ["相关不等于因果"])
 
     def test_granular_evidence_and_format_pages_are_not_three_item_previews(self) -> None:
-        assembler = ContextAssembler(ROOT)
+        assembler = ContextAssembler(
+            ROOT, contract_profile=LEGACY_CONTRACT_PROFILE
+        )
         evidence = [
             {"id": f"E-{index}", "detail": "x" * 1000}
             for index in range(20)

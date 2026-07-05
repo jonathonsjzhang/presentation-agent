@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.context import ContextAssembler
 
 
@@ -11,7 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ContextAssemblerTests(unittest.TestCase):
     def test_projects_required_fields_without_flattening_artifacts(self) -> None:
-        assembler = ContextAssembler(ROOT)
+        assembler = ContextAssembler(
+            ROOT, contract_profile=LEGACY_CONTRACT_PROFILE
+        )
         artifact_path = Path("/tmp/argument.json")
         context = assembler.assemble(
             worker_id="storyline_design",
@@ -49,7 +52,9 @@ class ContextAssemblerTests(unittest.TestCase):
         self.assertEqual(context["upstream_signal"]["core_thesis"], "核心判断")
 
     def test_duplicate_source_ids_receive_stable_suffixes(self) -> None:
-        assembler = ContextAssembler(ROOT)
+        assembler = ContextAssembler(
+            ROOT, contract_profile=LEGACY_CONTRACT_PROFILE
+        )
         context = assembler.assemble(
             worker_id="storyline_design",
             report_charter={},
@@ -67,7 +72,9 @@ class ContextAssemblerTests(unittest.TestCase):
         )
 
     def test_unknown_worker_fails_open_with_namespaced_full_artifact(self) -> None:
-        assembler = ContextAssembler(ROOT)
+        assembler = ContextAssembler(
+            ROOT, contract_profile=LEGACY_CONTRACT_PROFILE
+        )
         context = assembler.assemble(
             worker_id="future_worker",
             report_charter={},
@@ -83,7 +90,9 @@ class ContextAssemblerTests(unittest.TestCase):
         self.assertEqual(context["material_refs"], [])
 
     def test_large_required_field_uses_preview_and_file_reference(self) -> None:
-        assembler = ContextAssembler(ROOT)
+        assembler = ContextAssembler(
+            ROOT, contract_profile=LEGACY_CONTRACT_PROFILE
+        )
         large_pages = [{"title": f"page-{index}", "body": "x" * 5000} for index in range(4)]
         context = assembler.assemble(
             worker_id="page_filling",
@@ -106,7 +115,9 @@ class ContextAssemblerTests(unittest.TestCase):
         )
 
     def test_page_filling_keeps_granular_evidence_above_default_limit(self) -> None:
-        assembler = ContextAssembler(ROOT)
+        assembler = ContextAssembler(
+            ROOT, contract_profile=LEGACY_CONTRACT_PROFILE
+        )
         evidence = [
             {"id": f"E-{index}", "detail": "x" * 1000}
             for index in range(20)
@@ -129,7 +140,9 @@ class ContextAssemblerTests(unittest.TestCase):
         )
 
     def test_format_keeps_full_page_contract_above_default_limit(self) -> None:
-        assembler = ContextAssembler(ROOT)
+        assembler = ContextAssembler(
+            ROOT, contract_profile=LEGACY_CONTRACT_PROFILE
+        )
         pages = [
             {
                 "page_no": index,

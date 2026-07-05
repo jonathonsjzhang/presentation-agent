@@ -2,7 +2,7 @@
   "version": "capability-registry.v1",
   "contract_profiles": {
     "v0_3": {
-      "status": "frozen",
+      "status": "active",
       "activation": "default_user_entry",
       "workers": [
         "analysis",

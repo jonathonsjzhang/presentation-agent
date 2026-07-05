@@ -79,7 +79,7 @@ def _coerce_to_dict(brief: BriefInput, root: Path) -> dict[str, Any]:
 def normalize_brief(
     brief: BriefInput,
     root: Path,
-    contract_profile: str = LEGACY_CONTRACT_PROFILE,
+    contract_profile: Optional[str] = None,
 ) -> dict[str, Any]:
     """Turn any accepted brief form into a valid raw_brief.v1 dict.
 
@@ -164,7 +164,7 @@ def launch_report(
     out: Optional[Union[str, Path]] = None,
     spawn_adapter: Optional[str] = None,
     init_only: bool = False,
-    contract_profile: str = "v0_3",
+    contract_profile: Optional[str] = None,
 ) -> dict[str, Any]:
     """Normalize a brief, persist it, and kick off a report run.
 
@@ -186,9 +186,19 @@ def launch_report(
     stage 1's run_dir without running any agent.
     """
     root_path = Path(root).resolve()
+    profile_request = (
+        contract_profile
+        if use_manager
+        else (contract_profile or LEGACY_CONTRACT_PROFILE)
+    )
     selected_profile = load_agent_profile(
-        root_path, contract_profile
+        root_path, profile_request
     ).contract_profile
+    if not use_manager and selected_profile != LEGACY_CONTRACT_PROFILE:
+        raise BriefError(
+            "Legacy Pipeline 仅支持 contract_profile='legacy.v0_2'；"
+            "v0_3 请使用默认 Manager 路径"
+        )
     normalized = normalize_brief(brief, root_path, selected_profile)
 
     run_id = f"report-{now_iso().replace(':', '').replace('+', 'Z')}"
@@ -227,7 +237,11 @@ def launch_report(
     if init_only:
         from presentation_agent.step import PipelineStepper
 
-        stepper = PipelineStepper(root_path, out_root)
+        stepper = PipelineStepper(
+            root_path,
+            out_root,
+            contract_profile=selected_profile,
+        )
         stage1 = stepper.init_pipeline(brief_path)
         return {
             "brief_path": str(brief_path),

@@ -81,11 +81,24 @@ class V03SchemaContractTests(unittest.TestCase):
             self.assertLessEqual(set(unit["source_section_ids"]), report_sections)
             self.assertLessEqual(set(unit["source_claim_ids"]), report_claims)
 
-    def test_v03_agent_contract_is_default_user_entry_but_legacy_api_is_preserved(self) -> None:
+    def test_v03_agent_contract_is_active_and_legacy_api_is_preserved(self) -> None:
         config = read_json(ROOT / "configs/agents.json")
         profile = config["contract_profiles"]["v0_3"]
-        self.assertEqual(config["active_contract_profile"], "legacy.v0_2")
-        self.assertEqual(profile["status"], "frozen")
+        self.assertEqual(config["active_contract_profile"], "v0_3")
+        self.assertEqual(profile["status"], "active")
+        self.assertEqual(profile["activated_at"], "2026-07-05")
+        self.assertEqual(
+            read_json(ROOT / "configs/context_requirements.json")[
+                "contract_profiles"
+            ]["v0_3"]["status"],
+            "active",
+        )
+        self.assertEqual(
+            read_json(ROOT / "configs/capabilities.json")[
+                "contract_profiles"
+            ]["v0_3"]["status"],
+            "active",
+        )
         self.assertEqual(profile["activation"], "default_user_entry")
         self.assertEqual(
             profile["canonical_stages"],
@@ -246,7 +259,9 @@ class FormatCoreCompilationTests(unittest.TestCase):
                     compile_skill_package(ROOT, self.spec, input_data)
 
     def test_legacy_page_content_compilation_remains_available(self) -> None:
-        legacy_spec = load_agent_profile(ROOT).specs["format"]
+        legacy_spec = load_agent_profile(
+            ROOT, "legacy.v0_2"
+        ).specs["format"]
         package = compile_skill_package(
             ROOT,
             legacy_spec,

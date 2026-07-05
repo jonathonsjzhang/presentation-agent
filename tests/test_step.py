@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.io import read_json
 from presentation_agent.llm.adapters.mock import synthesize_from_schema
 from presentation_agent.step import PipelineStepper, StepError, StepRunner
@@ -87,6 +88,7 @@ class TestStepRunner(unittest.TestCase):
             "current_step": "init",
             "round_index": 0,
             "max_revision_rounds": 2,
+            "contract_profile": LEGACY_CONTRACT_PROFILE,
             "input_path": str(RUNTIME_EXAMPLES / "raw_brief.json"),
             "output_dir": str(stage_dir),
             "p0_open": [],
@@ -109,6 +111,23 @@ class TestStepRunner(unittest.TestCase):
         s = runner.status()
         self.assertEqual(s["current_step"], "init")
         self.assertEqual(s["agent_id"], "argument_synthesis")
+
+    def test_pre_profile_legacy_stage_is_inferred_on_resume(self):
+        stage_dir = self._init_stage_dir()
+        run_state_path = stage_dir / "run_state.json"
+        run_state = json.loads(run_state_path.read_text(encoding="utf-8"))
+        run_state.pop("contract_profile")
+        run_state_path.write_text(
+            json.dumps(run_state, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        runner = StepRunner(self.root, stage_dir)
+
+        self.assertEqual(
+            runner.contract_profile,
+            LEGACY_CONTRACT_PROFILE,
+        )
 
     # ---- prepare ------------------------------------------------------------
 
@@ -275,9 +294,18 @@ class TestPipelineStepper(unittest.TestCase):
 
         brief_path = RUNTIME_EXAMPLES / "raw_brief.json"
         shutil.copy2(str(brief_path), str(self.tmp / "raw_brief.json"))
-        stepper = PipelineStepper(self.root, self.tmp)
+        stepper = PipelineStepper(
+            self.root,
+            self.tmp,
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         stage1 = stepper.init_pipeline(self.tmp / "raw_brief.json")
         self.assertEqual(stage1["agent_id"], "argument_synthesis")
+        resumed = PipelineStepper(self.root, self.tmp)
+        self.assertEqual(
+            resumed.contract_profile,
+            LEGACY_CONTRACT_PROFILE,
+        )
 
         # Now simulate stage 1 done by creating its artifact.json
         sd1 = Path(stage1["stage_dir"])
@@ -314,7 +342,11 @@ class TestPipelineStepper(unittest.TestCase):
 
         brief_path = RUNTIME_EXAMPLES / "raw_brief.json"
         shutil.copy2(str(brief_path), str(self.tmp / "raw_brief.json"))
-        stepper = PipelineStepper(self.root, self.tmp)
+        stepper = PipelineStepper(
+            self.root,
+            self.tmp,
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         stepper.init_pipeline(self.tmp / "raw_brief.json")
         with self.assertRaises(StepError):
             stepper.advance_stage()
@@ -324,7 +356,11 @@ class TestPipelineStepper(unittest.TestCase):
 
         brief_path = RUNTIME_EXAMPLES / "raw_brief.json"
         shutil.copy2(str(brief_path), str(self.tmp / "raw_brief.json"))
-        stepper = PipelineStepper(self.root, self.tmp)
+        stepper = PipelineStepper(
+            self.root,
+            self.tmp,
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         stepper.init_pipeline(self.tmp / "raw_brief.json")
         ps = stepper.pipeline_status()
         self.assertEqual(ps["current_stage"], 1)

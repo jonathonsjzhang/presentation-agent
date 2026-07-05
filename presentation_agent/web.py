@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.capabilities.registry import CapabilityRegistry
 from presentation_agent.io import read_json, write_json
 from presentation_agent.learning import LearningEventStore, compare_material_versions
@@ -96,7 +97,10 @@ class WebApp:
         raise NotFound(f"Unknown API route: {path}")
 
     def overview(self) -> dict[str, Any]:
-        runner = LoopRunner(self.root)
+        runner = LoopRunner(
+            self.root,
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         agents = []
         control_plane = runner.config.get("control_plane", {})
         if control_plane:
@@ -166,7 +170,10 @@ class WebApp:
         }
 
     def learning_overview(self) -> dict[str, Any]:
-        runner = LoopRunner(self.root)
+        runner = LoopRunner(
+            self.root,
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         global_state_path = self.root / "data" / "global" / "state.json"
         global_state = read_json(global_state_path, default={})
         agents: list[dict[str, Any]] = []
@@ -289,7 +296,10 @@ class WebApp:
         else:
             input_path = self.safe_path(str(input_path), ("examples/", "artifacts/"))
 
-        runner = LoopRunner(self.root)
+        runner = LoopRunner(
+            self.root,
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         result = runner.run(agent_id, input_path, run_dir)
         result["latest_runs"] = self.list_runs(limit=6)
         return result
@@ -445,7 +455,10 @@ class WebApp:
         apply = bool(body.get("apply", False))
         reason = str(body.get("reason") or "api")
         if body.get("all"):
-            runner = LoopRunner(self.root)
+            runner = LoopRunner(
+                self.root,
+                contract_profile=LEGACY_CONTRACT_PROFILE,
+            )
             agent_ids = [spec.id for spec in runner.list_agents()]
         else:
             agent_id = str(body.get("agent_id") or "").strip()

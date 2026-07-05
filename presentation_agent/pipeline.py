@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional
 
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.io import write_json
 from presentation_agent.loop import LoopRunner
 from presentation_agent.models import now_iso
@@ -26,7 +27,11 @@ class Pipeline:
 
     def __init__(self, root: Path, provider_override: Optional[str] = None) -> None:
         self.root = root
-        self.runner = LoopRunner(root, provider_override=provider_override)
+        self.runner = LoopRunner(
+            root,
+            provider_override=provider_override,
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         self.stages = self._ordered_stages()
 
     def _ordered_stages(self):

@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.launch import BriefError, launch_report
 from presentation_agent.learning import LearningEventStore, compare_material_versions
 from presentation_agent.loop import LoopRunner
@@ -488,11 +489,19 @@ def main() -> None:
         from presentation_agent.models import now_iso
         run_id = f"pipeline-{now_iso().replace(':', '').replace('+', 'Z')}"
         out_root = Path(args.out).resolve() if args.out else (root / "artifacts" / run_id)
-        normalized = normalize_brief(args.brief, root)
+        normalized = normalize_brief(
+            args.brief,
+            root,
+            LEGACY_CONTRACT_PROFILE,
+        )
         brief_path = out_root / "raw_brief.json"
         out_root.mkdir(parents=True, exist_ok=True)
         write_json(brief_path, normalized)
-        stepper = PipelineStepper(root, out_root)
+        stepper = PipelineStepper(
+            root,
+            out_root,
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         stage1 = stepper.init_pipeline(brief_path)
         print(f"pipeline dir: {out_root}")
         print(f"brief: {brief_path}")

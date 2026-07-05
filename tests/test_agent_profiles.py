@@ -503,8 +503,19 @@ class AgentProfileLoaderTests(unittest.TestCase):
                     ["analysis", "storyline", "report", "format"],
                 )
 
-    def test_default_profile_preserves_legacy_workers_and_pipeline(self) -> None:
+    def test_default_profile_activates_document_first_v03(self) -> None:
         profile = load_agent_profile(ROOT)
+        self.assertEqual(profile.contract_profile, "v0_3")
+        self.assertEqual(
+            [spec.id for spec in profile.ordered_specs],
+            ["analysis", "storyline", "report", "format"],
+        )
+        self.assertNotIn("evidence_harvester", profile.specs)
+        self.assertIn("qa_preparation", profile.specs)
+        self.assertIn("speaker_script", profile.specs)
+
+    def test_explicit_legacy_profile_remains_available(self) -> None:
+        profile = load_agent_profile(ROOT, LEGACY_CONTRACT_PROFILE)
         self.assertEqual(profile.contract_profile, LEGACY_CONTRACT_PROFILE)
         self.assertEqual(
             [spec.id for spec in profile.ordered_specs],
@@ -518,6 +529,26 @@ class AgentProfileLoaderTests(unittest.TestCase):
             ],
         )
         self.assertIn("evidence_harvester", profile.specs)
+
+    def test_default_manager_entry_uses_four_public_stages(self) -> None:
+        source = FIXTURES / "golden_cases" / "mixed_deep_dive" / "input.json"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            brief = normalize_brief(source, ROOT)
+            brief_path = run_dir / "raw_brief.json"
+            brief_path.write_text(
+                json.dumps(brief, ensure_ascii=False), encoding="utf-8"
+            )
+            manager = ManagerOrchestrator(ROOT, run_dir)
+            prepared = manager.initialize_run(brief_path)
+
+        self.assertEqual(manager.contract_profile, "v0_3")
+        self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
+        self.assertEqual(
+            prepared["selected_workers"],
+            ["analysis", "storyline", "report", "format"],
+        )
+        self.assertNotIn("evidence_harvester", prepared["selected_workers"])
 
     def test_explicit_v03_loads_executable_four_stage_specs(self) -> None:
         profile = load_agent_profile(ROOT, "v0_3")

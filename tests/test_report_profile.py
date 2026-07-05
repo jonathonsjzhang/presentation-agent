@@ -78,7 +78,8 @@ class ReportProfileTests(unittest.TestCase):
         )
         self.assertEqual(brief["audience"], "CEO 和 COO")
         self.assertEqual(brief["report_type"], "deep_dive")
-        self.assertEqual(brief["output_format"], "ppt")
+        self.assertEqual(brief["output_format"], "document")
+        self.assertEqual(brief["delivery_targets"], ["document"])
 
 
 if __name__ == "__main__":

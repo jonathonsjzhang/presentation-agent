@@ -32,9 +32,9 @@ def load_agent_profile(
 ) -> AgentProfile:
     """Load the sole runtime view of worker specs and their canonical order.
 
-    Omitting ``contract_profile`` follows ``active_contract_profile`` and
-    therefore preserves the legacy v0.2 runtime. New profiles are opt-in and
-    resolve from ``contract_profiles.<name>.workers``.
+    Omitting ``contract_profile`` follows ``active_contract_profile``.
+    Compatibility profiles remain available only through an explicit profile
+    selection.
     """
 
     config = read_json(root / "configs" / "agents.json")

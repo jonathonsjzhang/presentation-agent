@@ -5,6 +5,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.loop import LoopRunner
 from presentation_agent.memory import MemoryStore
 
@@ -26,7 +27,11 @@ class LoopTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_storyline_loop_reaches_human_review(self) -> None:
-        runner = LoopRunner(self.root, provider_override="mock")
+        runner = LoopRunner(
+            self.root,
+            provider_override="mock",
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         result = runner.run(
             "storyline_design",
             self.root / "examples" / "storyline_input.json",
@@ -59,7 +64,10 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(items[0].case_anchors, ["L-001"])
 
     def test_agent_specs_include_design_contracts(self) -> None:
-        runner = LoopRunner(self.root)
+        runner = LoopRunner(
+            self.root,
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         agents = runner.list_agents()
 
         self.assertEqual([agent.id for agent in agents], [

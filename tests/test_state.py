@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.io import read_json
 from presentation_agent.llm.adapters.mock import synthesize_from_schema
 from presentation_agent.loop import LoopRunner
@@ -69,7 +70,11 @@ class GlobalStateContractTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_global_writes_are_applied_after_clean_stop(self) -> None:
-        runner = LoopRunner(self.root, provider_override="mock")
+        runner = LoopRunner(
+            self.root,
+            provider_override="mock",
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         result = runner.run("argument_synthesis", self.root / "examples" / "raw_brief.json", self.root / "art" / "tp")
 
         # Per-run state exists after run completion
@@ -87,7 +92,11 @@ class GlobalStateContractTests(unittest.TestCase):
         state["secret_unrelated_key"] = "should_not_leak"
         state_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
 
-        runner = LoopRunner(self.root, provider_override="mock")
+        runner = LoopRunner(
+            self.root,
+            provider_override="mock",
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+        )
         spec = runner.specs["argument_synthesis"]
         full = json.loads(state_path.read_text(encoding="utf-8"))
         scoped = runner._scoped_global_reads(spec, full)

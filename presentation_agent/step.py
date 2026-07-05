@@ -4,7 +4,10 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
-from presentation_agent.agent_profiles import load_agent_profile
+from presentation_agent.agent_profiles import (
+    LEGACY_CONTRACT_PROFILE,
+    load_agent_profile,
+)
 from presentation_agent.analysis import decide_evidence
 from presentation_agent.capabilities.budget import estimate_tokens
 from presentation_agent.capabilities.compiler import compile_skill_package
@@ -80,12 +83,15 @@ class StepRunner:
         self.handoff_dir = run_dir / "handoff"
         self.handoff_dir.mkdir(parents=True, exist_ok=True)
 
-        self.agent_profile = load_agent_profile(root, contract_profile)
+        state = self._load_state()
+        requested_profile = contract_profile or state.get("contract_profile")
+        if requested_profile is None and state:
+            requested_profile = LEGACY_CONTRACT_PROFILE
+        self.agent_profile = load_agent_profile(root, requested_profile)
         self.contract_profile = self.agent_profile.contract_profile
         self.config = self.agent_profile.config
         self.specs = self.agent_profile.specs
 
-        state = self._load_state()
         state_profile = state.get("contract_profile")
         if state_profile and state_profile != self.contract_profile:
             raise StepError(
@@ -1467,7 +1473,15 @@ class PipelineStepper:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root or (root / "data")
-        self.agent_profile = load_agent_profile(root, contract_profile)
+        pipeline_state = read_json(
+            self.run_dir / "pipeline_state.json", default={}
+        )
+        requested_profile = contract_profile or pipeline_state.get(
+            "contract_profile"
+        )
+        if requested_profile is None and pipeline_state:
+            requested_profile = LEGACY_CONTRACT_PROFILE
+        self.agent_profile = load_agent_profile(root, requested_profile)
         self.contract_profile = self.agent_profile.contract_profile
         self.specs = self.agent_profile.specs
         self.ordered = self.agent_profile.ordered_specs

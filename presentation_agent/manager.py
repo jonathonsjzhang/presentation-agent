@@ -40,17 +40,19 @@ class ManagerAgentRuntime:
         root: Path,
         run_dir: Path,
         data_root: Path,
-        contract_profile: str = LEGACY_CONTRACT_PROFILE,
+        contract_profile: Optional[str] = None,
     ) -> None:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root
-        self.contract_profile = contract_profile
+        self.contract_profile = load_agent_profile(
+            root, contract_profile
+        ).contract_profile
         self.manager_dir = run_dir / "manager"
         self.handoff_dir = self.manager_dir / "handoff"
         self.handoff_dir.mkdir(parents=True, exist_ok=True)
         self.package = load_skill_package(root, "manager")
-        if contract_profile == "v0_3":
+        if self.contract_profile == "v0_3":
             behavior = load_skill_package(root, "manager_v03")
             self.package = replace(
                 self.package,
@@ -437,15 +439,17 @@ class WorkerExecutor:
         run_dir: Path,
         data_root: Path,
         spawn_adapter: Optional[str] = None,
-        contract_profile: str = LEGACY_CONTRACT_PROFILE,
+        contract_profile: Optional[str] = None,
     ) -> None:
         self.root = root
         self.run_dir = run_dir
         self.data_root = data_root
         self.spawn_adapter = build_spawn_adapter(root, override=spawn_adapter)
-        self.contract_profile = contract_profile
         profile = load_agent_profile(root, contract_profile)
-        self.context_assembler = ContextAssembler(root, contract_profile=contract_profile)
+        self.contract_profile = profile.contract_profile
+        self.context_assembler = ContextAssembler(
+            root, contract_profile=self.contract_profile
+        )
         self.specs = dict(profile.specs)
 
     def capabilities(self) -> list[dict[str, Any]]:
@@ -680,11 +684,14 @@ class ManagerOrchestrator:
         self.decisions_path = run_dir / "manager_decisions.jsonl"
         self.raw_brief_path = run_dir / "raw_brief.json"
         persisted_state = read_json(self.state_path, default={}) if self.state_path.exists() else {}
-        self.contract_profile = str(
-            contract_profile
-            or persisted_state.get("contract_profile")
-            or LEGACY_CONTRACT_PROFILE
+        requested_profile = contract_profile or persisted_state.get(
+            "contract_profile"
         )
+        if requested_profile is None and persisted_state:
+            requested_profile = LEGACY_CONTRACT_PROFILE
+        self.contract_profile = load_agent_profile(
+            root, requested_profile
+        ).contract_profile
         self.agent = ManagerAgentRuntime(
             root, run_dir, self.data_root, contract_profile=self.contract_profile
         )
@@ -1466,7 +1473,7 @@ class ManagerOrchestrator:
     @staticmethod
     def _recommended_routes(
         report_type: str,
-        contract_profile: str = LEGACY_CONTRACT_PROFILE,
+        contract_profile: str,
     ) -> dict[str, Any]:
         if contract_profile == "v0_3":
             return {

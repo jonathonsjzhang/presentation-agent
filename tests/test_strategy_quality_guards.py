@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.connectors.registry import load_with_connector
 from presentation_agent.context import ContextAssembler
 from presentation_agent.io import read_json
@@ -57,7 +58,9 @@ class StrategyQualityGuardTests(unittest.TestCase):
         self.assertEqual(loaded["source_unit_summary"]["unresolved"], 0)
 
     def test_argument_long_evidence_preview_blocks_readiness(self) -> None:
-        assembler = ContextAssembler(ROOT)
+        assembler = ContextAssembler(
+            ROOT, contract_profile=LEGACY_CONTRACT_PROFILE
+        )
         large_evidence = [
             {"evidence_id": f"EV-{index}", "raw_content": "x" * 2500}
             for index in range(100)

@@ -4,7 +4,7 @@
 
 ## 一、系统总框架
 
-- **Manager + 4 核心 Worker**：Manager 直接面向用户，负责任务定义、计划、派发、验收和返工；Evidence Harvester 在 deep-dive、多源或用户研究材料中先建立完整证据目录，其余 4 个专业 Worker 负责论点分析、故事线设计、报告产出和可视化。
+- **Manager + 4 核心 Worker**：Manager 直接面向用户，负责任务定义、计划、派发、验收和返工；Analysis 在需要时内部调用 Evidence Harvester，其余专业 Worker 依次负责故事线设计、报告产出和可视化。
 - **自演进闭环**：每个 Agent 由可编辑 skill 定义工作方式，由 loop 执行、review 拦截、state/memory 持续学习，并通过 Web Cockpit 可视化管理整个 harness。
 - **覆盖场景**：支持董事会、总办、战略负责人、业务团队、外部等不同汇报对象，覆盖专题深度分析、业务进展汇报与信息快速同步三种汇报性质，可产出文档、PPT 或 HTML 三种材料格式。
 
@@ -26,7 +26,7 @@
 - **Evidence 内部化**：由 Analysis 按确定性三路径调用，不再占用顶层 execution plan。
 - **完整报告语义层**：`report.v1` 保存正文、主张、证据、反方、caveat、来源与附录，并生成内容版 DOCX。
 - **三载体转译**：`formatted_material.v2` 从 Report 转译为精装 DOCX、PPT 或 HTML，记录压缩、遗漏和来源映射。
-- **Profile-aware runtime**：v0.3 与 `legacy.v0_2` 隔离运行，run state 防止跨 profile 恢复。
+- **Profile-aware runtime**：v0.3 是默认活动 profile；`legacy.v0_2` 仅作为显式兼容路径保留，run state 防止跨 profile 恢复。
 - **扩展 gate**：QA list 与逐字稿移至核心材料完成之后。
 
 #### v0.2（2026-06-30）

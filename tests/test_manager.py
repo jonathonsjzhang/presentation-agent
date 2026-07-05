@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from presentation_agent.agent_profiles import LEGACY_CONTRACT_PROFILE
 from presentation_agent.io import read_json, write_json
 from presentation_agent.manager import ManagerOrchestrator
 from presentation_agent.memory_router import MemoryRouter
@@ -121,8 +122,17 @@ class ManagerOrchestratorTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmpdir.cleanup()
 
+    def _manager(self, **kwargs) -> ManagerOrchestrator:
+        return ManagerOrchestrator(
+            ROOT,
+            self.run_dir,
+            data_root=self.data_root,
+            contract_profile=LEGACY_CONTRACT_PROFILE,
+            **kwargs,
+        )
+
     def test_plan_gate_then_dispatches_first_worker(self) -> None:
-        manager = ManagerOrchestrator(ROOT, self.run_dir, data_root=self.data_root)
+        manager = self._manager()
         brief_gate = manager.initialize_run(self.brief)
         self.assertEqual(brief_gate["gate"], "brief")
         manager.approve()  # confirm brief → planning
@@ -165,7 +175,7 @@ class ManagerOrchestratorTests(unittest.TestCase):
         self.assertTrue(Path(dispatched["instruction"]["instruction_path"]).exists())
 
     def test_manager_context_exposes_profile_registry_and_route(self) -> None:
-        manager = ManagerOrchestrator(ROOT, self.run_dir, data_root=self.data_root)
+        manager = self._manager()
         manager.initialize_run(self.brief)
         manager.approve()  # confirm brief → planning
         state = manager.status()["state"]
@@ -175,13 +185,23 @@ class ManagerOrchestratorTests(unittest.TestCase):
         self.assertEqual(context["capability_registry"]["atomic_capability_count"], 11)
         self.assertIn("qa_preparation", context["recommended_routes"]["default"])
 
-    def test_spawn_adapter_persists_and_annotates_first_worker(self) -> None:
-        manager = ManagerOrchestrator(
+    def test_existing_legacy_run_keeps_its_persisted_profile(self) -> None:
+        manager = self._manager()
+        manager.initialize_run(self.brief)
+
+        resumed = ManagerOrchestrator(
             ROOT,
             self.run_dir,
             data_root=self.data_root,
-            spawn_adapter="workbuddy",
         )
+
+        self.assertEqual(
+            resumed.contract_profile,
+            LEGACY_CONTRACT_PROFILE,
+        )
+
+    def test_spawn_adapter_persists_and_annotates_first_worker(self) -> None:
+        manager = self._manager(spawn_adapter="workbuddy")
         brief_gate = manager.initialize_run(self.brief)
         self.assertEqual(brief_gate["gate"], "brief")
         manager.approve()  # confirm brief → planning
@@ -189,11 +209,7 @@ class ManagerOrchestratorTests(unittest.TestCase):
 
         # Simulate the next CLI process: no override is passed, so it must recover
         # the adapter from this run's manager_state.json.
-        manager = ManagerOrchestrator(
-            ROOT,
-            self.run_dir,
-            data_root=self.data_root,
-        )
+        manager = self._manager()
         self.assertEqual(manager.workers.spawn_adapter.kind, "workbuddy")
         instruction = manager.prepare()
         write_json(Path(instruction["output_path"]), _planning_decision())
@@ -209,7 +225,7 @@ class ManagerOrchestratorTests(unittest.TestCase):
         )
 
     def test_worker_completion_returns_to_manager_acceptance(self) -> None:
-        manager = ManagerOrchestrator(ROOT, self.run_dir, data_root=self.data_root)
+        manager = self._manager()
         brief_gate = manager.initialize_run(self.brief)
         self.assertEqual(brief_gate["gate"], "brief")
         manager.approve()  # confirm brief → planning
@@ -243,7 +259,7 @@ class ManagerOrchestratorTests(unittest.TestCase):
         self.assertEqual(state["current_actor"], "manager")
 
     def test_invalid_manager_plan_is_rejected(self) -> None:
-        manager = ManagerOrchestrator(ROOT, self.run_dir, data_root=self.data_root)
+        manager = self._manager()
         brief_gate = manager.initialize_run(self.brief)
         self.assertEqual(brief_gate["gate"], "brief")
         manager.approve()  # confirm brief → planning
@@ -258,7 +274,7 @@ class ManagerOrchestratorTests(unittest.TestCase):
             manager.commit_manager()
 
     def test_deep_dive_full_catalog_requires_harvester_first(self) -> None:
-        manager = ManagerOrchestrator(ROOT, self.run_dir, data_root=self.data_root)
+        manager = self._manager()
         manager.initialize_run(self.brief)
         manager.approve()
         instruction = manager.prepare()
@@ -275,7 +291,7 @@ class ManagerOrchestratorTests(unittest.TestCase):
             manager.commit_manager()
 
     def test_plan_feedback_returns_to_manager_planning(self) -> None:
-        manager = ManagerOrchestrator(ROOT, self.run_dir, data_root=self.data_root)
+        manager = self._manager()
         # Step 1: brief confirmation gate
         brief_gate = manager.initialize_run(self.brief)
         self.assertEqual(brief_gate["gate"], "brief")
@@ -298,7 +314,7 @@ class ManagerOrchestratorTests(unittest.TestCase):
         )
 
     def test_completion_requires_final_human_gate(self) -> None:
-        manager = ManagerOrchestrator(ROOT, self.run_dir, data_root=self.data_root)
+        manager = self._manager()
         # Step 1: brief confirmation
         brief_gate = manager.initialize_run(self.brief)
         self.assertEqual(brief_gate["gate"], "brief")
@@ -347,7 +363,7 @@ class ManagerOrchestratorTests(unittest.TestCase):
         return task_dir
 
     def test_annotate_spawn_inline_is_noop(self) -> None:
-        manager = ManagerOrchestrator(ROOT, self.run_dir, data_root=self.data_root)
+        manager = self._manager()
         self.assertEqual(manager.workers.spawn_adapter.kind, "inline")
         task_dir = self._make_task_dir("awaiting_review_output")
         instruction = {
@@ -363,7 +379,7 @@ class ManagerOrchestratorTests(unittest.TestCase):
     def test_annotate_spawn_review_step_emits_readonly_reviewer(self) -> None:
         from presentation_agent.spawn import WorkBuddySpawnAdapter
 
-        manager = ManagerOrchestrator(ROOT, self.run_dir, data_root=self.data_root)
+        manager = self._manager()
         manager.workers.spawn_adapter = WorkBuddySpawnAdapter()
         task_dir = self._make_task_dir("awaiting_review_output")
         instruction = {
@@ -387,7 +403,7 @@ class ManagerOrchestratorTests(unittest.TestCase):
     def test_annotate_spawn_revise_step_emits_writable_worker(self) -> None:
         from presentation_agent.spawn import WorkBuddySpawnAdapter
 
-        manager = ManagerOrchestrator(ROOT, self.run_dir, data_root=self.data_root)
+        manager = self._manager()
         manager.workers.spawn_adapter = WorkBuddySpawnAdapter()
         task_dir = self._make_task_dir("awaiting_revise_output")
         instruction = {
