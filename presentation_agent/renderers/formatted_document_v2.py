@@ -36,7 +36,12 @@ def _validate(formatted: dict[str, Any], report: dict[str, Any]) -> None:
     if report.get("agent_id") != "report" or report.get("schema") != "report.v1":
         raise ValueError("formatted document renderer requires report.v1")
     section_ids = {item.get("section_id") for item in report.get("sections") or []}
-    claim_ids = {item.get("claim_id") for item in report.get("claims") or []}
+    claim_ids = {
+        str(claim_id)
+        for section in report.get("sections") or []
+        if isinstance(section, dict)
+        for claim_id in section.get("claim_ids") or []
+    }
     for asset in formatted.get("visual_assets") or []:
         if not set(asset.get("source_section_ids") or []) <= section_ids:
             raise ValueError(f"{asset.get('asset_id')}: unknown source section mapping")
@@ -190,16 +195,25 @@ def _assets_by_section(formatted: dict[str, Any]) -> dict[str, list[dict[str, An
     return result
 
 
-def _protected_caveats_for_section(report: dict[str, Any], report_section: dict[str, Any]) -> list[str]:
-    protected = set((report.get("format_handoff") or {}).get("protected_caveats") or [])
-    section_claims = set(report_section.get("claim_ids") or [])
+def _protected_caveats_for_section(
+    formatted: dict[str, Any],
+    report_section: dict[str, Any],
+) -> list[str]:
+    section_id = str(report_section.get("section_id") or "")
+    unit_ids = {
+        str(unit.get("unit_id"))
+        for unit in formatted.get("delivery_units") or []
+        if isinstance(unit, dict)
+        and section_id in set(map(str, unit.get("source_section_ids") or []))
+    }
     caveats: list[str] = []
-    for claim in report.get("claims") or []:
-        if claim.get("claim_id") not in section_claims:
+    for row in formatted.get("caveat_preservation") or []:
+        if not isinstance(row, dict):
             continue
-        for caveat in claim.get("caveats") or []:
-            if caveat in protected and caveat not in caveats:
-                caveats.append(caveat)
+        destinations = set(map(str, row.get("destination_unit_ids") or []))
+        caveat = str(row.get("source_caveat") or "")
+        if caveat and destinations & unit_ids and caveat not in caveats:
+            caveats.append(caveat)
     return caveats
 
 
@@ -296,18 +310,9 @@ def render_formatted_document_v2(
             _add_note_box(doc, "本节判断", str(report_section.get("section_thesis") or ""))
             for block in report_section.get("narrative_blocks") or []:
                 _render_narrative_block(doc, report, block)
-            for table in report_section.get("tables") or []:
-                _add_data_table(
-                    doc,
-                    str(table.get("title") or table.get("table_id") or "表格"),
-                    [str(value) for value in table.get("columns") or []],
-                    table.get("rows") or [],
-                    table.get("source_refs") or [],
-                    table.get("notes") or [],
-                )
             for asset in section_assets.get(report_section.get("section_id"), []):
                 _render_visual_asset(doc, asset, out_dir / f"{file_stem}_assets")
-            for caveat in _protected_caveats_for_section(report, report_section):
+            for caveat in _protected_caveats_for_section(formatted, report_section):
                 _add_note_box(doc, "关键边界", caveat, caveat=True)
             _add_note_box(doc, "本节结论", str(report_section.get("section_conclusion") or ""))
             transition = str(report_section.get("transition") or "")

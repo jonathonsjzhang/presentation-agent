@@ -26,8 +26,8 @@ class AnalysisSkillTests(unittest.TestCase):
         self.package = load_skill_package(ROOT, "analysis")
 
     def test_skill_package_contains_instructions_rubrics_schema_and_reference(self) -> None:
-        self.assertIn("Evidence readiness", self.package.instructions)
-        self.assertIn("Analysis method", self.package.instructions)
+        self.assertIn("证据准备度", self.package.instructions)
+        self.assertIn("比较和追问", self.package.instructions)
         self.assertIn("analysis.v1", self.package.schemas)
         rubric_ids = {rubric["id"] for rubric in self.package.rubrics}
         self.assertTrue(

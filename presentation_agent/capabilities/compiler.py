@@ -60,11 +60,17 @@ def compile_skill_package(
                 matching_rules = [_canonical_format_rule(profile.delivery_target)]
             lines = [str(rule.get("instruction", "")).strip() for rule in matching_rules]
             lines = [line for line in lines if line]
-            if lines:
-                instruction_sections.append(
-                    f"## Active capability: {atomic_spec.id}\n"
-                    + "\n".join(f"- {line}" for line in lines)
-                )
+            # 原子 SKILL.md 正文 = 载体独有的核心准则与 gotcha（生成期须内化）。
+            # 与 rules 注入相互独立：canonical_format 只替换 rules（契约字段），
+            # 不影响 SKILL.md 准则的注入，从而实现 B1 共存。
+            skill_body = str(package.get("instructions", "")).strip()
+            if skill_body or lines:
+                section = [f"## Active capability: {atomic_spec.id}"]
+                if skill_body:
+                    section.append(skill_body)
+                if lines:
+                    section.append("\n".join(f"- {line}" for line in lines))
+                instruction_sections.append("\n\n".join(section))
             for rule in matching_rules:
                 _check_property_conflict(rule, atomic_spec.id, property_owners)
                 context_requirements.extend(
@@ -167,8 +173,8 @@ def _canonical_format_rule(delivery_target: str) -> dict[str, Any]:
         "context_requirements": [
             "report_metadata",
             "sections",
-            "claims",
-            "claim_evidence_map",
+            "source_registry",
+            "caveats_and_limits",
             "format_handoff",
             "delivery_target",
         ],

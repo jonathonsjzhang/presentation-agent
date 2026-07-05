@@ -645,8 +645,6 @@ class StepRunner:
             self._uses_v03_format_renderer()
             and not self._format_render_succeeded(render_result)
         )
-        if self._uses_report_content_renderer():
-            self._update_report_content_deliverable(artifact, render_result)
         if self._uses_v03_format_renderer():
             self._update_v03_format_render_result(artifact, render_result)
         # Keep the semantic report.v1 artifact even when DOCX rendering fails;
@@ -739,27 +737,6 @@ class StepRunner:
             and render_result.output_path
             and str(render_result.output_path).lower().endswith(".docx")
         )
-
-    def _update_report_content_deliverable(
-        self, artifact: dict[str, Any], render_result: Any
-    ) -> None:
-        deliverable = artifact.setdefault("content_deliverable", {})
-        expected_path = self.run_dir / "report.docx"
-        deliverable["intended_path"] = (
-            render_result.output_path
-            if self._report_render_succeeded(render_result)
-            else str(expected_path)
-        )
-        if self._report_render_succeeded(render_result):
-            deliverable["status"] = "rendered"
-            deliverable.pop("error", None)
-        else:
-            deliverable["status"] = "error"
-            deliverable["error"] = (
-                render_result.detail
-                if render_result is not None and render_result.detail
-                else "Report DOCX renderer did not return a rendered DOCX file"
-            )
 
     @staticmethod
     def _format_render_succeeded(render_result: Any) -> bool:

@@ -51,7 +51,7 @@ class CrossStageReviewer:
     ) -> dict[str, Any]:
         issues: list[dict[str, Any]] = []
         finding_ids = self._ids(upstream.get("findings"), "finding_id")
-        coverage = artifact.get("alignment_audit", {}).get("finding_coverage", [])
+        coverage = artifact.get("editorial_decisions", [])
         covered = [
             str(row.get("finding_id"))
             for row in coverage
@@ -72,16 +72,12 @@ class CrossStageReviewer:
             artifact, {"finding_refs", "finding_id"}
         )
         unsupported_refs = sorted(referenced - finding_ids)
-        unsupported_claims = artifact.get("alignment_audit", {}).get(
-            "unsupported_claims", []
-        )
-        if unsupported_refs or unsupported_claims:
+        if unsupported_refs:
             issues.append(self._issue(
                 "P0", "unsupported_viewpoint",
                 "Storyline 新增了 Analysis 无法支持的 viewpoint / claim",
                 {
                     "unknown_finding_refs": unsupported_refs,
-                    "unsupported_claims": unsupported_claims,
                 },
                 "storyline",
             ))
@@ -159,7 +155,9 @@ class CrossStageReviewer:
         target = str(artifact.get("delivery_target") or "document")
         permits_omission = target in {"ppt", "html"}
         section_ids = self._ids(upstream.get("sections"), "section_id")
-        claim_ids = self._ids(upstream.get("claims"), "claim_id")
+        claim_ids = self._collect_ref_values(
+            upstream.get("sections", []), {"claim_ids"}
+        )
         protected_claim_ids = set(map(
             str,
             upstream.get("format_handoff", {}).get("protected_claim_ids", []),
@@ -217,7 +215,7 @@ class CrossStageReviewer:
             str(row.get("source_caveat"))
             for row in preservation
             if isinstance(row, dict)
-            and row.get("status") == "preserved"
+            and row.get("status") in {"preserved", "reworded_equivalent"}
             and row.get("destination_unit_ids")
         }
         missing_caveats = sorted(set(map(str, protected)) - preserved)
@@ -228,11 +226,15 @@ class CrossStageReviewer:
             if not isinstance(section, dict):
                 continue
             section_id = str(section.get("section_id") or "")
-            for item_key, id_key in (("tables", "table_id"), ("figure_specs", "figure_id")):
-                for item in section.get(item_key, []):
+            for block in section.get("narrative_blocks", []):
+                if not isinstance(block, dict):
+                    continue
+                block_id = str(block.get("block_id") or "")
+                origins = {section_id, block_id} - {""}
+                for key in ("table", "figure_spec"):
+                    item = block.get(key)
                     if not isinstance(item, dict):
                         continue
-                    origins = {section_id, str(item.get(id_key) or "")} - {""}
                     for number in self._numbers(item):
                         number_origins.setdefault(number, set()).update(origins)
         report_numbers = set(number_origins)
@@ -240,12 +242,9 @@ class CrossStageReviewer:
             "delivery_units": artifact.get("delivery_units", []),
             "visual_assets": artifact.get("visual_assets", []),
         })
-        evidence_refs = {
-            str(ref)
-            for row in upstream.get("claim_evidence_map", [])
-            if isinstance(row, dict)
-            for ref in row.get("evidence_refs", [])
-        }
+        evidence_refs = self._collect_ref_values(
+            upstream.get("sections", []), {"evidence_refs"}
+        )
         format_evidence_refs = self._collect_ref_values(
             {
                 "delivery_units": artifact.get("delivery_units", []),
@@ -267,10 +266,7 @@ class CrossStageReviewer:
             | claim_ids
             | evidence_refs
             | self._ids(upstream.get("source_registry"), "source_id")
-            | self._collect_ref_values(
-                upstream.get("sections", []),
-                {"block_id", "table_id", "figure_id"},
-            )
+            | self._collect_ref_values(upstream.get("sections", []), {"block_id"})
             | self._ids(upstream.get("appendices"), "appendix_id")
         )
         unknown_omission_refs = omitted_refs - known_omission_refs

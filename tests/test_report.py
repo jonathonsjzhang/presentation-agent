@@ -24,8 +24,8 @@ class ReportCoreTests(unittest.TestCase):
     def test_report_skill_and_rubrics_are_report_specific(self) -> None:
         skill = (ROOT / "skills" / "report" / "SKILL.md").read_text(encoding="utf-8")
         rubrics = read_json(ROOT / "skills" / "report" / "rubrics.json")
-        self.assertIn("严格匹配", skill)
-        self.assertIn("连续正文", skill)
+        self.assertIn("严格按", skill)
+        self.assertIn("连续段落", skill)
         self.assertIn("report.v1", skill)
         self.assertNotIn("material_units 作为输出", skill)
         ids = {item["id"] for item in rubrics["rubrics"]}
@@ -78,29 +78,30 @@ class ReportCoreTests(unittest.TestCase):
             self.assertTrue(paragraphs, section["section_id"])
             self.assertTrue(any(len(paragraph) >= 60 for paragraph in paragraphs))
             self.assertTrue(section["section_conclusion"])
-        self.assertTrue(any(section["tables"] for section in self.report["sections"]))
+        self.assertTrue(any(
+            block["block_type"] == "table"
+            for section in self.report["sections"]
+            for block in section["narrative_blocks"]
+        ))
         self.assertTrue(self.report["source_registry"])
-        self.assertTrue(self.report["methodology"]["approach"])
-        self.assertTrue(self.report["methodology"]["limitations"])
-        self.assertTrue(self.report["risks_and_counterarguments"])
+        self.assertTrue(self.report["caveats_and_limits"]["approach"])
+        self.assertTrue(self.report["caveats_and_limits"]["limitations"])
         self.assertTrue(self.report["appendices"])
 
     def test_claim_finding_evidence_and_source_trace_is_closed(self) -> None:
-        claim_ids = {item["claim_id"] for item in self.report["claims"]}
-        finding_ids = {item["finding_id"] for item in self.report["findings"]}
-        source_ids = {item["source_id"] for item in self.report["source_registry"]}
-        mapped_claims = {item["claim_id"] for item in self.report["claim_evidence_map"]}
-        self.assertEqual(mapped_claims, claim_ids)
-        for claim in self.report["claims"]:
-            self.assertLessEqual(set(claim["finding_refs"]), finding_ids)
+        analysis = read_json(FIXTURES / "analysis.v1.valid.json")
+        finding_ids = {item["finding_id"] for item in analysis["findings"]}
         for section in self.report["sections"]:
-            self.assertLessEqual(set(section["claim_ids"]), claim_ids)
             self.assertLessEqual(set(section["finding_refs"]), finding_ids)
+            block_claim_ids = {
+                claim_id
+                for block in section["narrative_blocks"]
+                for claim_id in block["claim_ids"]
+            }
+            self.assertEqual(set(section["claim_ids"]), block_claim_ids)
             for block in section["narrative_blocks"]:
-                self.assertLessEqual(set(block["claim_ids"]), claim_ids)
-        for mapping in self.report["claim_evidence_map"]:
-            self.assertTrue(mapping["evidence_refs"])
-            self.assertLessEqual(set(mapping["source_ids"]), source_ids)
+                self.assertTrue(block["claim_ids"])
+                self.assertIn("evidence_refs", block)
 
 
 if __name__ == "__main__":

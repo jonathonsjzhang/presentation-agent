@@ -1,6 +1,6 @@
 {
   "schema": "storyline.v3",
-  "description": "Storyline Worker 的文档优先契约：Executive Summary、动态信息金字塔、章节级论证序列；禁止 pages。",
+  "description": "Storyline Worker 输出契约：Executive Summary + Message Pyramid + Section Outline + 编辑决策 + 待解决问题。",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,10 +11,8 @@
     "report_type",
     "executive_summary",
     "message_pyramid",
-    "narrative_sequence",
     "report_outline",
-    "appendix_plan",
-    "alignment_audit",
+    "editorial_decisions",
     "upstream_revision_requests",
     "open_questions"
   ],
@@ -113,21 +111,6 @@
         }
       }
     },
-    "narrative_sequence": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["section_id", "purpose", "depends_on", "transition"],
-        "properties": {
-          "section_id": { "type": "string" },
-          "purpose": { "type": "string" },
-          "depends_on": { "type": "array", "items": { "type": "string" } },
-          "transition": { "type": "string" }
-        }
-      }
-    },
     "report_outline": {
       "type": "object",
       "additionalProperties": false,
@@ -149,7 +132,7 @@
               "evidence_refs",
               "counterarguments",
               "caveats",
-              "transition_from",
+              "depends_on",
               "transition_to"
             ],
             "properties": {
@@ -157,6 +140,15 @@
               "heading": { "type": "string", "minLength": 1 },
               "section_question": { "type": "string", "minLength": 1 },
               "section_thesis": { "type": "string", "minLength": 1 },
+              "depends_on": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "本节的论证依赖哪些前序 section 的结论"
+              },
+              "transition_to": {
+                "type": "string",
+                "description": "本节如何引出下一节"
+              },
               "content_units": {
                 "type": "array",
                 "minItems": 1,
@@ -178,8 +170,7 @@
                       "enum": ["claim", "evidence", "interpretation", "counterargument", "caveat", "decision"]
                     },
                     "statement": { "type": "string", "minLength": 1 },
-                    "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
-                    ,
+                    "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
                     "evidence_refs": { "type": "array", "items": { "type": "string" } },
                     "caveats": { "type": "array", "items": { "type": "string" } }
                   }
@@ -188,63 +179,48 @@
               "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
               "evidence_refs": { "type": "array", "items": { "type": "string" } },
               "counterarguments": { "type": "array", "items": { "type": "string" } },
-              "caveats": { "type": "array", "items": { "type": "string" } },
-              "transition_from": { "type": "string" },
-              "transition_to": { "type": "string" }
+              "caveats": { "type": "array", "items": { "type": "string" } }
             }
           }
         }
       }
     },
-    "appendix_plan": {
+    "editorial_decisions": {
       "type": "array",
+      "minItems": 1,
+      "description": "每个 Analysis finding 的编辑去向。合并了原 appendix_plan、kill_list 和 finding_coverage。",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["appendix_id", "title", "purpose", "source_refs"],
+        "required": ["finding_id", "disposition", "rationale"],
         "properties": {
-          "appendix_id": { "type": "string" },
-          "title": { "type": "string" },
-          "purpose": { "type": "string" },
-          "source_refs": { "type": "array", "items": { "type": "string" } }
-        }
-      }
-    },
-    "alignment_audit": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "executive_summary_matches_apex",
-        "all_supporting_messages_traceable",
-        "all_sections_traceable",
-        "finding_coverage",
-        "unsupported_claims",
-        "notes"
-      ],
-      "properties": {
-        "executive_summary_matches_apex": { "type": "boolean" },
-        "all_supporting_messages_traceable": { "type": "boolean" },
-        "all_sections_traceable": { "type": "boolean" },
-        "finding_coverage": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
+          "finding_id": { "type": "string", "minLength": 1 },
+          "disposition": {
+            "type": "string",
+            "enum": ["main_story", "appendix", "omitted"]
+          },
+          "locations": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "出现在哪些 section（main_story 时必填）"
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "description": "编辑决策理由。omitted 时说明为何被砍，appendix 时说明为何不进入主线"
+          },
+          "appendix_detail": {
             "type": "object",
+            "description": "仅 disposition=appendix 时填写",
             "additionalProperties": false,
-            "required": ["finding_id", "disposition", "locations", "rationale"],
+            "required": ["title", "purpose"],
             "properties": {
-              "finding_id": { "type": "string", "minLength": 1 },
-              "disposition": {
-                "type": "string",
-                "enum": ["main_story", "appendix", "omitted"]
-              },
-              "locations": { "type": "array", "items": { "type": "string" } },
-              "rationale": { "type": "string", "minLength": 1 }
+              "title": { "type": "string", "minLength": 1 },
+              "purpose": { "type": "string", "minLength": 1 },
+              "source_refs": { "type": "array", "items": { "type": "string" } }
             }
           }
-        },
-        "unsupported_claims": { "type": "array", "items": { "type": "string" } },
-        "notes": { "type": "array", "items": { "type": "string" } }
+        }
       }
     },
     "upstream_revision_requests": {

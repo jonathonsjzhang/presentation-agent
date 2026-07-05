@@ -63,7 +63,6 @@ class ReportDocxTests(unittest.TestCase):
                 "执行摘要",
                 "成果保存与回访共同出现",
                 "方法与边界",
-                "风险与反方观点",
                 "主张与证据追溯",
                 "来源清单",
                 "34%",

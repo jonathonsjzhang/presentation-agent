@@ -68,7 +68,7 @@ class WP8CrossReviewTests(unittest.TestCase):
 
     def test_analysis_to_storyline_blocks_missing_and_unsupported(self) -> None:
         artifact = copy.deepcopy(self.storyline)
-        artifact["alignment_audit"]["finding_coverage"].pop()
+        artifact["editorial_decisions"].pop()
         artifact["message_pyramid"]["supporting_messages"][0][
             "finding_refs"
         ] = ["F-404"]

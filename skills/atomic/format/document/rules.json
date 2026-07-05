@@ -22,7 +22,7 @@
       "phase": ["generation", "review"],
       "level": "P0",
       "property": "unit_type",
-      "instruction": "按 section 生成可独立阅读的章节内容，使用段落、表格、来源注和脚注层级，不模拟 PPT 页面。"
+      "instruction": "按 section 生成可独立阅读的章节内容，首节为 Executive Summary，用连续散文 + bullet 承载论证，不模拟 PPT 页面。"
     },
     {
       "id": "FMT-DOC-FM-G01",
@@ -30,16 +30,24 @@
       "phase": ["generation", "review"],
       "level": "P0",
       "property": "format_contract",
-      "instruction": "只生成正式 DOCX 报告：format=document，material_units[].unit_type=document_section，首个正文单元为 Executive Summary，render_plan 使用 docx_report_renderer；禁止加载 PPT/HTML 执行流程。",
+      "instruction": "只转译为正式 DOCX 报告：format=document，material_units[].unit_type=document_section，首个正文单元为 Executive Summary，render_plan.renderer=docx_renderer；禁止加载 PPT/HTML 执行流程。产出 docx（源）+ pdf（由 docx 转）+ md（降级）三种格式，命名 YYYYMMDD_文档名_版本号。",
       "context_requirements": ["pages", "draft_material", "global_sources", "global_data_gaps"]
     },
     {
       "id": "FMT-DOC-FM-G02",
       "applies_to": ["format"],
       "phase": ["generation", "review"],
+      "level": "P0",
+      "property": "style_token_contract",
+      "instruction": "style_tokens 必须落实：中文楷体/英文 Arial；一级标题 24pt 加粗、小标题 16pt 蓝色(#2972F4)加粗、正文 14pt 黑色；highlight 三级(深蓝#0070C0加粗>黑加粗>下划线)；全篇非黑白灰颜色≤3、主色蓝；正文 bullet 末尾不加句号、缩进≤3层。"
+    },
+    {
+      "id": "FMT-DOC-FM-G03",
+      "applies_to": ["format"],
+      "phase": ["generation", "review"],
       "level": "P1",
-      "property": "document_readability",
-      "instruction": "正文按 action heading + bullet-first 证据链组织，表格、图表、caption、source 与 caveat 可独立阅读，不把 PPT 页面逐页摊平。"
+      "property": "evidence_visualization",
+      "instruction": "论据做可视化，优先复用素材已有图，缺则按类型生成（数值对比→柱状图、多维数据→格式表格、逻辑流程→SVG）；图/表下方加图注（编号+简述+来源），不用脚注；图表配色锁在 ≤3 色内。"
     },
     {
       "id": "FMT-DOC-QA-G01",

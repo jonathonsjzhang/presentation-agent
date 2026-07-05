@@ -1,8 +1,108 @@
 ---
 name: document
-description: Adapt report structure for a document with independently readable sections, explicit reasoning, source notes, and appendix hierarchy.
+description: Adapt report structure for a formal DOCX consulting report — Kaiti/Arial typography, a blue-led ≤3-color palette, tiered highlights, bullet-based body with Executive Summary opening, and evidence turned into charts/tables/figures with captions.
 ---
 
-# Document Format
+# Document Format（正式书面报告的格式与可视化）
 
-Use this atomic capability only when `output_format=document`. Storyline units are sections, not pseudo-slides.
+只在 `output_format=document` 时启用。承载体是**正式 DOCX 咨询报告**（与 ppt 的"演示"载体相对），阅读方式是"跳读 + 精读"的书面阅读，单位是**章节（section）**，不是幻灯片。
+
+**分工边界（先读这一句）**：报告的**行文**——章节独立可读、金字塔式论证、附录降层、连续散文——已由上游 report worker 写好并固化在 `report.v1` 里。**本能力不改写行文，只做两件事：把行文精确落成书面格式，把论据落成可视化。** 不要重新组织论点，不要增删结论，只负责"长什么样"。
+
+---
+
+## 一、排版规范（style token，硬约束）
+
+这些是可执行的样式契约，逐条对应 `style_tokens`，渲染时不得偏离。取值来自两篇人工范本实测。
+
+### 1. 字体
+- 中文一律 **楷体（KaiTi）**，英文与数字一律 **Arial**。同一 run 内同时设 `eastAsia=楷体` 和 `ascii=Arial`。
+- ⚠️ **gotcha**：python-docx 默认只设 `ascii` 字体，中文会掉回宋体。必须显式写 `run.font.element` 的 `w:eastAsia`，否则中文楷体全部失效——这是最常见的返工点。
+
+### 2. 字号与标题层级
+| 层级 | 字号 | 样式 |
+|---|---|---|
+| 报告一级标题（开篇） | **24pt** | 加粗，近黑 `#1A1A1A` |
+| 章节小标题 | **16pt** | 加粗，**蓝色 `#2972F4`** |
+| 正文 | **14pt** | 常规，黑色 |
+- 开篇必须有且仅有一个 24pt 一级标题（报告名）。
+- ⚠️ **gotcha**：字号定义在 run 级而非 style 级——范本里 `Normal` 样式不带字号，靠 run 覆盖。生成时逐 run 设字号，别指望改 style 生效。
+
+### 3. 颜色与 Highlight（重要性递减三级）
+- 正文文字统一**黑色**。强调（highlight）按重要性递减，只用三种手段：
+  1. **深蓝加粗 `#0070C0`**（最强，如核心论点句、用户原声引语）
+  2. **黑色加粗**（次强，分论点、关键数字）
+  3. **下划线**（最弱，术语或轻提示）
+- ⚠️ **gotcha**：三级 highlight 是"重要性阶梯"，不是并列可选项。同一句里不要既深蓝又下划线；一段里深蓝加粗 highlight 不超过 1-2 处，否则强调失效、满纸皆重点等于没重点。
+
+### 4. 全局配色（≤3 色铁律）
+- 主色调**蓝**（深蓝 `#0070C0` / 主蓝 `#2972F4` / 浅蓝），副色可**酌情**用绿、红。
+- **一篇报告非黑白灰的颜色总数 ≤ 3**（标题蓝 + 图表最多再引入 2 个副色）。范本图表恰好是 蓝/绿/红 三色。
+- ⚠️ **gotcha**：这条最容易被图表破坏——matplotlib 默认色板一上来就是 5-6 色。出图前必须显式指定 `color=` 列表，锁死在已选的 ≤3 色内。红绿语义不预设，由行文内容决定（增长/下降或强调/次要），跟随 report.v1 的表述，不要自作主张套涨跌色。
+
+### 5. 正文排版
+- 正文以 **bullet point** 展开为主，成段散文承载论证（行文已由 report worker 写好，此处保持其段落结构）。
+- **每个段落 / bullet 末尾不加句号**（范本一致约定）。其他标点正常。
+- 按内容层次缩进，**最多 3 层**（范本用 ~16.8pt / 38.8pt 两级）。层级对应论点→分论点→证据/引语。
+- 用户原声引语单独成段（深蓝），署名另起一行，格式 `——性别 年龄 职业`（如 `——女 44岁 投资专家`）。
+- ⚠️ **gotcha**：缩进别超过 3 层，第 4 层往后读者就迷失层级；末尾句号是范本硬约定，生成后要全篇校一遍，AI 很容易习惯性补上句号。
+
+### 6. 开篇契约
+- 正文第一节**必须**是 **Executive Summary**，且能被单独抽出当"一页纸摘要"用（高管只读这一节即可拿到全部核心结论）。
+- ⚠️ **gotcha**：Executive Summary 不是"引言/背景介绍"，它是结论的浓缩版。若上游 report.v1 的首节不是结论摘要，按其 executive_summary 字段补齐，不要拿背景段冒充。
+
+---
+
+## 二、论据可视化
+
+report.v1 里的论据要落成可视化，而非停留在文字。四类载体，**优先级：复用素材已有图 > 代码生成**。
+
+### 1. 复用优先
+- 若 `source_refs[]` / 素材目录里**已有**现成图片（如范本里的 5 张配图），**直接引用**，不重复造。
+- ⚠️ **gotcha**：引用素材图前确认它与当前论点一致、清晰度够、无过期数据。宁可重画也不要贴一张对不上论点的旧图。
+
+### 2. 缺图时按类型生成
+| 论据形态 | 可视化载体 | 生成方式 |
+|---|---|---|
+| 数值对比 / 趋势 | **柱状图**（首选）、折线 | matplotlib，按 §4 配色锁色 |
+| 多维结构化数据 | **带格式表格** | python-docx 表格，设表头底纹、边框、字体 |
+| 逻辑/流程/架构 | **SVG 图**（架构图、流程图） | 生成 SVG 后嵌入 |
+| 定性佐证 | 图片引用 | 见 §1 |
+- 图表数据必须来自 `source_refs[]` 的真实来源，禁止模拟/占位数据；无数据则在图注注明"数据缺失"。
+- ⚠️ **gotcha**：表格不是把数据摊平就行——要做格式设计（表头加粗+浅蓝底纹、三线或全框、单元格字体跟随全局楷体/Arial）。裸表格会显得比范本粗糙。
+
+### 3. 图注规范（不用脚注）
+- 论据来源**不进脚注**，直接在图/表**下方**加一行描述，格式对齐论文：
+  - `图1 近一年 DS 人均单日时长趋势　来源：QuestMobile`
+  - `表2 各场景重度用户占比对比　来源：用户问卷（n=1568）`
+- 图/表**连续编号**（图1、图2…；表1、表2…分开编），正文用交叉引用指向（"如图1所示"）。
+- ⚠️ **gotcha**：图注是"编号 + 简述 + 来源"三段式，缺来源等于论据无出处。别把长解释写进图注，解释归正文。
+
+---
+
+## 三、产出物（真相源链路）
+
+同一份报告产出 **3 种格式**，以 **docx 为唯一真相源**（md 无法承载楷体/多色 highlight/格式表格，不可当源）：
+
+1. **DOCX（源）**：python-docx 按上述全部 style token 精确生成——楷体/Arial、24/16/14、深蓝 highlight、多级缩进、格式表格、matplotlib/SVG 图表全部落地。
+2. **PDF**：由 docx 转换（`libreoffice --headless --convert-to pdf`），字体、颜色、图表无损继承。**不要**从 md 生成 PDF。
+3. **Markdown**：从内容单独导出的**降级纯文本版**（丢样式是预期内的，供粘贴/检索/diff）。
+
+- ⚠️ **gotcha**：链路方向是 docx → pdf → （md 旁路），**绝不能** md → docx/pdf，否则楷体、三级 highlight、格式表格全部丢失。三份产物内容一致、样式各按载体能力呈现即可，不追求 md 也有样式。
+
+### 命名规范
+- 统一格式：**`日期 + 文档名 + 版本号`**，如 `20260705_DS用户时长分析_v1.docx`。
+- 日期用 `YYYYMMDD`，版本号 `v1 / v2 / vF`。三种格式同名不同扩展名。
+
+---
+
+## 与 PPT 载体的关键差异（对照记忆）
+
+| 维度 | Document（书面） | PPT（演示） |
+|---|---|---|
+| 单位 | 章节 section | 页 slide |
+| 论证 | 一节承载完整论证链（散文+bullet） | 一页一论点 |
+| 摘要 | Executive Summary 独立成节，可抽出单读 | Execution Summary 论点树页 |
+| 降层内容 | 进附录，正文交叉引用 | 砍到 ≤ 页数上限 |
+| 证据 | 行文内嵌数字 + 图表下方图注 | 视觉承载 + 页脚来源 |
+| 正文形态 | 连续散文 + bullet，末尾无句号 | bullet / 视觉元素 |

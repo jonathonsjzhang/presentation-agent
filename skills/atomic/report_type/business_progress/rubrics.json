@@ -1,13 +1,4 @@
 {
-  "rubrics": [
-    {
-      "id": "RPT-PROGRESS-SL-001",
-      "applies_to": ["storyline"],
-      "severity": "P0",
-      "dimension": "report_type_fit",
-      "criterion": "业务进展汇报必须覆盖目标、进展、偏差、风险/卡点、支持请求和下一步。",
-      "check": "story arc 是否仅罗列已完成事项，或遗漏偏差和管理请求。",
-      "fix": "围绕承诺与实际的差异重排主线，补齐风险、请求和下一步。"
-    }
-  ]
+  "_note": "原子层 rubrics 待后续补充。",
+  "rubrics": []
 }

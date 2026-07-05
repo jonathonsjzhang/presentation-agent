@@ -100,9 +100,9 @@ class StorylineV3Tests(unittest.TestCase):
         self.assertEqual(validate(self.analysis, self.analysis_schema), [])
         package = load_skill_package(ROOT, "storyline")
         self.assertTrue(package.exists)
-        self.assertIn("同一轮", package.instructions)
+        self.assertIn("一次输出", package.instructions)
         self.assertIn("upstream_revision_requests", package.instructions)
-        self.assertIn("content_units", package.instructions)
+        self.assertIn("content units", package.instructions)
         self.assertNotIn("skills/storyline_design", package.instructions)
         self.assertEqual(len(package.rubrics), len(self.rubrics))
         self.assertIn("storyline.v3", package.schemas)
@@ -147,12 +147,10 @@ class StorylineV3Tests(unittest.TestCase):
         self.assertEqual(summary["core_answer"], pyramid["apex"]["statement"])
 
         sections = self.storyline["report_outline"]["sections"]
-        sequence = self.storyline["narrative_sequence"]
         section_ids = [item["section_id"] for item in sections]
-        self.assertEqual([item["section_id"] for item in sequence], section_ids)
 
         seen: set[str] = set()
-        for item in sequence:
+        for item in sections:
             self.assertLessEqual(set(item["depends_on"]), seen)
             seen.add(item["section_id"])
 
@@ -163,7 +161,7 @@ class StorylineV3Tests(unittest.TestCase):
                 message["message_id"],
             )
 
-        coverage = self.storyline["alignment_audit"]["finding_coverage"]
+        coverage = self.storyline["editorial_decisions"]
         covered_ids = [item["finding_id"] for item in coverage]
         self.assertEqual(len(covered_ids), len(set(covered_ids)))
         self.assertEqual(

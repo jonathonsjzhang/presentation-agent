@@ -70,11 +70,19 @@ class V03SchemaContractTests(unittest.TestCase):
         storyline_findings = set(storyline["message_pyramid"]["apex"]["finding_refs"])
         self.assertLessEqual(storyline_findings, analysis_findings)
 
-        report_findings = {item["finding_id"] for item in report["findings"]}
+        report_findings = {
+            finding_id
+            for section in report["sections"]
+            for finding_id in section["finding_refs"]
+        }
         self.assertLessEqual(report_findings, analysis_findings)
 
         report_sections = {item["section_id"] for item in report["sections"]}
-        report_claims = {item["claim_id"] for item in report["claims"]}
+        report_claims = {
+            claim_id
+            for section in report["sections"]
+            for claim_id in section["claim_ids"]
+        }
         self.assertEqual(set(formatted["source_section_ids"]), report_sections)
         self.assertEqual(set(formatted["source_claim_ids"]), report_claims)
         for unit in formatted["delivery_units"]:
@@ -260,7 +268,11 @@ class FormatCoreCompilationTests(unittest.TestCase):
 
     def test_fixture_records_mapping_and_all_translation_audits(self) -> None:
         report_sections = {row["section_id"] for row in self.report["sections"]}
-        report_claims = {row["claim_id"] for row in self.report["claims"]}
+        report_claims = {
+            claim_id
+            for section in self.report["sections"]
+            for claim_id in section["claim_ids"]
+        }
         self.assertEqual(set(self.formatted["source_section_ids"]), report_sections)
         self.assertEqual(set(self.formatted["source_claim_ids"]), report_claims)
         protected = set(self.report["format_handoff"]["protected_caveats"])
