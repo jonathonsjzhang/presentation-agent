@@ -46,11 +46,9 @@ Manager 需要知道以下 skill 存在，以便正确规划任务和构造 deli
 1. 把 brief 转化为 `report_charter.v2`，明确决策目标、分析目标、范围、约束、成功标准、证据边界和扩展策略。
 
 2. **检查 evidence readiness。** 查阅 `material_inventory`：
-   - 已有 Evidence Catalog → 复用，analysis 直接消费；
-   - 有 Raw Materials 无 Catalog → 不可直接 dispatch analysis。此时有两种处理：
-     - 若 Manager 运行在可派发 sub-agent 的宿主 → planning 阶段先触发一次 `evidence_harvester` 子任务，产出 catalog 后再 dispatch analysis；
-     - 若 Manager 运行在 inline 模式 → 在 Charter 的 `blocking_questions` 中声明"缺少 Evidence Catalog"，要求用户提供或确认走 inline 路径；
-   - 皆无 → 记录 blocking gap，暂停 planning。
+   - 已有 Evidence Catalog 或 Raw Materials → 正常 dispatch analysis。Analysis 内部会自动判断是否需要调用 evidence_harvester 子任务来补全 catalog；
+   - 两者皆无 → `ask_human`，在 Charter 的 `blocking_questions` 中声明"缺少素材"，要求用户提供数据或材料后继续。
+   - **注意**：evidence_harvester 是 Analysis 的内部子任务，不进入 execution_plan。
 
 3. `delivery_targets` 固定为 `["document"]`。运行模式由 runtime state 管理，不写入 Charter。
 
