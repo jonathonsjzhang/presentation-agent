@@ -4,7 +4,7 @@
 
 ## 一、系统总框架
 
-- **Manager + 4 核心 Worker**：Manager 直接面向用户，负责任务定义、计划、派发、验收和返工；Analysis 在需要时内部调用 Evidence Harvester，其余专业 Worker 依次负责故事线设计、报告产出和可视化。
+- **Manager + 4 核心 Worker**：Manager 直接面向用户，负责任务定义、计划、派发、验收和返工；四个 Worker 模拟人类分析师从“把材料想明白”到“把观点讲清楚并做成交付物”的工作流：Analysis 发现、验证并收敛观点，Storyline 选择主线并组织论证，Report 完成正式写作，Format 完成载体化表达。
 - **自演进闭环**：每个 Agent 由可编辑 skill 定义工作方式，由 loop 执行、review 拦截、state/memory 持续学习，并通过 Web Cockpit 可视化管理整个 harness。
 - **覆盖场景**：支持董事会、总办、战略负责人、业务团队、外部等不同汇报对象，覆盖专题深度分析、业务进展汇报与信息快速同步三种汇报性质，可产出文档、PPT 或 HTML 三种材料格式。
 
@@ -59,10 +59,10 @@
 |---|---|---|---|
 | 控制面 | Manager | 定义任务、规划依赖、派发 Worker、验收、返工和完结 | Report charter、execution plan、task packet、acceptance report |
 | 内部子任务 | Evidence Harvester | 读取、拆分、提取和索引材料；不形成战略判断 | Evidence Catalog |
-| Worker | Analysis（分析） | 形成可追溯 finding、so what、反证、替代解释、置信度与待讨论观点 | `analysis.v1` |
-| Worker | Storyline（故事线） | 同轮形成 Executive Summary、message pyramid、章节与内容单元；不分页 | `storyline.v3` |
-| Worker | Report（报告产出） | 写成完整、严肃、可独立阅读的战略分析报告 | `report.v1`、内容版 DOCX |
-| Worker | Format（可视化） | 将报告转译为单一载体并增强图表、框架图和版式 | `formatted_material.v2`、DOCX/PPTX/HTML |
+| Worker | Analysis（观点发现与收敛） | 通读参考材料，发散可能的发现、解释与假设，经过比较、追问和证据检验后，收敛成一组重要且站得住的发现与观点；负责把材料想明白，但不决定汇报的唯一主线 | `analysis.v1` |
+| Worker | Storyline（故事线设计） | 面向汇报目标和受众，从 Analysis 的观点中选择核心主张，取舍信息并组织成一条递进、可说服的论证链；负责把观点讲成故事，但不重新分析材料或撰写完整正文 | `storyline.v3` |
+| Worker | Report（正式写作） | 沿已批准的故事线，把论点展开为完整、严肃、可独立阅读的战略分析报告，补足解释、证据、反方、边界与衔接，但不新增上游未支持的观点 | `report.v1`、内容版 DOCX |
+| Worker | Format（载体化表达） | 在不改变核心判断和证据边界的前提下，把完整报告转译为目标载体，通过信息层级、图表、框架图和版式提升理解效率与交付质量 | `formatted_material.v2`、DOCX/PPTX/HTML |
 | 可选扩展 | Q&A 梳理 | 核心材料完成后，按需预判追问与回答策略 | Q&A pack |
 | 可选扩展 | 逐字稿 | 核心材料完成后，按需生成汇报话术和时间节奏 | Speaker script |
 
@@ -140,7 +140,7 @@ skills/<agent_id>/
 
 这种设计的好处是：修改 Agent 行为时，优先改 skill 包，而不是改 Python runtime。SOP、rubrics、schema 都可以独立演进。
 
-Analysis、Storyline 与 Report 各司其职：Analysis 先判断材料说明了什么、有哪些竞争性解释以及真正的 so what；Storyline 再形成 Executive Summary、动态 message pyramid 和章节论证顺序，不生成 `pages`；Report 把内容单元展开为完整正文、主张—证据链、方法、反方、caveat、来源与附录。证据无法支撑时必须发出 upstream revision request，不能静默补写。
+四个 Worker 对应两次内容收敛和两次表达加工：Analysis 先从大量材料中发散并验证可能的发现、解释和假设，再收敛为观点池；Storyline 从观点池中选择唯一主线，形成 Executive Summary、动态 message pyramid 和章节论证顺序；Report 把故事线写成完整正文，展开主张—证据链、方法、反方、caveat、来源与附录；Format 再把语义完整的报告转译为目标载体，完成信息层级、图表和版式设计。简言之，Analysis 负责把材料想明白，Storyline 负责把观点讲成故事，Report 负责把故事写成报告，Format 负责把报告做成可交付材料。任何下游 Worker 都不能静默补做上游工作；证据或观点无法支撑时必须发出 upstream revision request。
 
 Skill 体系覆盖了战略汇报的常见场景，由 Manager planning 收敛为 `report_charter` 并通过 task packet 和 global state 向 Worker 传递：
 

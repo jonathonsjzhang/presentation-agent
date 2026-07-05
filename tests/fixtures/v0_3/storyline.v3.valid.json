@@ -55,20 +55,6 @@
       }
     ]
   },
-  "narrative_sequence": [
-    {
-      "section_id": "S-01",
-      "purpose": "建立优先验证价值闭环的证据基础与边界。",
-      "depends_on": [],
-      "transition": "从行为差异进入可能机制。"
-    },
-    {
-      "section_id": "S-02",
-      "purpose": "解释价值复用机制并提出可证伪实验。",
-      "depends_on": ["S-01"],
-      "transition": "从机制判断进入决策与补数。"
-    }
-  ],
   "report_outline": {
     "sections": [
       {
@@ -98,7 +84,7 @@
         "evidence_refs": ["E-Q-01", "E-Q-02"],
         "counterarguments": ["高意愿用户可能更愿意保存成果。"],
         "caveats": ["冻结样本不支持直接因果推断。"],
-        "transition_from": "",
+        "depends_on": [],
         "transition_to": "需要用访谈与实验定义可能机制。"
       },
       {
@@ -128,40 +114,25 @@
         "evidence_refs": ["E-I-01", "E-Q-02"],
         "counterarguments": ["提醒不足也可能解释部分未回访。"],
         "caveats": ["访谈样本仅用于机制探索。"],
-        "transition_from": "从相关性进入机制解释。",
+        "depends_on": ["S-01"],
         "transition_to": "收束为实验选择与补数要求。"
       }
     ]
   },
-  "appendix_plan": [
+  "editorial_decisions": [
     {
-      "appendix_id": "A-01",
-      "title": "分组口径与样本限制",
-      "purpose": "保留回访率计算口径和自选择风险。",
-      "source_refs": ["E-Q-01", "E-Q-02"]
+      "finding_id": "F-01",
+      "disposition": "main_story",
+      "locations": ["S-01", "S-02"],
+      "rationale": "量化差异是优先级判断和实验设计的主要依据。"
+    },
+    {
+      "finding_id": "F-02",
+      "disposition": "main_story",
+      "locations": ["S-02"],
+      "rationale": "定性发现用于解释可能机制并限定结论强度。"
     }
   ],
-  "alignment_audit": {
-    "executive_summary_matches_apex": true,
-    "all_supporting_messages_traceable": true,
-    "all_sections_traceable": true,
-    "finding_coverage": [
-      {
-        "finding_id": "F-01",
-        "disposition": "main_story",
-        "locations": ["executive_summary", "M-01", "S-01", "S-02"],
-        "rationale": "量化差异是优先级判断和实验设计的主要依据。"
-      },
-      {
-        "finding_id": "F-02",
-        "disposition": "main_story",
-        "locations": ["executive_summary", "M-02", "S-02"],
-        "rationale": "定性发现用于解释可能机制并限定结论强度。"
-      }
-    ],
-    "unsupported_claims": [],
-    "notes": ["未新增 Analysis 之外的关键判断。"]
-  },
   "upstream_revision_requests": [],
   "open_questions": ["成果保存后的具体回访路径是否可被准确埋点？"]
 }

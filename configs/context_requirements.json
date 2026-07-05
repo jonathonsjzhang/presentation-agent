@@ -40,9 +40,9 @@
           "required_fields": [
             "executive_summary",
             "message_pyramid",
-            "narrative_sequence",
             "report_outline",
-            "appendix_plan",
+            "editorial_decisions",
+            "upstream_revision_requests",
             "open_questions"
           ],
           "output_schema": "report.v1"
@@ -53,13 +53,10 @@
             "report_metadata",
             "executive_summary",
             "sections",
-            "claims",
             "source_registry",
-            "claim_evidence_map",
-            "assumptions",
-            "data_gaps",
-            "risks_and_counterarguments",
+            "caveats_and_limits",
             "recommendations",
+            "appendices",
             "format_handoff"
           ],
           "task_fields": [

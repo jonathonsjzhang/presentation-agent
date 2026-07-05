@@ -1,13 +1,4 @@
 {
-  "rubrics": [
-    {
-      "id": "AUD-EXEC-SL-001",
-      "applies_to": ["storyline"],
-      "severity": "P1",
-      "dimension": "audience_fit",
-      "criterion": "总办故事线应清楚呈现待拍板、协调卡点和责任关系。",
-      "check": "结尾是否只有泛化建议，而没有需要确认、协调或升级的事项。",
-      "fix": "把关键分歧和责任关系前置，并给出明确拍板点。"
-    }
-  ]
+  "_note": "原子层 rubrics 待后续补充。",
+  "rubrics": []
 }

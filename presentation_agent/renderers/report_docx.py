@@ -36,12 +36,11 @@ def _require_report_v1(report: dict[str, Any]) -> None:
         "report_metadata",
         "executive_summary",
         "sections",
-        "claims",
-        "findings",
         "source_registry",
-        "claim_evidence_map",
-        "methodology",
+        "caveats_and_limits",
+        "recommendations",
         "appendices",
+        "format_handoff",
     }
     missing = sorted(required - report.keys())
     if missing:
@@ -290,12 +289,9 @@ def _add_note_box(doc: Any, label: str, text: str, *, caveat: bool = False) -> N
 
 
 def _source_ids_for_block(report: dict[str, Any], block: dict[str, Any]) -> list[str]:
-    claim_ids = set(block.get("claim_ids") or [])
-    source_ids: list[str] = []
-    for mapping in report.get("claim_evidence_map") or []:
-        if mapping.get("claim_id") in claim_ids:
-            source_ids.extend(mapping.get("source_ids") or [])
-    return list(dict.fromkeys(source_ids))
+    # report.v1 keeps evidence refs on the block and the source registry at
+    # report level; it intentionally has no second global claim-evidence map.
+    return []
 
 
 def _add_citation(doc: Any, evidence_refs: Iterable[str], source_ids: Iterable[str]) -> None:
@@ -387,12 +383,19 @@ def _render_narrative_block(doc: Any, report: dict[str, Any], block: dict[str, A
     elif block_type == "method_note":
         _add_note_box(doc, "方法说明", content)
     elif block_type == "figure_placeholder":
-        _add_note_box(doc, "图表待制作", content or "详见本节 figure spec。")
-    elif block_type == "table":
+        spec = block.get("figure_spec") or {}
+        _render_figure_spec(doc, spec)
         if content:
-            paragraph = doc.add_paragraph(style="Report Note")
-            run = paragraph.add_run(content)
-            _set_run_font(run, color=_INK)
+            _add_note_box(doc, "图表说明", content)
+    elif block_type == "table":
+        table = block.get("table") or {}
+        _add_data_table(
+            doc,
+            content or "表格",
+            [str(value) for value in table.get("columns") or []],
+            table.get("rows") or [],
+            block.get("evidence_refs") or [],
+        )
     else:
         paragraph = doc.add_paragraph()
         run = paragraph.add_run(content)
@@ -431,9 +434,9 @@ def _render_executive_summary(doc: Any, summary: dict[str, Any]) -> None:
 
 
 def _render_method_and_risks(doc: Any, report: dict[str, Any]) -> None:
-    methodology = report.get("methodology") or {}
+    methodology = report.get("caveats_and_limits") or {}
     _add_heading(doc, "方法与边界", 1)
-    for label, key in (("分析方法", "approach"), ("分析范围", "scope")):
+    for label, key in (("分析方法", "approach"),):
         paragraph = doc.add_paragraph()
         lead = paragraph.add_run(f"{label}：")
         _set_run_font(lead, bold=True, color=_DARK_BLUE)
@@ -448,23 +451,10 @@ def _render_method_and_risks(doc: Any, report: dict[str, Any]) -> None:
         _add_heading(doc, "方法限制", 2)
         _add_bullets(doc, limitations)
     for heading, key in (("关键假设", "assumptions"), ("数据缺口", "data_gaps")):
-        values = report.get(key) or []
+        values = methodology.get(key) or []
         if values:
             _add_heading(doc, heading, 2)
             _add_bullets(doc, values)
-
-    risks = report.get("risks_and_counterarguments") or []
-    if risks:
-        _add_heading(doc, "风险与反方观点", 1)
-        rows = [
-            [
-                item.get("risk_or_counterargument", ""),
-                item.get("response", ""),
-                item.get("residual_uncertainty", ""),
-            ]
-            for item in risks
-        ]
-        _add_data_table(doc, "反方观点与残余不确定性", ["观点 / 风险", "回应", "残余不确定性"], rows)
 
 
 def _render_recommendations(doc: Any, recommendations: list[dict[str, Any]]) -> None:
@@ -487,39 +477,51 @@ def _render_recommendations(doc: Any, recommendations: list[dict[str, Any]]) -> 
 def _render_appendices(doc: Any, report: dict[str, Any]) -> None:
     appendices = report.get("appendices") or []
     sources = report.get("source_registry") or []
-    claims = report.get("claims") or []
-    mappings = {item.get("claim_id"): item for item in report.get("claim_evidence_map") or []}
-    if not appendices and not sources and not claims:
+    trace_rows: list[list[str]] = []
+    seen_claims: set[str] = set()
+    for section in report.get("sections") or []:
+        if not isinstance(section, dict):
+            continue
+        for block in section.get("narrative_blocks") or []:
+            if not isinstance(block, dict):
+                continue
+            for claim_id in block.get("claim_ids") or []:
+                claim_id = str(claim_id)
+                if not claim_id or claim_id in seen_claims:
+                    continue
+                seen_claims.add(claim_id)
+                trace_rows.append([
+                    claim_id,
+                    str(block.get("content") or ""),
+                    "、".join(map(str, block.get("evidence_refs") or [])),
+                    str(section.get("section_id") or ""),
+                ])
+    if not appendices and not sources and not trace_rows:
         return
     doc.add_page_break()
     _add_heading(doc, "附录", 1)
     for appendix in appendices:
         _add_heading(doc, str(appendix.get("title") or appendix.get("appendix_id") or "附录"), 2)
         _add_bullets(doc, [f"关联内容：{ref}" for ref in appendix.get("content_refs") or []])
-    if claims:
+    if trace_rows:
         _add_heading(doc, "主张与证据追溯", 2)
-        rows = []
-        for claim in claims:
-            mapping = mappings.get(claim.get("claim_id"), {})
-            rows.append([
-                claim.get("claim_id", ""),
-                claim.get("statement", ""),
-                "、".join(mapping.get("evidence_refs") or []),
-                "、".join(mapping.get("source_ids") or []),
-            ])
-        _add_data_table(doc, "Claim traceability", ["Claim", "主张", "证据", "来源"], rows)
+        _add_data_table(
+            doc,
+            "Claim traceability",
+            ["Claim", "首次出现内容", "证据", "章节"],
+            trace_rows,
+        )
     if sources:
         _add_heading(doc, "来源清单", 2)
         rows = [
             [
                 item.get("source_id", ""),
                 item.get("citation", ""),
-                item.get("source_type", ""),
                 item.get("locator", ""),
             ]
             for item in sources
         ]
-        _add_data_table(doc, "Source registry", ["来源 ID", "来源", "类型", "定位"], rows)
+        _add_data_table(doc, "Source registry", ["来源 ID", "来源", "定位"], rows)
 
 
 def render_report_docx(
@@ -577,17 +579,6 @@ def render_report_docx(
         _add_note_box(doc, "本节判断", str(report_section.get("section_thesis") or ""))
         for block in report_section.get("narrative_blocks") or []:
             _render_narrative_block(doc, report, block)
-        for table in report_section.get("tables") or []:
-            _add_data_table(
-                doc,
-                str(table.get("title") or table.get("table_id") or "表格"),
-                [str(value) for value in table.get("columns") or []],
-                table.get("rows") or [],
-                table.get("source_refs") or [],
-                table.get("notes") or [],
-            )
-        for figure in report_section.get("figure_specs") or []:
-            _render_figure_spec(doc, figure)
         _add_note_box(doc, "本节结论", str(report_section.get("section_conclusion") or ""))
         transition = str(report_section.get("transition") or "")
         if transition:

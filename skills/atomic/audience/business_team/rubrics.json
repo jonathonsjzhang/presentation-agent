@@ -1,13 +1,4 @@
 {
-  "rubrics": [
-    {
-      "id": "AUD-BIZ-SL-001",
-      "applies_to": ["storyline"],
-      "severity": "P1",
-      "dimension": "audience_fit",
-      "criterion": "业务团队故事线必须能落到优先级、指标、责任或下一步。",
-      "check": "so what 是否停留在抽象价值，没有业务动作含义。",
-      "fix": "补充业务动作、衡量指标、责任与依赖。"
-    }
-  ]
+  "_note": "原子层 rubrics 待后续补充。",
+  "rubrics": []
 }

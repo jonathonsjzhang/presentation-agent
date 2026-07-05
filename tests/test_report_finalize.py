@@ -79,11 +79,7 @@ class ReportFinalizeIntegrationTests(unittest.TestCase):
 
         artifact = read_json(self.stage_dir / "artifact.json")
         self.assertEqual(artifact["schema"], "report.v1")
-        self.assertEqual(artifact["content_deliverable"]["status"], "rendered")
-        self.assertEqual(
-            artifact["content_deliverable"]["intended_path"], str(output_path)
-        )
-        self.assertNotIn("error", artifact["content_deliverable"])
+        self.assertNotIn("content_deliverable", artifact)
         self.assertEqual(result["status"], "pending_human_review")
         self.assertEqual(result["rendered_files"], [str(output_path)])
 
@@ -100,15 +96,7 @@ class ReportFinalizeIntegrationTests(unittest.TestCase):
         artifact = read_json(self.stage_dir / "artifact.json")
         self.assertEqual(artifact["schema"], "report.v1")
         self.assertTrue(artifact["sections"])
-        self.assertEqual(artifact["content_deliverable"]["status"], "error")
-        self.assertEqual(
-            artifact["content_deliverable"]["error"],
-            "synthetic renderer failure",
-        )
-        self.assertEqual(
-            artifact["content_deliverable"]["intended_path"],
-            str(self.stage_dir / "report.docx"),
-        )
+        self.assertNotIn("content_deliverable", artifact)
         self.assertEqual(result["status"], "blocked")
         self.assertNotIn("rendered_files", result)
         state = read_json(self.stage_dir / "run_state.json")

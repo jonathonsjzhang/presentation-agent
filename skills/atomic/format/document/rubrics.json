@@ -15,8 +15,53 @@
       "severity": "P0",
       "dimension": "format_contract",
       "criterion": "文档产物只能包含 document_section，并以 Executive Summary 开篇。",
-      "check": "format 是否为 document；material_units[].unit_type 是否均为 document_section；首个正文单元是否为 Executive Summary；render_plan 是否使用 docx_report_renderer。",
-      "fix": "按独立阅读的 DOCX 章节重构，不逐页摊平 PPT。"
+      "check": "format 是否为 document；material_units[].unit_type 是否均为 document_section；首个正文单元是否为 Executive Summary；render_plan 是否使用 docx_renderer。",
+      "fix": "按独立阅读的 DOCX 章节重构，首节改为结论摘要 Executive Summary，不逐页摊平 PPT。"
+    },
+    {
+      "id": "FMT-DOC-FM-002",
+      "applies_to": ["format"],
+      "severity": "P0",
+      "dimension": "typography",
+      "criterion": "字体与字号符合规范：中文楷体、英文 Arial；一级标题 24pt、小标题 16pt 蓝色加粗、正文 14pt 黑色。",
+      "check": "run 是否同时设 eastAsia=楷体 与 ascii=Arial（中文未掉宋体）；标题/小标题/正文字号是否为 24/16/14；小标题是否蓝色(#2972F4)加粗。",
+      "fix": "逐 run 补齐 eastAsia 楷体字体与对应字号、颜色，修正掉回宋体的中文。"
+    },
+    {
+      "id": "FMT-DOC-FM-003",
+      "applies_to": ["format"],
+      "severity": "P0",
+      "dimension": "color_discipline",
+      "criterion": "全篇非黑白灰颜色 ≤ 3 且以蓝为主色；highlight 三级手段正确（深蓝加粗 > 黑加粗 > 下划线）。",
+      "check": "统计正文与图表用到的非黑白灰颜色种数是否 ≤3；主色是否为蓝；highlight 是否只用这三种手段、是否泛滥（单段深蓝加粗是否 ≤1-2 处）。",
+      "fix": "收敛到 ≤3 色，matplotlib 显式指定 color 列表；削减过量 highlight。"
+    },
+    {
+      "id": "FMT-DOC-FM-004",
+      "applies_to": ["format"],
+      "severity": "P1",
+      "dimension": "body_layout",
+      "criterion": "正文以 bullet 为主，段落/bullet 末尾不加句号，缩进 ≤ 3 层。",
+      "check": "是否存在段落末尾句号；缩进层级是否超过 3 层；用户原声引语是否单独成段并按‘——性别 年龄 职业’署名。",
+      "fix": "去除段末句号，压缩超过 3 层的缩进，规范引语署名格式。"
+    },
+    {
+      "id": "FMT-DOC-FM-005",
+      "applies_to": ["format"],
+      "severity": "P1",
+      "dimension": "evidence_visualization",
+      "criterion": "论据已可视化且图注规范：图/表下方有‘编号 + 简述 + 来源’图注，不用脚注。",
+      "check": "关键论据是否落成柱状图/格式表格/SVG/引用图；图表是否连续编号并有来源图注；图表数据是否来自真实 source_refs（无模拟数据）。",
+      "fix": "为缺失图注补‘图N 简述　来源：X’；优先复用素材图，缺则按类型生成并锁色。"
+    },
+    {
+      "id": "FMT-DOC-FM-006",
+      "applies_to": ["format"],
+      "severity": "P1",
+      "dimension": "deliverable_chain",
+      "criterion": "产出 docx（源）+ pdf（由 docx 转）+ md（降级）三种格式，命名 YYYYMMDD_文档名_版本号。",
+      "check": "是否三格式齐全；pdf 是否由 docx 转换而非 md；三份是否同名不同扩展名且符合命名规范。",
+      "fix": "以 docx 为源，libreoffice 转 pdf，md 单独导出；修正命名。"
     }
   ]
 }

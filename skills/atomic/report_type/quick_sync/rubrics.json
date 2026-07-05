@@ -1,13 +1,4 @@
 {
-  "rubrics": [
-    {
-      "id": "RPT-QUICK-SL-001",
-      "applies_to": ["storyline"],
-      "severity": "P1",
-      "dimension": "report_type_fit",
-      "criterion": "快速同步应克制，只保留变化、影响、动作和观察点。",
-      "check": "是否引入过多背景、候选框架或完整战略辩论。",
-      "fix": "压缩为变化—影响—动作—观察点，把延展分析移出主线。"
-    }
-  ]
+  "_note": "原子层 rubrics 待后续补充。",
+  "rubrics": []
 }

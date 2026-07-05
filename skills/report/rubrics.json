@@ -15,7 +15,7 @@
       "severity": "P0",
       "dimension": "storyline_fidelity",
       "criterion": "Executive Summary、章节顺序、thesis、finding refs、counterarguments 与 caveats 必须忠实覆盖 storyline.v3，且不得新增未支持的关键观点。",
-      "check": "逐项对照 storyline executive_summary、report_outline 和 appendix_plan。",
+      "check": "逐项对照 storyline executive_summary、report_outline 和 editorial_decisions。",
       "fix": "恢复上游主张与边界；证据不足时降级强度并记录 gap。"
     },
     {
@@ -30,8 +30,8 @@
       "id": "REPORT-TRACE-001",
       "severity": "P0",
       "dimension": "traceability",
-      "criterion": "全部 claim、finding、evidence 和 source 引用必须闭合且不存在悬空 ID。",
-      "check": "核对 sections、blocks、claims、findings、claim_evidence_map 与 source_registry 的集合关系。",
+      "criterion": "全部 section、block、claim、finding、evidence 和 source 引用必须闭合且不存在悬空 ID。",
+      "check": "核对 sections.finding_refs、section.claim_ids、narrative_blocks.claim_ids/evidence_refs 与 source_registry；section.claim_ids 必须等于其 blocks 的 claim_ids 去重并集。",
       "fix": "补齐映射、来源与定位；无法追溯的内容删除或降级为显式假设。"
     },
     {
@@ -39,7 +39,7 @@
       "severity": "P0",
       "dimension": "claim_calibration",
       "criterion": "影响结论强度的 caveat、assumption、data gap 和 residual uncertainty 必须显式可见，相关性不得改写为因果。",
-      "check": "比对 claim strength、正文措辞、table/figure notes、methodology limitations 和 protected caveats。",
+      "check": "比对正文措辞、table/figure notes、caveats_and_limits 和 protected caveats。",
       "fix": "恢复边界、降低结论强度或补充所需证据。"
     },
     {
@@ -78,9 +78,9 @@
       "id": "REPORT-HANDOFF-001",
       "severity": "P1",
       "dimension": "format_handoff",
-      "criterion": "Format handoff 必须保护核心 claim 和 caveat，并明确允许与禁止的转译，不混入具体 layout 指令。",
-      "check": "核对 protected_claim_ids、protected_caveats 和 transformation lists。",
-      "fix": "补齐内容保护边界并移除载体实现细节。"
+      "criterion": "Format handoff 必须保护关键 caveat 并指出视觉机会，不混入具体 layout 指令。",
+      "check": "核对 protected_caveats 和 visual_opportunities。",
+      "fix": "补齐 caveat 保护边界与视觉机会，并移除载体实现细节。"
     }
   ]
 }
