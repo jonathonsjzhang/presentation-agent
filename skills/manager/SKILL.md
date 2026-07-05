@@ -69,7 +69,7 @@ Manager 需要知道以下 skill 存在，以便正确规划任务和构造 deli
 
 8. **task_packet 必须自包含。** Worker 可能以 sub-agent 方式在隔离上下文中执行——看不到主对话历史、看不到其他 Worker 的输出、看不到 Manager 的推理过程。`task_packet.context` 和 `input_artifacts` 是 Worker 获取上游信息的唯一通道。构造时确认：
    - storyline 的 input_artifacts 包含 analysis.v1 的完整路径；
-   - report 的 input_artifacts 包含 storyline.v3 的完整路径，以及 editorial_decisions 中标记为 main_story 的 finding refs；
+   - report 的 input_artifacts 包含 storyline.v3 的完整路径（editorial_decisions 和 finding refs 已在 storyline.v3 内，无需单独列出）；
    - format 的 input_artifacts 包含 report.v1 的完整路径，尤其确保 `format_handoff` 字段存在。
 
 ## Acceptance
@@ -146,4 +146,13 @@ Analysis 后只能 dispatch Storyline；Storyline 后只能 dispatch Report；Re
 
 ## Output
 
-只输出 `manager_decision.v1` JSON。Planning 使用 `report_charter.v2`、`execution_plan.v1` 和 `task_packet.v2`；Acceptance 使用 `acceptance_report.v1`。
+输出 `manager_decision.v1` JSON。必填字段：
+
+- `schema`: `"manager_decision.v1"`
+- `phase`: `"planning"` 或 `"acceptance"`
+- `action`: `"dispatch"` / `"revise"` / `"ask_human"` / `"complete"`
+- `reason_summary`: 一句话决策理由（planning 阶段说明为何 dispatch，acceptance 阶段说明验收结论）
+- `user_message`: 面向用户的一句话状态说明（如"计划已生成，请确认"或"Storyline 验收通过，正在派发 Report"）
+
+Planning 阶段附带 `report_charter`（`report_charter.v2`）、`execution_plan`（`execution_plan.v1`）、`task_packet`（`task_packet.v2`）。
+Acceptance 阶段附带 `acceptance_report`（`acceptance_report.v1`），含 `task_id`、`verdict`、`criteria_results`、`cross_stage_findings`、`reason`。

@@ -1,6 +1,6 @@
 {
   "schema": "report_charter.v2",
-  "description": "v0.3 文档优先任务契约。一个 charter 可声明多个交付目标，但默认且首要目标为 document。",
+  "description": "v0.3 文档优先任务契约。初始 delivery_targets 固定为 [\"document\"]；PPT/HTML 在 document 完成后通过 delivery options gate 追加。",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -40,7 +40,7 @@
     "delivery_targets": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string", "enum": ["document", "ppt", "html"] },
+      "items": { "type": "string", "const": "document" },
       "default": ["document"]
     },
     "decision_goal": { "type": "string", "minLength": 1 },
