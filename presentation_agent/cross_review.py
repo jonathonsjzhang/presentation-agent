@@ -57,7 +57,16 @@ class CrossStageReviewer:
             for row in coverage
             if isinstance(row, dict) and row.get("finding_id")
         ]
-        missing = sorted(finding_ids - set(covered))
+        advisory_fids = {
+            str(fid)
+            for request in artifact.get("upstream_revision_requests", [])
+            if isinstance(request, dict)
+            and request.get("blocking_level") == "advisory"
+            for fid in request.get("finding_refs", [])
+        }
+        all_missing = finding_ids - set(covered)
+        missing = sorted(all_missing - advisory_fids)
+        advisory_missing = sorted(all_missing & advisory_fids)
         duplicate = sorted({item for item in covered if covered.count(item) > 1})
         unknown = sorted(set(covered) - finding_ids)
         if missing or duplicate or unknown:
@@ -65,6 +74,13 @@ class CrossStageReviewer:
                 "P0", "finding_coverage",
                 "Analysis findings 未被 Storyline 恰好登记一次",
                 {"missing": missing, "duplicate": duplicate, "unknown": unknown},
+                "storyline",
+            ))
+        if advisory_missing:
+            issues.append(self._issue(
+                "P1", "advisory_finding_coverage",
+                "Advisory upstream revision 对应 finding 未登记 editorial disposition",
+                {"advisory_missing": advisory_missing},
                 "storyline",
             ))
 

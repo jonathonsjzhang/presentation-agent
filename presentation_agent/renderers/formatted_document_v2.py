@@ -161,6 +161,12 @@ def _render_visual_asset(doc: Any, asset: dict[str, Any], asset_dir: Path) -> No
         _add_data_table(doc, title, columns, rows, asset.get("source_evidence_refs") or [], asset.get("caveats") or [])
     elif asset_type == "callout":
         _add_note_box(doc, title, str(asset.get("reader_takeaway") or ""))
+    elif asset_type == "chart" and not _chart_data_ready(asset):
+        _add_note_box(
+            doc,
+            title,
+            str(asset.get("reader_takeaway") or "图表数据尚未提供，暂以要点呈现。"),
+        )
     else:
         asset_dir.mkdir(parents=True, exist_ok=True)
         if asset_type == "chart":
@@ -181,6 +187,20 @@ def _render_visual_asset(doc: Any, asset: dict[str, Any], asset_dir: Path) -> No
     _add_asset_trace(doc, asset)
     for caveat in asset.get("caveats") or []:
         _add_note_box(doc, "图表边界", str(caveat), caveat=True)
+
+
+def _chart_data_ready(asset: dict[str, Any]) -> bool:
+    data = asset.get("data")
+    if not isinstance(data, dict):
+        return False
+    categories = data.get("categories")
+    values = data.get("values")
+    return (
+        isinstance(categories, list)
+        and isinstance(values, list)
+        and bool(categories)
+        and len(categories) == len(values)
+    )
 
 
 def _assets_by_section(formatted: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:

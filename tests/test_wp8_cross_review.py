@@ -81,6 +81,29 @@ class WP8CrossReviewTests(unittest.TestCase):
             {"finding_coverage", "unsupported_viewpoint"},
         )
 
+    def test_advisory_revision_missing_editorial_row_is_warning_only(self) -> None:
+        artifact = copy.deepcopy(self.storyline)
+        removed = artifact["editorial_decisions"].pop()
+        artifact["upstream_revision_requests"].append(
+            {
+                "request_type": "evidence_gap",
+                "finding_refs": [removed["finding_id"]],
+                "reason": "补充数据有助于增强但不影响主线成立",
+                "blocking_level": "advisory",
+            }
+        )
+
+        result = self.reviewer._check_analysis_to_storyline(
+            self.analysis, artifact
+        )
+
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["issues"][0]["severity"], "P1")
+        self.assertEqual(
+            result["issues"][0]["dimension"],
+            "advisory_finding_coverage",
+        )
+
     def test_storyline_to_report_blocks_fidelity_loss(self) -> None:
         artifact = copy.deepcopy(self.report)
         artifact["sections"][0]["section_thesis"] = "改写后的过强结论"
