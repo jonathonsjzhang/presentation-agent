@@ -151,21 +151,28 @@ def _render_visual_asset(doc: Any, asset: dict[str, Any], asset_dir: Path) -> No
         )
     else:
         asset_dir.mkdir(parents=True, exist_ok=True)
-        if asset_type == "chart":
-            png_path = _chart_png(asset, asset_dir / f"{asset['asset_id']}.png")
-        elif asset_type == "matrix":
-            _, png_path = render_svg_with_png_fallback(asset, asset_dir)
-            _matrix_png(asset, png_path)
-        else:
-            _, png_path = render_svg_with_png_fallback(asset, asset_dir)
-        paragraph = doc.add_paragraph()
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = paragraph.add_run()
-        run.add_picture(str(png_path), width=Inches(6.35))
-        caption = doc.add_paragraph()
-        caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = caption.add_run(f"{title} — {asset.get('reader_takeaway', '')}")
-        _set_run_font(run, size=9.5, color="1F4D78", bold=True)
+        try:
+            if asset_type == "chart":
+                png_path = _chart_png(asset, asset_dir / f"{asset['asset_id']}.png")
+            elif asset_type == "matrix":
+                _, png_path = render_svg_with_png_fallback(asset, asset_dir)
+                _matrix_png(asset, png_path)
+            else:
+                _, png_path = render_svg_with_png_fallback(asset, asset_dir)
+            paragraph = doc.add_paragraph()
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = paragraph.add_run()
+            run.add_picture(str(png_path), width=Inches(6.35))
+            caption = doc.add_paragraph()
+            caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = caption.add_run(f"{title} — {asset.get('reader_takeaway', '')}")
+            _set_run_font(run, size=9.5, color="1F4D78", bold=True)
+        except Exception:
+            _add_note_box(
+                doc,
+                title,
+                str(asset.get("reader_takeaway") or f"「{title}」渲染失败，数据格式不兼容，暂以文本呈现。"),
+            )
     _add_asset_trace(doc, asset)
     for caveat in asset.get("caveats") or []:
         _add_note_box(doc, "图表边界", str(caveat), caveat=True)
@@ -407,6 +414,7 @@ def render_formatted_document_v2(
             if sid and h:
                 section_id_map[_normalize_heading(h)] = sid
         markdown_sections = _markdown_sections(markdown)
+        render_warnings: list[str] = []
         for heading, body in markdown_sections:
             _add_heading(doc, heading, 1)
             _render_markdown_body(doc, body)
@@ -415,7 +423,12 @@ def render_formatted_document_v2(
             # Path A: visuals keyed by normalized heading
             # Path B: visual_assets keyed by section_id
             for asset in (section_assets.get(norm) or []) + (section_assets.get(sid) or []):
-                _render_visual_asset(doc, asset, out_dir / f"{file_stem}_assets")
+                try:
+                    _render_visual_asset(doc, asset, out_dir / f"{file_stem}_assets")
+                except Exception as exc:
+                    render_warnings.append(
+                        f"{asset.get('asset_id', '?')} ({asset.get('asset_type', '?')}): {exc}"
+                    )
         _normalize_east_asia_font(doc)
         output_path = out_dir / f"{file_stem}.docx"
         doc.save(output_path)
@@ -426,7 +439,9 @@ def render_formatted_document_v2(
             output_path=str(output_path),
             file_bytes=output_path.stat().st_size,
             unit_count=len(markdown_sections),
-            detail=f"preset={PRESET_NAME}; visuals={len(formatted.get('visuals') or [])}",
+            warnings=render_warnings,
+            detail=f"preset={PRESET_NAME}; visuals={len(formatted.get('visuals') or [])}"
+            + (f"; failed={len(render_warnings)}" if render_warnings else ""),
         )
     except Exception as exc:
         return RenderResult(
