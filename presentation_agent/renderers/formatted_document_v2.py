@@ -18,8 +18,15 @@ from presentation_agent.renderers.report_docx import (
     _style_document,
 )
 
+import re
+
 CAPABILITY_ID = "format.document.v2"
 PRESET_NAME = "standard_business_brief"
+
+
+def _normalize_heading(heading: str) -> str:
+    """Strip 'N. ' / 'N、' prefix so section_heading can match markdown ## lines."""
+    return re.sub(r"^\d+[\.\、\s]+", "", heading).strip()
 
 
 def _validate(formatted: dict[str, Any], report: dict[str, Any]) -> None:
@@ -193,7 +200,8 @@ def _assets_by_section(formatted: dict[str, Any]) -> dict[str, list[dict[str, An
                 "source_section_ids": [visual.get("section_heading")],
                 "source_claim_ids": [],
             }
-            result.setdefault(str(visual.get("section_heading") or ""), []).append(prepared)
+            key = _normalize_heading(str(visual.get("section_heading") or ""))
+            result.setdefault(key, []).append(prepared)
         return result
     ordered_ids = formatted.get("render_plan", {}).get("asset_order") or []
     lookup = {item.get("asset_id"): item for item in formatted.get("visual_assets") or []}
@@ -389,11 +397,24 @@ def render_formatted_document_v2(
         doc.add_page_break()
 
         section_assets = _assets_by_section(formatted)
+        # Build heading → section_id map from report.v1 sections so both
+        # Path A (visuals keyed by section_heading) and Path B (visual_assets
+        # keyed by source_section_ids) resolve correctly.
+        section_id_map: dict[str, str] = {}
+        for sec in report.get("sections") or []:
+            sid = str(sec.get("section_id") or "")
+            h = str(sec.get("heading") or "")
+            if sid and h:
+                section_id_map[_normalize_heading(h)] = sid
         markdown_sections = _markdown_sections(markdown)
         for heading, body in markdown_sections:
             _add_heading(doc, heading, 1)
             _render_markdown_body(doc, body)
-            for asset in section_assets.get(heading, []):
+            norm = _normalize_heading(heading)
+            sid = section_id_map.get(norm, "")
+            # Path A: visuals keyed by normalized heading
+            # Path B: visual_assets keyed by section_id
+            for asset in (section_assets.get(norm) or []) + (section_assets.get(sid) or []):
                 _render_visual_asset(doc, asset, out_dir / f"{file_stem}_assets")
         _normalize_east_asia_font(doc)
         output_path = out_dir / f"{file_stem}.docx"

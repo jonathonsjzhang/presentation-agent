@@ -1028,6 +1028,15 @@ class StepRunner:
         # and deterministic routing fields belong to the runtime envelope.
         data["agent_id"] = self.spec.id
         data["schema"] = self.spec.output_schema
+        # Guard: a gen artifact that is only schema+agent_id (and nothing
+        # substantive) is a model failure — reject it before it propagates.
+        # output_review.json is exempt; reviewers may legitimately return
+        # short verdicts.
+        if filename == "output_gen.json" and len(data) <= 3:
+            raise StepError(
+                f"Worker {self.spec.id} 产出了空 artifact "
+                f"(仅含 schema/agent_id，无实质内容)"
+            )
         if self.spec.id == "format":
             input_data = self._load_input(state)
             target = input_data.get("delivery_target")

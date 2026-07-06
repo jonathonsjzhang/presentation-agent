@@ -12,16 +12,46 @@ class CsvConnector(SuffixConnector):
     suffixes = (".csv",)
 
     def load(self, path: Path, context: ConnectorContext) -> dict[str, Any]:
-        with path.open("r", encoding="utf-8-sig", newline="") as f:
-            sample = f.read(4096)
-            f.seek(0)
+        encodings = ("utf-8-sig", "utf-8", "gb2312", "gbk", "latin-1")
+        last_error: Exception | None = None
+        for enc in encodings:
             try:
-                dialect = csv.Sniffer().sniff(sample) if sample.strip() else csv.excel
-            except csv.Error:
-                dialect = csv.excel
-            reader = csv.DictReader(f, dialect=dialect)
-            rows = [dict(row) for row in reader]
-            columns = list(reader.fieldnames or [])
+                with path.open("r", encoding=enc, newline="") as f:
+                    raw_sample = f.read(4096)
+                    # Skip blank lines for Sniffer — survey exports often
+                    # have empty rows between header blocks
+                    sample = "\n".join(
+                        line for line in raw_sample.splitlines() if line.strip()
+                    )
+                    f.seek(0)
+                    try:
+                        dialect = (
+                            csv.Sniffer().sniff(sample) if sample.strip()
+                            else csv.excel
+                        )
+                    except csv.Error:
+                        dialect = csv.excel
+                    reader = csv.DictReader(f, dialect=dialect)
+                    rows: list[dict[str, str]] = []
+                    for row in reader:
+                        try:
+                            cleaned = {
+                                k: v for k, v in row.items() if k is not None
+                            }
+                            if cleaned:
+                                rows.append(cleaned)
+                        except (csv.Error, ValueError):
+                            # Row with field-count mismatch (survey artifact) — skip
+                            continue
+                    columns = list(reader.fieldnames or [])
+                break
+            except (UnicodeDecodeError, UnicodeError) as exc:
+                last_error = exc
+                continue
+        else:
+            raise IOError(
+                f"无法以任何已知编码读取 {path}: {last_error}"
+            )
 
         return {
             "topic": path.stem,
