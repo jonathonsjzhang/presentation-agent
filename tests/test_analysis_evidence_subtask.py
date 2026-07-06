@@ -360,17 +360,20 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
             (task_dir / "handoff" / "instruction_review.md").exists()
         )
         review = read_json(task_dir / "review_round_0.json")
-        self.assertEqual(review["reviewer"], "schema_gate_only")
+        self.assertEqual(
+            review["reviewer"],
+            "schema_gate_only+schema_advisory",
+        )
         self.assertEqual(review["objections"], [])
 
-    def test_open_schema_p0_is_blocked_at_revision_limit(self) -> None:
+    def test_worker_schema_errors_are_advisory_in_loop_first_mode(self) -> None:
         runner, task_dir = self._runner({"analysis_objective": "test"})
         runner.max_revision_rounds = 0
         generation = runner.prepare()
         artifact = json.loads(
             (FIXTURES / "analysis.v1.valid.json").read_text(encoding="utf-8")
         )
-        artifact.pop("findings")
+        artifact["legacy_pages"] = []
         write_json(Path(generation["output_path"]), artifact)
         review = runner.commit()
         write_json(Path(review["output_path"]), {"objections": []})
@@ -378,9 +381,10 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         done = runner.commit()
 
         state = read_json(task_dir / "run_state.json")
-        self.assertEqual(done["status"], "blocked")
-        self.assertEqual(state["next_action"], "return_open_p0_to_manager")
-        self.assertTrue(state["p0_open"])
+        self.assertEqual(done["status"], "pending_human_review")
+        self.assertEqual(state["next_action"], "await_human_decision")
+        self.assertFalse(state["p0_open"])
+        self.assertTrue(state["p1_open"])
 
     def test_default_mode_still_prepares_independent_reviewer(self) -> None:
         runner, _ = self._runner({"analysis_objective": "test"})

@@ -5,6 +5,7 @@
     "v0_3": {
       "status": "active",
       "activation": "default_user_entry",
+      "schema_gate_mode": "advisory",
       "contract_frozen_at": "2026-07-02",
       "activated_at": "2026-07-05",
       "manager_charter_schema": "report_charter.v2",
