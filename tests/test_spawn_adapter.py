@@ -64,6 +64,14 @@ class WorkBuddySpawnAdapterTests(unittest.TestCase):
             self.assertEqual(spec["role"], "worker")
             self.assertEqual(spec["invariants"]["max_depth"], 1)
             self.assertEqual(spec["invariants"]["write_scope"], str(task_dir))
+            self.assertEqual(
+                spec["skill_execution"]["mode"],
+                "compiled_inline",
+            )
+            self.assertTrue(
+                spec["skill_execution"]["instruction_embeds_full_skill"]
+            )
+            self.assertIn("ONLY authoritative", spec["prompt"])
 
     def test_reviewer_uses_readonly_explore_type(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -105,6 +113,14 @@ class NativeTerminalSpawnAdapterTests(unittest.TestCase):
             self.assertEqual(spec["sandbox_mode"], "workspace-write")
             self.assertFalse(spec["invariants"]["read_only"])
             self.assertEqual(spec["result_delivery"], "direct_file")
+            self.assertEqual(
+                spec["skill_execution"]["authoritative_contract"],
+                "instruction_path",
+            )
+            self.assertIn(
+                str(task_dir / "handoff" / "instruction_gen.md"),
+                spec["prompt"],
+            )
 
     def test_codex_reviewer_is_read_only_explorer(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

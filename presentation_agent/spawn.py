@@ -312,6 +312,7 @@ class WorkBuddySpawnAdapter(SpawnAdapter):
     def spawn(self, request: SpawnRequest) -> SpawnResult:
         subagent_type = "general-purpose" if request.role == "worker" else "Explore"
         result_delivery = "direct_file" if request.role == "worker" else "host_relay"
+        prompt = _build_cli_prompt(request)
         spec = {
             "host": "workbuddy",
             "subagent_type": subagent_type,
@@ -321,6 +322,8 @@ class WorkBuddySpawnAdapter(SpawnAdapter):
             "instruction_path": str(request.instruction_path),
             "input_path": str(request.input_path),
             "output_path": str(request.output_path),
+            "prompt": prompt,
+            "skill_execution": _skill_execution_contract(request),
             "result_delivery": result_delivery,
             "invariants": {
                 "max_depth": 1,
@@ -339,6 +342,8 @@ class WorkBuddySpawnAdapter(SpawnAdapter):
                 "tool": "Agent",
                 "subagent_type": subagent_type,
                 "result_delivery": result_delivery,
+                "prompt": prompt,
+                "skill_execution": spec["skill_execution"],
                 "invariants": spec["invariants"],
             },
         )
@@ -352,6 +357,7 @@ class ClaudeCodeSpawnAdapter(SpawnAdapter):
     def spawn(self, request: SpawnRequest) -> SpawnResult:
         subagent_type = "general-purpose" if request.role == "worker" else "Explore"
         result_delivery = "direct_file" if request.role == "worker" else "host_relay"
+        prompt = _build_cli_prompt(request)
         spec = {
             "host": "claude_code",
             "tool": "Task",
@@ -362,6 +368,8 @@ class ClaudeCodeSpawnAdapter(SpawnAdapter):
             "instruction_path": str(request.instruction_path),
             "input_path": str(request.input_path),
             "output_path": str(request.output_path),
+            "prompt": prompt,
+            "skill_execution": _skill_execution_contract(request),
             "result_delivery": result_delivery,
             "disallowed_tools": (
                 [] if request.role == "worker" else ["Write", "Edit", "Bash", "NotebookEdit"]
@@ -385,6 +393,8 @@ class ClaudeCodeSpawnAdapter(SpawnAdapter):
                 "subagent_type": subagent_type,
                 "disallowed_tools": spec["disallowed_tools"],
                 "result_delivery": result_delivery,
+                "prompt": prompt,
+                "skill_execution": spec["skill_execution"],
                 "invariants": spec["invariants"],
             },
         )
@@ -399,6 +409,7 @@ class CodexSpawnAdapter(SpawnAdapter):
         native_role = "worker" if request.role == "worker" else "explorer"
         sandbox_mode = "workspace-write" if request.role == "worker" else "read-only"
         result_delivery = "direct_file" if request.role == "worker" else "host_relay"
+        prompt = _build_cli_prompt(request)
         spec = {
             "host": "codex",
             "tool": "spawn_agent",
@@ -411,6 +422,8 @@ class CodexSpawnAdapter(SpawnAdapter):
             "instruction_path": str(request.instruction_path),
             "input_path": str(request.input_path),
             "output_path": str(request.output_path),
+            "prompt": prompt,
+            "skill_execution": _skill_execution_contract(request),
             "result_delivery": result_delivery,
             "invariants": {
                 "max_depth": 1,
@@ -432,6 +445,8 @@ class CodexSpawnAdapter(SpawnAdapter):
                 "native_role": native_role,
                 "sandbox_mode": sandbox_mode,
                 "result_delivery": result_delivery,
+                "prompt": prompt,
+                "skill_execution": spec["skill_execution"],
                 "invariants": spec["invariants"],
             },
         )
@@ -502,8 +517,28 @@ def _build_cli_prompt(request: SpawnRequest) -> str:
         f"(it embeds the full SKILL.md role, workflow and output contract) and the "
         f"task input at {request.input_path}. Produce the contract-compliant JSON "
         f"and write it (a single valid JSON object, no markdown fences) to "
-        f"{request.output_path}. Confine all writes to {request.task_dir}."
+        f"{request.output_path}. The instruction package is the ONLY authoritative "
+        "source for field names, enum values, required sections, and workflow rules. "
+        "Do not infer or restate the schema from this dispatch prompt, and ignore any "
+        "conflicting summary outside the instruction package. "
+        f"Confine all writes to {request.task_dir}."
     )
+
+
+def _skill_execution_contract(request: SpawnRequest) -> dict[str, Any]:
+    """Declare how the repository skill reaches the isolated sub-agent."""
+
+    return {
+        "mode": "compiled_inline",
+        "agent_id": request.agent_id,
+        "instruction_embeds_full_skill": True,
+        "instruction_path": str(request.instruction_path),
+        "compiled_package_path": str(
+            request.task_dir / "compiled_skill_package.json"
+        ),
+        "authoritative_contract": "instruction_path",
+        "host_must_forward_prompt_verbatim": True,
+    }
 
 
 class CLISpawnAdapter(SpawnAdapter):
