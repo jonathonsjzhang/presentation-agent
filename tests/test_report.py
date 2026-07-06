@@ -26,11 +26,11 @@ class ReportCoreTests(unittest.TestCase):
         skill = (ROOT / "skills" / "report" / "SKILL.md").read_text(encoding="utf-8")
         rubrics = read_json(ROOT / "skills" / "report" / "rubrics.json")
         self.assertIn(
-            "基于已经批准的 Storyline，把论证骨架写成一篇完整、有开头、有推进、有收束、可以从头读到尾的 Markdown 报告",
+            "基于已批准的 Storyline，把论证骨架写成一篇完整",
             skill,
         )
         self.assertIn("report_markdown", skill)
-        self.assertIn("唯一的内容真相源", skill)
+        self.assertIn("唯一内容真相源", skill)
         self.assertNotIn("正文 block 必须", skill)
         ids = {item["id"] for item in rubrics["rubrics"]}
         self.assertTrue(

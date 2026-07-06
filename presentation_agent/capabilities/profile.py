@@ -144,7 +144,14 @@ def _normalize_value(dimension: str, value: Any, config: Mapping[str, Any]) -> s
         return str(aliases[normalized])
     lowered = normalized.lower()
     lowered_aliases = {str(k).lower(): str(v) for k, v in aliases.items()}
-    return lowered_aliases.get(lowered, lowered)
+    # Exact lowered match
+    if lowered in lowered_aliases:
+        return lowered_aliases[lowered]
+    # Substring match: "腾讯总办" contains "总办" → "exec_office"
+    for alias_key, alias_val in lowered_aliases.items():
+        if alias_key in lowered:
+            return str(alias_val)
+    return lowered
 
 
 def _normalize_delivery_target(value: Any, config: Mapping[str, Any]) -> str:

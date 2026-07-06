@@ -1093,6 +1093,26 @@ class ManagerOrchestrator:
             ):
                 instruction["spawn"] = previous_spawn
                 return
+        # Extra guard: if the output already exists and has meaningful
+        # content, don't re-spawn — the sub-agent already completed.
+        output_path = Path(out_path)
+        if output_path.exists() and output_path.stat().st_size > 0:
+            try:
+                out_data = read_json(output_path, default={})
+                if isinstance(out_data, dict) and any(
+                    isinstance(v, (list, dict)) and len(v) > 0
+                    for v in out_data.values()
+                    if v is not None
+                ):
+                    instruction["spawn"] = {
+                        "adapter": adapter.kind,
+                        "role": "worker",
+                        "status": "completed",
+                        "detail": "output exists — skipping re-spawn",
+                    }
+                    return
+            except Exception:
+                pass
         # _build_spawn_request keys off instruction["step"]; the awaiting_* short
         # circuit only has current_step, which already carries the sub-step name
         # (e.g. "awaiting_review_output" / "awaiting_revise_output").

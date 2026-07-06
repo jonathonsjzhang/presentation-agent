@@ -15,7 +15,10 @@
   ],
   "properties": {
     "topic": {"type": "string", "minLength": 1},
-    "audience": {"type": "string", "minLength": 1},
+    "audience": {
+      "type": "string",
+      "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"]
+    },
     "report_type": {
       "type": "string",
       "enum": ["deep_dive", "business_progress", "quick_sync"]
