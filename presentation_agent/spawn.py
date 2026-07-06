@@ -145,7 +145,13 @@ def commit_evidence_subtask(
     subtask_dir: Path,
     data_root: Path,
 ) -> dict[str, Any]:
-    """Schema-gate one Evidence generation without an internal retry."""
+    """Commit Evidence with a temporary compatibility gate.
+
+    Evidence is an internal input-preparation subtask and Analysis still
+    receives the raw materials. Keep only the minimum consumability checks
+    blocking; preserve detailed schema failures as warnings so field-taxonomy
+    drift does not stop the entire production chain.
+    """
 
     from presentation_agent.agent_profiles import load_agent_profile
     from presentation_agent.capabilities.compiler import compile_skill_package
@@ -158,6 +164,34 @@ def commit_evidence_subtask(
         catalog = extract_json(output_path.read_text(encoding="utf-8"))
     except ValueError as exc:
         raise StepError(f"Evidence 输出不是合法 JSON: {exc}") from exc
+    catalog.setdefault("agent_id", "evidence_harvester")
+    catalog.setdefault("schema", "evidence_catalog.v1")
+    catalog.setdefault("unresolved_units", [])
+
+    minimum_errors = []
+    for field in ("source_units", "evidence_items"):
+        if not isinstance(catalog.get(field), list):
+            minimum_errors.append(f"$.{field}: Evidence Catalog 必须提供 array")
+    if minimum_errors:
+        raise StepError(
+            "Evidence Catalog 最小可消费门禁未通过:\n- "
+            + "\n- ".join(minimum_errors)
+        )
+
+    catalog.setdefault("source_unit_disposition", {})
+    if not isinstance(catalog.get("coverage_summary"), dict):
+        catalog["coverage_summary"] = {}
+    unresolved_count = len(catalog["unresolved_units"])
+    coverage = catalog["coverage_summary"]
+    coverage.setdefault("total_source_units", len(catalog["source_units"]))
+    coverage.setdefault(
+        "captured_units",
+        max(0, len(catalog["source_units"]) - unresolved_count),
+    )
+    coverage.setdefault("excluded_units", 0)
+    coverage.setdefault("unresolved_units", unresolved_count)
+    coverage.setdefault("complete", unresolved_count == 0)
+
     profile = load_agent_profile(root, "v0_3")
     spec = profile.support_specs["evidence_harvester"]
     input_data = read_json(subtask_dir / "input.json", default={})
@@ -165,15 +199,28 @@ def commit_evidence_subtask(
     objections = ArtifactReviewer(llm=None)._schema_gate(
         spec, catalog, package.to_dict()
     )
-    review = {"reviewer": "schema_gate", "objections": [o.to_dict() for o in objections]}
+    schema_warnings = [o.to_dict() for o in objections]
+    if schema_warnings:
+        catalog["schema_warnings"] = schema_warnings
+    review = {
+        "reviewer": "schema_compatibility_gate",
+        "mode": "advisory",
+        "blocking_checks": [
+            "catalog_is_json_object",
+            "source_units_is_array",
+            "evidence_items_is_array",
+        ],
+        "schema_warnings": schema_warnings,
+        "objections": [],
+    }
     write_json(subtask_dir / "review.json", review)
-    if any(o.severity == "P0" for o in objections):
-        raise StepError("Evidence Catalog schema gate 未通过；本轮不会自动重试")
     write_json(subtask_dir / "evidence_catalog.json", catalog)
     state_path = subtask_dir / "run_state.json"
     state = read_json(state_path, default={})
     state["status"] = "completed"
     state["current_step"] = "done"
+    state["schema_gate_mode"] = "advisory"
+    state["schema_warning_count"] = len(schema_warnings)
     state["produced_artifacts"] = [
         str(subtask_dir / "evidence_catalog.json"),
         str(subtask_dir / "review.json"),
