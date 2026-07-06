@@ -122,7 +122,7 @@ def normalize_brief(
     normalized["audience"] = profile.audience
     normalized["report_type"] = profile.report_type
     normalized["output_format"] = profile.output_format
-    normalized["report_profile_version"] = profile.version
+    normalized["report_profile_version"] = selected_profile
     return normalized
 
 

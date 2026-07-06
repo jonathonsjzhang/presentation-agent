@@ -238,6 +238,33 @@ class AgentProfileLoaderTests(unittest.TestCase):
             [],
         )
 
+    def test_manager_planning_instruction_exposes_actual_nested_schemas(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            runtime = ManagerAgentRuntime(
+                ROOT,
+                temp / "run",
+                temp / "data",
+                contract_profile="v0_3",
+            )
+            instruction = runtime.prepare(
+                {"schema": "manager_context.v1"},
+                "planning",
+            )
+            text = Path(instruction["instruction_path"]).read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("### report_charter.v2", text)
+            self.assertIn('"material_inventory"', text)
+            self.assertIn("### execution_plan.v1", text)
+            self.assertIn('"completion_criteria"', text)
+            self.assertIn("### task_packet.v2", text)
+            self.assertIn('"recommendation_granularity"', text)
+            self.assertIn(
+                "report_charter.v2 → analysis.v1 → storyline.v3",
+                text,
+            )
+
     def test_delivery_gate_exposes_structured_choice_and_routes_selection(
         self,
     ) -> None:

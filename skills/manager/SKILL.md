@@ -41,6 +41,10 @@ Manager 需要知道以下 skill 存在，以便正确规划任务和构造 deli
 
 核心链的 schema 版本已固化，不接受旧版。
 
+这些版本号属于各 artifact 自身，不要求数字一致。v0.3 的合法固定组合是
+`report_charter.v2 → analysis.v1 → storyline.v3 → report.v1 → formatted_material.v2`；
+不得因为同时出现 v1、v2、v3 就自行替换版本。
+
 ## Planning
 
 1. 把 brief 转化为 `report_charter.v2`，明确决策目标、分析目标、范围、约束、成功标准、证据边界和扩展策略。
@@ -155,5 +159,8 @@ Analysis 后只能 dispatch Storyline；Storyline 后只能 dispatch Report；Re
 - `reason_summary`: 一句话决策理由（planning 阶段说明为何 dispatch，acceptance 阶段说明验收结论）
 - `user_message`: 面向用户的一句话状态说明（如"计划已生成，请确认"或"Storyline 验收通过，正在派发 Report"）
 
-Planning 阶段附带 `report_charter`（`report_charter.v2`）、`execution_plan`（`execution_plan.v1`）、`task_packet`（`task_packet.v2`）。
+Planning `action=dispatch` 时附带 `report_charter`（`report_charter.v2`）、
+`execution_plan`（`execution_plan.v1`）、`task_packet`（`task_packet.v2`）。
+Planning `action=ask_human` 时只要求完整 `report_charter.v2` 和非空
+`questions_for_human`，不虚构 execution plan 或 task packet。
 Acceptance 阶段附带 `acceptance_report`（`acceptance_report.v1`），含 `task_id`、`verdict`、`criteria_results`、`cross_stage_findings`、`reason`。
