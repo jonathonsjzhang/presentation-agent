@@ -121,7 +121,7 @@ class CrossStageReviewer:
                     advisory_fids.add(str(fid))
 
         outline = upstream.get("report_outline", {}).get("sections", [])
-        report_sections = artifact.get("sections", [])
+        report_sections = artifact.get("section_manifest", [])
         expected = self._ids(outline, "section_id")
         actual = self._ids(report_sections, "section_id")
         if expected != actual:
@@ -138,7 +138,7 @@ class CrossStageReviewer:
             str(row.get("section_id")): row
             for row in report_sections if isinstance(row, dict)
         }
-        changed_theses = []
+        changed_headings = []
         missing_finding_refs: dict[str, list[str]] = {}
         advisory_missing_finding_refs: dict[str, list[str]] = {}
         missing_caveats: dict[str, list[str]] = {}
@@ -148,8 +148,8 @@ class CrossStageReviewer:
                 continue
             section_id = str(source.get("section_id") or "")
             target = report_by_id.get(section_id, {})
-            if source.get("section_thesis") != target.get("section_thesis"):
-                changed_theses.append(section_id)
+            if source.get("heading") != target.get("heading"):
+                changed_headings.append(section_id)
             source_refs = set(map(str, source.get("finding_refs", [])))
             target_refs = set(map(str, target.get("finding_refs", [])))
             missing = source_refs - target_refs
@@ -160,13 +160,17 @@ class CrossStageReviewer:
                     advisory_missing_finding_refs[section_id] = sorted(adv)
                 if non_adv:
                     missing_finding_refs[section_id] = sorted(non_adv)
-            # Caveats may be preserved in the claim registry or methodology
-            # rather than repeated verbatim inside every section.
-            target_text = self._normalized_text(artifact)
-            absent = [
-                caveat for caveat in source.get("caveats", [])
-                if not self._caveat_preserved(str(caveat), target_text)
-            ]
+            # Caveats are declared explicitly in section_manifest.caveats,
+            # inherited verbatim from the storyline outline.  Direct field
+            # comparison replaces the previous full-text scan, which was
+            # fragile when the report_markdown rephrased boundary wording.
+            source_caveats = set(
+                str(c).strip() for c in source.get("caveats", []) if c
+            )
+            target_caveats = set(
+                str(c).strip() for c in target.get("caveats", []) if c
+            )
+            absent = source_caveats - target_caveats
             if absent:
                 # A caveat is "advisory-related" when its text references a
                 # finding ID that belongs to an advisory revision request.
@@ -180,12 +184,12 @@ class CrossStageReviewer:
                 if non_adv_caveats:
                     missing_caveats[section_id] = non_adv_caveats
 
-        if changed_theses or missing_finding_refs or missing_caveats:
+        if changed_headings or missing_finding_refs or missing_caveats:
             issues.append(self._issue(
                 "P0", "storyline_fidelity",
-                "Report 未保真承接 Storyline 的 thesis / claim / caveat",
+                "Report 未保真承接 Storyline 的章节 / claim / caveat",
                 {
-                    "changed_theses": changed_theses,
+                    "changed_headings": changed_headings,
                     "missing_finding_refs": missing_finding_refs,
                     "missing_caveats": missing_caveats,
                 },
@@ -215,15 +219,10 @@ class CrossStageReviewer:
     ) -> dict[str, Any]:
         issues: list[dict[str, Any]] = []
         target = str(artifact.get("delivery_target") or "document")
-        permits_omission = target in {"ppt", "html"}
-        section_ids = self._ids(upstream.get("sections"), "section_id")
+        section_ids = self._ids(upstream.get("section_manifest"), "section_id")
         claim_ids = self._collect_ref_values(
-            upstream.get("sections", []), {"claim_ids"}
+            upstream.get("section_manifest", []), {"claim_ids"}
         )
-        protected_claim_ids = set(map(
-            str,
-            upstream.get("format_handoff", {}).get("protected_claim_ids", []),
-        ))
         omitted_refs = {
             str(row.get("source_ref"))
             for row in artifact.get("omitted_content_register", [])
@@ -243,23 +242,18 @@ class CrossStageReviewer:
         claims_without_unit = claim_ids - unit_claim_refs
         mapping_evidence = {
             "missing_sections": sorted(
-                missing_sections - omitted_refs if permits_omission
-                else missing_sections
+                missing_sections
             ),
             "missing_claims": sorted(
-                (missing_claims - omitted_refs) | (missing_claims & protected_claim_ids)
-                if permits_omission else missing_claims
+                missing_claims
             ),
             "unmapped_unit_sections": sorted(unit_section_refs - section_ids),
             "unmapped_unit_claims": sorted(unit_claim_refs - claim_ids),
             "sections_without_unit": sorted(
-                sections_without_unit - omitted_refs if permits_omission
-                else sections_without_unit
+                sections_without_unit
             ),
             "claims_without_unit": sorted(
-                (claims_without_unit - omitted_refs)
-                | (claims_without_unit & protected_claim_ids)
-                if permits_omission else claims_without_unit
+                claims_without_unit
             ),
         }
         if any(mapping_evidence.values()):
@@ -281,31 +275,8 @@ class CrossStageReviewer:
             and row.get("destination_unit_ids")
         }
         missing_caveats = sorted(set(map(str, protected)) - preserved)
-        # Compare source data values, not incidental digits in IDs or prose
-        # (for example B-04 or a derived “16 percentage points”).
-        number_origins: dict[str, set[str]] = {}
-        for section in upstream.get("sections", []):
-            if not isinstance(section, dict):
-                continue
-            section_id = str(section.get("section_id") or "")
-            for block in section.get("narrative_blocks", []):
-                if not isinstance(block, dict):
-                    continue
-                block_id = str(block.get("block_id") or "")
-                origins = {section_id, block_id} - {""}
-                for key in ("table", "figure_spec"):
-                    item = block.get(key)
-                    if not isinstance(item, dict):
-                        continue
-                    for number in self._numbers(item):
-                        number_origins.setdefault(number, set()).update(origins)
-        report_numbers = set(number_origins)
-        format_numbers = self._numbers({
-            "delivery_units": artifact.get("delivery_units", []),
-            "visual_assets": artifact.get("visual_assets", []),
-        })
         evidence_refs = self._collect_ref_values(
-            upstream.get("sections", []), {"evidence_refs"}
+            upstream.get("section_manifest", []), {"evidence_refs"}
         )
         format_evidence_refs = self._collect_ref_values(
             {
@@ -314,31 +285,22 @@ class CrossStageReviewer:
             },
             {"source_evidence_refs"},
         )
-        missing_numbers = report_numbers - format_numbers
         missing_evidence_refs = evidence_refs - format_evidence_refs
-        if permits_omission:
-            missing_numbers = {
-                number for number in missing_numbers
-                if not (number_origins.get(number, set()) & omitted_refs)
-            }
-            missing_evidence_refs -= omitted_refs
 
         known_omission_refs = (
             section_ids
             | claim_ids
             | evidence_refs
             | self._ids(upstream.get("source_registry"), "source_id")
-            | self._collect_ref_values(upstream.get("sections", []), {"block_id"})
-            | self._ids(upstream.get("appendices"), "appendix_id")
         )
         unknown_omission_refs = omitted_refs - known_omission_refs
         retention = {
-            "missing_numbers": sorted(missing_numbers),
             "missing_evidence_refs": sorted(missing_evidence_refs),
             "unknown_evidence_refs": sorted(
                 format_evidence_refs - evidence_refs
             ),
             "missing_caveats": missing_caveats,
+            "forbidden_omissions": sorted(omitted_refs),
             "unknown_omission_refs": sorted(unknown_omission_refs),
         }
         if any(retention.values()):
@@ -350,7 +312,7 @@ class CrossStageReviewer:
         return self._result(
             "block" if any(row.get("severity") == "P0" for row in issues) else "pass",
             issues,
-            f"report mapping and {target} content retention checked",
+            f"report Markdown mapping and {target} content fidelity checked",
         )
 
     def _load_upstream_artifact(
