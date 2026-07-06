@@ -82,13 +82,13 @@
           },
           "source_section_ids": {
             "type": "array",
-            "minItems": 1,
-            "items": { "type": "string" }
+            "items": { "type": "string" },
+            "description": "内容单元应绑定来源章节；封面、目录和分隔页等结构单元可为空"
           },
           "source_claim_ids": {
             "type": "array",
-            "minItems": 1,
-            "items": { "type": "string" }
+            "items": { "type": "string" },
+            "description": "承载主张的内容单元应绑定 claim；纯结构单元可为空"
           },
           "source_evidence_refs": { "type": "array", "items": { "type": "string" } },
           "caveats": { "type": "array", "items": { "type": "string" } },

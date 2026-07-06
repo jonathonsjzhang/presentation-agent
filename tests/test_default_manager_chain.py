@@ -187,6 +187,48 @@ class DefaultManagerChainTests(unittest.TestCase):
                 "completed",
             )
 
+    def test_planning_without_materials_asks_human_instead_of_dispatching(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            run_dir = temp / "run"
+            brief_path = temp / "brief.json"
+            charter = read_json(FIXTURES / "report_charter.v2.valid.json")
+            charter["material_inventory"] = []
+            charter["blocking_questions"] = ["请提供至少一份可分析的材料。"]
+            write_json(brief_path, charter)
+
+            manager = ManagerOrchestrator(
+                ROOT,
+                run_dir,
+                data_root=temp / "data",
+                spawn_adapter="inline",
+                contract_profile="v0_3",
+            )
+            manager.initialize_run(brief_path)
+            manager.approve(run_mode="full_auto", review_mode="schema_only")
+            planning = manager.prepare()
+            write_json(
+                Path(planning["output_path"]),
+                {
+                    "schema": "manager_decision.v1",
+                    "phase": "planning",
+                    "action": "ask_human",
+                    "reason_summary": "缺少可分析素材",
+                    "report_charter": charter,
+                    "questions_for_human": ["请提供至少一份可分析的材料。"],
+                    "user_message": "需要素材后才能开始 Analysis。",
+                },
+            )
+
+            result = manager.commit_manager()
+
+            self.assertEqual(result["actor"], "human")
+            self.assertEqual(result["gate"], "decision")
+            self.assertEqual(
+                manager.status()["state"]["status"],
+                "awaiting_human_decision",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
