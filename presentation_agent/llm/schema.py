@@ -77,16 +77,32 @@ def _first_balanced_object(text: str) -> str | None:
     return None
 
 
-def validate(data: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
+def validate(
+    data: Any,
+    schema: dict[str, Any],
+    path: str = "$",
+    *,
+    _root_schema: dict[str, Any] | None = None,
+) -> list[str]:
     """Minimal JSON-schema validator covering the subset this project uses.
 
     Supported keywords: type, required, properties, items, enum, const,
-    minItems, maxItems, minLength, maxLength.
+    minItems, maxItems, minLength, maxLength, minimum, maximum,
+    additionalProperties, and local JSON-pointer $ref.
     Unknown keywords are ignored (lenient by design). Returns a list of human
     readable error strings; empty list means valid. No external dependency, so
     the harness stays pure-stdlib.
     """
+    root_schema = _root_schema or schema
     errors: list[str] = []
+
+    ref = schema.get("$ref")
+    if isinstance(ref, str):
+        try:
+            resolved = _resolve_local_ref(root_schema, ref)
+        except ValueError as exc:
+            return [f"{path}: invalid schema reference {ref!r}: {exc}"]
+        return validate(data, resolved, path, _root_schema=root_schema)
 
     if "const" in schema and data != schema["const"]:
         errors.append(f"{path}: must equal {schema['const']!r}, got {data!r}")
@@ -107,7 +123,29 @@ def validate(data: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
             properties = schema.get("properties", {})
             for key, subschema in properties.items():
                 if key in data and isinstance(subschema, dict):
-                    errors.extend(validate(data[key], subschema, f"{path}.{key}"))
+                    errors.extend(
+                        validate(
+                            data[key],
+                            subschema,
+                            f"{path}.{key}",
+                            _root_schema=root_schema,
+                        )
+                    )
+            additional = schema.get("additionalProperties", True)
+            unknown_keys = [key for key in data if key not in properties]
+            if additional is False:
+                for key in unknown_keys:
+                    errors.append(f"{path}: unexpected field '{key}'")
+            elif isinstance(additional, dict):
+                for key in unknown_keys:
+                    errors.extend(
+                        validate(
+                            data[key],
+                            additional,
+                            f"{path}.{key}",
+                            _root_schema=root_schema,
+                        )
+                    )
 
     if expected_type == "array" or isinstance(data, list):
         if isinstance(data, list):
@@ -124,7 +162,14 @@ def validate(data: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
         item_schema = schema.get("items")
         if isinstance(data, list) and isinstance(item_schema, dict):
             for index, item in enumerate(data):
-                errors.extend(validate(item, item_schema, f"{path}[{index}]"))
+                errors.extend(
+                    validate(
+                        item,
+                        item_schema,
+                        f"{path}[{index}]",
+                        _root_schema=root_schema,
+                    )
+                )
 
     if expected_type == "string" and isinstance(data, str):
         min_length = schema.get("minLength")
@@ -138,7 +183,29 @@ def validate(data: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
                 f"{path}: length must be at most {max_length}, got {len(data)}"
             )
 
+    if expected_type in ("integer", "number") and isinstance(data, (int, float)):
+        minimum = schema.get("minimum")
+        maximum = schema.get("maximum")
+        if isinstance(minimum, (int, float)) and data < minimum:
+            errors.append(f"{path}: must be at least {minimum}, got {data}")
+        if isinstance(maximum, (int, float)) and data > maximum:
+            errors.append(f"{path}: must be at most {maximum}, got {data}")
+
     return errors
+
+
+def _resolve_local_ref(root_schema: dict[str, Any], ref: str) -> dict[str, Any]:
+    if not ref.startswith("#/"):
+        raise ValueError("only local '#/...' references are supported")
+    current: Any = root_schema
+    for raw_part in ref[2:].split("/"):
+        part = raw_part.replace("~1", "/").replace("~0", "~")
+        if not isinstance(current, dict) or part not in current:
+            raise ValueError(f"path component {part!r} not found")
+        current = current[part]
+    if not isinstance(current, dict):
+        raise ValueError("reference target must be a schema object")
+    return current
 
 
 def _type_ok(data: Any, expected: str | list[str]) -> bool:

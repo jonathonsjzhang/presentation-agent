@@ -261,6 +261,72 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         self.assertIn("UNIQUE_RAW_MATERIAL_42", instruction)
         self.assertIn("SU-1", instruction)
 
+    def test_evidence_schema_drift_is_advisory_when_catalog_is_consumable(self) -> None:
+        runner, task_dir = self._runner(
+            {
+                "raw_materials": [
+                    {"material_id": "M-1", "text": "source text"}
+                ]
+            }
+        )
+        first = runner.prepare()
+        write_json(
+            Path(first["output_path"]),
+            {
+                "schema": "evidence_catalog.v1",
+                "source_units": [
+                    {
+                        "source_unit_id": "SU-1",
+                        "file": "source.xlsx",
+                        "description": "usage metric",
+                    }
+                ],
+                "evidence_items": [
+                    {
+                        "evidence_id": "E-1",
+                        "type": "quantitative_metric",
+                        "description": "DAU increased",
+                    }
+                ],
+                "source_unit_disposition": [],
+                "coverage_summary": {"total_source_units": 1},
+            },
+        )
+
+        analysis = runner.commit()
+
+        self.assertEqual(analysis["step"], "gen")
+        catalog = read_json(
+            task_dir
+            / "subtasks"
+            / "evidence_harvester"
+            / "evidence_catalog.json"
+        )
+        self.assertEqual(catalog["agent_id"], "evidence_harvester")
+        self.assertEqual(catalog["unresolved_units"], [])
+        self.assertTrue(catalog["schema_warnings"])
+        review = read_json(
+            task_dir / "subtasks" / "evidence_harvester" / "review.json"
+        )
+        self.assertEqual(review["mode"], "advisory")
+        self.assertTrue(review["schema_warnings"])
+
+    def test_evidence_minimum_gate_still_blocks_non_array_payloads(self) -> None:
+        runner, _ = self._runner(
+            {"raw_materials": [{"material_id": "M-1"}]}
+        )
+        first = runner.prepare()
+        write_json(
+            Path(first["output_path"]),
+            {
+                "source_units": {},
+                "evidence_items": [],
+            },
+        )
+
+        with self.assertRaisesRegex(Exception, "最小可消费门禁"):
+            runner.commit()
+
     def test_blocking_unresolved_evidence_returns_analysis_blocked(self) -> None:
         runner, _ = self._runner({"analysis_objective": "test"})
         generation = runner.prepare()

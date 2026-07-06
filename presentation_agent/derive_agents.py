@@ -230,9 +230,31 @@ def derive_all(root: Path) -> list[DerivedFile]:
 
 
 def write_derived(root: Path, derived: list[DerivedFile]) -> list[Path]:
-    """Write derived files to disk, creating parent dirs. Returns written paths."""
+    """Replace generated host files with the active profile projection.
+
+    Only files carrying the auto-generated banner are eligible for deletion;
+    hand-written orchestrators and unrelated host files are preserved.
+    """
 
     written: list[Path] = []
+    desired = {item.path for item in derived}
+    for relative_root in OUTPUT_ROOTS.values():
+        output_root = root / relative_root
+        if not output_root.exists():
+            continue
+        for target in output_root.iterdir():
+            if not target.is_file():
+                continue
+            relative = target.relative_to(root)
+            if relative in desired:
+                continue
+            try:
+                text = target.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            if AUTOGEN_BANNER in text:
+                target.unlink()
+
     for item in derived:
         target = root / item.path
         target.parent.mkdir(parents=True, exist_ok=True)

@@ -97,6 +97,9 @@ class ManagerAgentRuntime:
             "```json",
             json.dumps(schema, ensure_ascii=False, indent=2),
             "```",
+        ])
+        lines.extend(self._nested_schema_reference(phase))
+        lines.extend([
             "",
             "## 输出操作",
             "",
@@ -110,6 +113,40 @@ class ManagerAgentRuntime:
             "instruction_path": str(instruction_path),
             "output_path": str(output_path),
         }
+
+    def _nested_schema_reference(self, phase: str) -> list[str]:
+        """Expose the same nested contracts that read_decision validates.
+
+        manager_decision.v1 intentionally keeps nested payloads as generic
+        objects because their required shape depends on phase/action. Without
+        this reference the model sees a looser contract than the runtime
+        applies at commit time.
+        """
+        names = (
+            ("report_charter.v2", "execution_plan.v1", "task_packet.v2")
+            if phase == "planning"
+            else ("acceptance_report.v1", "task_packet.v2")
+        )
+        lines = [
+            "",
+            "## 嵌套对象 Schema（runtime 提交时使用同一份定义校验）",
+            "",
+            "版本号属于各 artifact 自身，不表示流水线 profile 混用："
+            "`report_charter.v2 → analysis.v1 → storyline.v3 → report.v1 "
+            "→ formatted_material.v2` 是 v0.3 的固定契约组合。",
+        ]
+        for name in names:
+            lines.extend(
+                [
+                    "",
+                    f"### {name}",
+                    "",
+                    "```json",
+                    json.dumps(self._schema(name), ensure_ascii=False, indent=2),
+                    "```",
+                ]
+            )
+        return lines
 
     def _required_fields_reference(self) -> list[str]:
         return [
@@ -1369,6 +1406,9 @@ class ManagerOrchestrator:
         profile = normalize_report_profile(
             profile_source, root=self.root, strict=False
         ).to_dict()
+        if self.contract_profile == "v0_3":
+            profile["version"] = "v0_3"
+            profile["delivery_target"] = profile["output_format"]
         registry = CapabilityRegistry(self.root)
         return {
             "schema": "manager_context.v1",
