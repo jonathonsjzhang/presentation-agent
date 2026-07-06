@@ -17,7 +17,11 @@ from presentation_agent.learning import LearningEventStore
 from presentation_agent.memory import MemoryStore
 from presentation_agent.memory_retrieval import MemoryRetriever
 from presentation_agent.models import AgentSpec, Objection, ReviewReport, StopDecision, now_iso
-from presentation_agent.review import ArtifactReviewer, StopChecker
+from presentation_agent.review import (
+    ArtifactReviewer,
+    StopChecker,
+    apply_schema_gate_mode,
+)
 from presentation_agent.routing import build_routing_policy
 from presentation_agent.skill_package import SkillPackage
 from presentation_agent.skills.base import SkillContext
@@ -90,6 +94,9 @@ class StepRunner:
         self.agent_profile = load_agent_profile(root, requested_profile)
         self.contract_profile = self.agent_profile.contract_profile
         self.config = self.agent_profile.config
+        self.schema_gate_mode = str(
+            self.agent_profile.profile_config.get("schema_gate_mode", "strict")
+        )
         self.specs = {
             **self.agent_profile.specs,
             **self.agent_profile.support_specs,
@@ -519,6 +526,7 @@ class StepRunner:
             reviewer="host_model+schema_gate",
             objections=all_p0 + all_p1,
         )
+        merged = apply_schema_gate_mode(merged, self.schema_gate_mode)
 
         state["p0_open"] = [o.to_dict() for o in merged.p0]
         state["p1_open"] = [o.to_dict() for o in merged.p1]
@@ -571,6 +579,7 @@ class StepRunner:
             self.spec, artifact, self.skill_package.to_dict()
         )
         review = ReviewReport(reviewer="schema_gate_only", objections=objections)
+        review = apply_schema_gate_mode(review, self.schema_gate_mode)
         review_path = self.run_dir / f"review_round_{state['round_index']}.json"
         write_json(review_path, review.to_dict())
         state["produced_artifacts"].append(str(review_path))
@@ -1005,6 +1014,9 @@ class StepRunner:
                 ) from exc
         if not isinstance(data, dict):
             raise StepError("handoff 输出必须是 JSON 对象")
+        if self.schema_gate_mode == "advisory":
+            data.setdefault("agent_id", self.spec.id)
+            data.setdefault("schema", self.spec.output_schema)
         return data
 
     def _write_instruction(
@@ -1121,6 +1133,13 @@ class StepRunner:
             {k: v for k, v in r.items() if k != "machine_check"}
             for r in all_rubrics
             if r.get("id") not in machine_ids
+            and not (
+                self.schema_gate_mode == "advisory"
+                and (
+                    "SCHEMA" in str(r.get("id", "")).upper()
+                    or r.get("dimension") in ("接口", "schema_contract")
+                )
+            )
         ]
         machine_note = (
             f"（以下 rubric 已由确定性机械校验覆盖，无需你重复判断：{sorted(machine_ids)}）"
@@ -1133,6 +1152,12 @@ class StepRunner:
             "## 角色",
             "你是独立审查者，以干净视角逐条对照 rubrics 判断产物质量。",
             "P0 是必须返工的硬伤，P1 是质量改进项。只报真实命中的条目。",
+            (
+                "当前为 loop-first 模式：详细 Schema 偏差由 runtime 记录为 P1，"
+                "不要把字段名、必填字段或枚举偏差重复报告为 P0。"
+                if self.schema_gate_mode == "advisory"
+                else ""
+            ),
             machine_note,
             "",
             "## 审查 rubrics（逐条对照）",

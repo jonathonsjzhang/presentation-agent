@@ -531,6 +531,10 @@ class AgentProfileLoaderTests(unittest.TestCase):
         profile = load_agent_profile(ROOT)
         self.assertEqual(profile.contract_profile, "v0_3")
         self.assertEqual(
+            profile.profile_config["schema_gate_mode"],
+            "advisory",
+        )
+        self.assertEqual(
             [spec.id for spec in profile.ordered_specs],
             ["analysis", "storyline", "report", "format"],
         )

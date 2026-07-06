@@ -13,7 +13,11 @@ from presentation_agent.llm.factory import build_llm_client
 from presentation_agent.memory import MemoryStore
 from presentation_agent.memory_retrieval import MemoryRetriever
 from presentation_agent.models import AgentSpec, StopDecision, now_iso
-from presentation_agent.review import ArtifactReviewer, StopChecker
+from presentation_agent.review import (
+    ArtifactReviewer,
+    StopChecker,
+    apply_schema_gate_mode,
+)
 from presentation_agent.routing import build_routing_policy
 from presentation_agent.skills.base import SkillContext
 from presentation_agent.skills.registry import get_skill
@@ -31,6 +35,9 @@ class LoopRunner:
         self.agent_profile = load_agent_profile(root, contract_profile)
         self.contract_profile = self.agent_profile.contract_profile
         self.config = self.agent_profile.config
+        self.schema_gate_mode = str(
+            self.agent_profile.profile_config.get("schema_gate_mode", "strict")
+        )
         self.specs = self.agent_profile.specs
         self.generate_llm = build_llm_client(root, purpose="generate", provider_override=provider_override)
         self.review_llm = build_llm_client(root, purpose="review", provider_override=provider_override)
@@ -161,6 +168,7 @@ class LoopRunner:
             run_state["current_step"] = "review"
             review = self.reviewer.review(spec, artifact, memory, skill_package.to_dict(),
                                            upstream_artifact=input_data)
+            review = apply_schema_gate_mode(review, self.schema_gate_mode)
             if self.reviewer.last_prompt_budget:
                 run_state.setdefault("prompt_budget", {})[
                     f"review_round_{round_index}"

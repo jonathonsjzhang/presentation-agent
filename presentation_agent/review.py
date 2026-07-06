@@ -38,6 +38,39 @@ _REVIEW_OUTPUT_SCHEMA: dict[str, Any] = {
 }
 
 
+def apply_schema_gate_mode(
+    review: ReviewReport,
+    mode: str,
+) -> ReviewReport:
+    """Downgrade schema-only P0s in loop-first development mode."""
+
+    if mode != "advisory":
+        return review
+    adjusted: list[Objection] = []
+    for objection in review.objections:
+        is_schema = (
+            "schema" in objection.id.lower()
+            or objection.dimension in ("接口", "schema_contract")
+        )
+        if objection.severity == "P0" and is_schema:
+            adjusted.append(
+                Objection(
+                    id=objection.id.replace("P0", "P1", 1),
+                    severity="P1",
+                    dimension=objection.dimension,
+                    message=f"[advisory schema] {objection.message}",
+                    evidence=objection.evidence,
+                    suggestion=objection.suggestion,
+                )
+            )
+        else:
+            adjusted.append(objection)
+    return ReviewReport(
+        reviewer=f"{review.reviewer}+schema_{mode}",
+        objections=adjusted,
+    )
+
+
 class ArtifactReviewer:
     """Three-layer reviewer for any agent.
 
