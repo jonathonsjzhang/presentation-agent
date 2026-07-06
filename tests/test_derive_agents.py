@@ -5,7 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from presentation_agent.derive_agents import derive_all, write_derived
+from presentation_agent.derive_agents import (
+    AUTOGEN_BANNER,
+    derive_all,
+    write_derived,
+)
 from presentation_agent.io import write_json
 
 
@@ -106,6 +110,22 @@ class DeriveAgentsTests(unittest.TestCase):
         self.assertTrue(any("codex/agents/" in r for r in rels))
         self.assertTrue(any("agents.workbuddy/" in r for r in rels))
         self.assertFalse(any(r.endswith("agents/report-builder.md") for r in rels))
+
+    def test_write_removes_only_stale_auto_generated_agents(self) -> None:
+        root = _root()
+        stale = root / ".codex/agents/legacy_worker.md"
+        stale.parent.mkdir(parents=True, exist_ok=True)
+        stale.write_text(
+            f"<!-- {AUTOGEN_BANNER} -->\nlegacy",
+            encoding="utf-8",
+        )
+        hand_written = root / ".codex/agents/custom.md"
+        hand_written.write_text("hand-written", encoding="utf-8")
+
+        write_derived(root, derive_all(root))
+
+        self.assertFalse(stale.exists())
+        self.assertTrue(hand_written.exists())
 
 
 if __name__ == "__main__":
