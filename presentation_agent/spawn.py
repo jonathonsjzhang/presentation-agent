@@ -166,31 +166,38 @@ def commit_evidence_subtask(
         raise StepError(f"Evidence 输出不是合法 JSON: {exc}") from exc
     catalog.setdefault("agent_id", "evidence_harvester")
     catalog.setdefault("schema", "evidence_catalog.v1")
-    catalog.setdefault("unresolved_units", [])
+    if not isinstance(catalog.get("items"), list) and isinstance(
+        catalog.get("evidence_items"), list
+    ):
+        catalog["items"] = [
+            {
+                "id": item.get("evidence_id") or item.get("id") or f"E-{index:03d}",
+                "source_ref": (
+                    (item.get("source_unit_refs") or [None])[0]
+                    or item.get("source_unit_ref")
+                    or "unknown"
+                ),
+                "content": (
+                    item.get("raw_content")
+                    or item.get("normalized_observation")
+                    or item.get("content")
+                    or ""
+                ),
+                **({"type": item["evidence_type"]} if item.get("evidence_type") else {}),
+            }
+            for index, item in enumerate(catalog["evidence_items"], 1)
+            if isinstance(item, dict)
+        ]
+    catalog.setdefault("unresolved", [])
 
     minimum_errors = []
-    for field in ("source_units", "evidence_items"):
-        if not isinstance(catalog.get(field), list):
-            minimum_errors.append(f"$.{field}: Evidence Catalog 必须提供 array")
+    if not isinstance(catalog.get("items"), list):
+        minimum_errors.append("$.items: Evidence Catalog 必须提供 array")
     if minimum_errors:
         raise StepError(
             "Evidence Catalog 最小可消费门禁未通过:\n- "
             + "\n- ".join(minimum_errors)
         )
-
-    catalog.setdefault("source_unit_disposition", {})
-    if not isinstance(catalog.get("coverage_summary"), dict):
-        catalog["coverage_summary"] = {}
-    unresolved_count = len(catalog["unresolved_units"])
-    coverage = catalog["coverage_summary"]
-    coverage.setdefault("total_source_units", len(catalog["source_units"]))
-    coverage.setdefault(
-        "captured_units",
-        max(0, len(catalog["source_units"]) - unresolved_count),
-    )
-    coverage.setdefault("excluded_units", 0)
-    coverage.setdefault("unresolved_units", unresolved_count)
-    coverage.setdefault("complete", unresolved_count == 0)
 
     profile = load_agent_profile(root, "v0_3")
     spec = profile.support_specs["evidence_harvester"]
@@ -207,8 +214,7 @@ def commit_evidence_subtask(
         "mode": "advisory",
         "blocking_checks": [
             "catalog_is_json_object",
-            "source_units_is_array",
-            "evidence_items_is_array",
+            "items_is_array",
         ],
         "schema_warnings": schema_warnings,
         "objections": [],

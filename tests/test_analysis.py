@@ -32,13 +32,11 @@ class AnalysisSkillTests(unittest.TestCase):
         rubric_ids = {rubric["id"] for rubric in self.package.rubrics}
         self.assertTrue(
             {
-                "AN-EVIDENCE-DECISION-001",
-                "AN-FINDING-GROUNDING-001",
-                "AN-SO-WHAT-001",
-                "AN-COUNTER-001",
-                "AN-ALTERNATIVE-001",
-                "AN-CONFIDENCE-001",
-                "AN-SCHEMA-001",
+                "ANALYSIS-DISCOVERY-001",
+                "ANALYSIS-INSIGHT-001",
+                "ANALYSIS-EVIDENCE-001",
+                "ANALYSIS-CHALLENGE-001",
+                "ANALYSIS-CONVERGENCE-001",
             }.issubset(rubric_ids)
         )
 
@@ -51,27 +49,24 @@ class AnalysisSkillTests(unittest.TestCase):
             [],
         )
 
-    def test_fixture_covers_required_analysis_reasoning_fields(self) -> None:
+    def test_fixture_covers_minimal_analysis_submission(self) -> None:
         self.assertTrue(self.artifact["findings"])
         for finding in self.artifact["findings"]:
-            with self.subTest(finding=finding["finding_id"]):
-                self.assertTrue(finding["supporting_evidence"])
-                self.assertIn("counter_evidence", finding)
-                self.assertTrue(finding["alternative_explanations"])
+            with self.subTest(finding=finding["id"]):
+                self.assertTrue(finding["claim"])
+                self.assertTrue(finding["evidence_refs"])
                 self.assertIn(finding["confidence"], {"high", "medium", "low"})
                 self.assertTrue(finding["so_what"])
-                self.assertTrue(finding["decision_relevance"])
-        self.assertTrue(self.artifact["decision_tensions"])
-        self.assertTrue(self.artifact["discussion_points"])
+        self.assertNotIn("viewpoint_candidates", self.schema["properties"])
+        self.assertNotIn("quality_checks", self.schema["properties"])
 
     def test_schema_review_rejects_missing_required_finding_fields(self) -> None:
         for field in (
-            "supporting_evidence",
-            "counter_evidence",
-            "alternative_explanations",
+            "id",
+            "claim",
+            "evidence_refs",
             "confidence",
             "so_what",
-            "decision_relevance",
         ):
             with self.subTest(field=field):
                 invalid = copy.deepcopy(self.artifact)
@@ -85,18 +80,16 @@ class AnalysisSkillTests(unittest.TestCase):
                     errors,
                 )
 
-    def test_machine_review_rejects_empty_grounding_so_what_and_confidence(self) -> None:
+    def test_schema_rejects_empty_grounding_so_what_and_confidence(self) -> None:
         invalid = copy.deepcopy(self.artifact)
         finding = invalid["findings"][0]
-        finding["supporting_evidence"] = []
+        finding["evidence_refs"] = [""]
         finding["so_what"] = ""
         finding["confidence"] = "certain"
-
-        objections = run_machine_checks(invalid, self.package.rubrics)
-        rubric_ids = {objection.id for objection in objections}
-        self.assertIn("P0-AN-FINDING-GROUNDING-001", rubric_ids)
-        self.assertIn("P0-AN-SO-WHAT-001", rubric_ids)
-        self.assertIn("P0-AN-CONFIDENCE-001", rubric_ids)
+        errors = validate(invalid, self.schema)
+        self.assertTrue(any("evidence_refs" in error for error in errors), errors)
+        self.assertTrue(any("so_what" in error for error in errors), errors)
+        self.assertTrue(any("confidence" in error for error in errors), errors)
 
 
 if __name__ == "__main__":

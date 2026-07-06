@@ -162,7 +162,15 @@ class ArtifactReviewer:
 
         schema = (skill_package or {}).get("schemas", {}).get(spec.output_schema)
         if schema:
-            raw_errors = validate(artifact, schema)
+            # The schema is the worker-facing submission contract. Runtime
+            # envelope fields are stamped after generation and are validated
+            # separately above.
+            submission = {
+                key: value
+                for key, value in artifact.items()
+                if key not in {"agent_id", "schema", "delivery_target", "render_result"}
+            }
+            raw_errors = validate(submission, schema)
             deduped = _dedup_validation_errors(raw_errors)
             for index, error in enumerate(deduped, start=1):
                 objections.append(

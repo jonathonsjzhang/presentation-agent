@@ -647,7 +647,7 @@ class StepRunner:
         analysis_blocked = self._analysis_is_blocked(artifact)
         render_result = self._render_deliverable(artifact)
         report_render_blocked = (
-            self._uses_report_content_renderer()
+            self._uses_report_markdown_materializer()
             and not self._report_render_succeeded(render_result)
         )
         format_render_blocked = (
@@ -674,7 +674,7 @@ class StepRunner:
             if p0_blocked
             else "return_blocking_gap_to_manager"
             if analysis_blocked
-            else "retry_report_docx_render"
+            else "retry_report_markdown_materialization"
             if report_render_blocked
             else "retry_format_render"
             if format_render_blocked
@@ -683,7 +683,7 @@ class StepRunner:
         finalize_note = (
             "达到最大返工轮数但仍有 P0，stage blocked"
             if p0_blocked
-            else "Report DOCX 渲染失败，stage blocked"
+            else "Report Markdown 物化失败，stage blocked"
             if report_render_blocked
             else "Format 正式材料渲染失败，stage blocked"
             if format_render_blocked
@@ -732,7 +732,7 @@ class StepRunner:
             or evidence.get("blocking_impact") == "blocking"
         )
 
-    def _uses_report_content_renderer(self) -> bool:
+    def _uses_report_markdown_materializer(self) -> bool:
         return self.contract_profile == "v0_3" and self.spec.id == "report"
 
     def _uses_v03_format_renderer(self) -> bool:
@@ -744,7 +744,7 @@ class StepRunner:
             render_result is not None
             and render_result.status == "rendered"
             and render_result.output_path
-            and str(render_result.output_path).lower().endswith(".docx")
+            and str(render_result.output_path).lower().endswith(".md")
         )
 
     @staticmethod
@@ -812,32 +812,42 @@ class StepRunner:
             asset["render_status"] = "rendered" if succeeded else "error"
 
     def _render_deliverable(self, artifact: dict[str, Any]):
-        """Render v0.3 report or format deliverables.
+        """Materialize v0.3 report manuscripts or render format deliverables.
 
-        - report renders semantic `report.v1` into the content DOCX.
+        - report materializes the canonical `report_markdown` as `report.md`.
         - format renders `formatted_material.v2` into the selected carrier.
 
         Returns a RenderResult, or None when this agent has no deliverable to
         render. Missing optional deps never crash: the RenderResult carries a
         `skipped_missing_dep` status instead.
         """
-        if self._uses_report_content_renderer():
+        if self._uses_report_markdown_materializer():
             try:
-                from presentation_agent.renderers.report_docx import (
-                    render_report_docx,
-                )
+                from presentation_agent.renderers.base import RenderResult
 
-                return render_report_docx(
-                    artifact,
-                    self.run_dir,
-                    file_stem="report",
+                markdown = str(artifact.get("report_markdown") or "")
+                report_file = str(artifact.get("report_file") or "report.md")
+                if report_file != "report.md":
+                    raise ValueError("report.v1 report_file must be report.md")
+                if not markdown.strip():
+                    raise ValueError("report.v1 report_markdown is empty")
+                output_path = self.run_dir / report_file
+                output_path.write_text(markdown.rstrip() + "\n", encoding="utf-8")
+                return RenderResult(
+                    status="rendered",
+                    fmt="markdown",
+                    fidelity="content",
+                    output_path=str(output_path),
+                    file_bytes=output_path.stat().st_size,
+                    unit_count=len(artifact.get("section_manifest") or []),
+                    detail="canonical report manuscript",
                 )
             except Exception as exc:
                 from presentation_agent.renderers.base import RenderResult
 
                 return RenderResult(
                     status="error",
-                    fmt="document",
+                    fmt="markdown",
                     fidelity="content",
                     detail=str(exc),
                 )
@@ -1014,9 +1024,16 @@ class StepRunner:
                 ) from exc
         if not isinstance(data, dict):
             raise StepError("handoff 输出必须是 JSON 对象")
-        if self.schema_gate_mode == "advisory":
-            data.setdefault("agent_id", self.spec.id)
-            data.setdefault("schema", self.spec.output_schema)
+        # Worker schemas describe the model submission only. Artifact identity
+        # and deterministic routing fields belong to the runtime envelope.
+        data["agent_id"] = self.spec.id
+        data["schema"] = self.spec.output_schema
+        if self.spec.id == "format":
+            input_data = self._load_input(state)
+            target = input_data.get("delivery_target")
+            if not target and isinstance(input_data.get("manager_task"), dict):
+                target = input_data["manager_task"].get("delivery_target")
+            data["delivery_target"] = target or "document"
         return data
 
     def _write_instruction(

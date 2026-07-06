@@ -1,49 +1,23 @@
 {
-  "schema": "task_packet.v2",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minimal worker task packet",
   "type": "object",
   "additionalProperties": true,
-  "required": [
-    "task_id",
-    "agent_id",
-    "objective",
-    "input_artifacts",
-    "context",
-    "constraints",
-    "deliverables",
-    "acceptance_criteria",
-    "dependencies",
-    "memory_dimensions",
-    "recommendation_granularity",
-    "unsupported_specificity_policy"
-  ],
+  "required": ["agent_id", "objective", "input_artifacts"],
   "properties": {
-    "schema": {"const": "task_packet.v2"},
-    "task_id": {"type": "string", "minLength": 1},
     "agent_id": {
       "type": "string",
       "enum": ["analysis", "storyline", "report", "format", "qa_preparation", "speaker_script"]
     },
     "objective": {"type": "string", "minLength": 1},
-    "input_artifacts": {"type": "array", "items": {"type": "string"}},
-    "context": {"type": "object"},
-    "constraints": {"type": "array", "items": {"type": "string"}},
-    "deliverables": {"type": "object"},
-    "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
-    "dependencies": {"type": "array", "items": {"type": "string"}},
-    "memory_dimensions": {"type": "array", "items": {"type": "string"}},
-    "recommendation_granularity": {
-      "type": "string",
-      "enum": ["strategic_direction", "strategic_choice", "execution_plan"]
+    "input_artifacts": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
     },
-    "unsupported_specificity_policy": {
-      "type": "string",
-      "enum": ["forbid", "source_backed_only", "allow"]
-    },
-    "delivery_target": {
-      "type": "string",
-      "enum": ["document", "ppt", "html"]
-    },
-    "revision_of": {"type": ["string", "null"]},
-    "revision_feedback": {"type": "array", "items": {"type": "string"}}
+    "revision_feedback": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
   }
 }

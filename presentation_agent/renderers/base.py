@@ -215,12 +215,6 @@ def _render_v2(
             fidelity="formatted",
             detail="formatted_material.v2 renderer requires source report.v1",
         )
-    if not material.get("delivery_units"):
-        return RenderResult(
-            status="no_units",
-            fmt=backend,
-            fidelity="formatted",
-        )
     if backend == "document":
         from presentation_agent.renderers.formatted_document_v2 import (
             render_formatted_document_v2,

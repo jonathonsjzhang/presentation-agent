@@ -1,13 +1,15 @@
 {
-  "schema": "acceptance_report.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minimal acceptance decision",
   "type": "object",
-  "required": ["task_id", "verdict", "criteria_results", "cross_stage_findings", "reason"],
+  "additionalProperties": true,
+  "required": ["verdict", "reason"],
   "properties": {
-    "task_id": {"type": "string"},
     "verdict": {"type": "string", "enum": ["accept", "revise", "blocked"]},
-    "criteria_results": {"type": "array"},
-    "cross_stage_findings": {"type": "array"},
-    "reason": {"type": "string"},
-    "revision_requirements": {"type": "array", "items": {"type": "string"}}
+    "reason": {"type": "string", "minLength": 1},
+    "revision_requirements": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
   }
 }

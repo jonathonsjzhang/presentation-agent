@@ -31,23 +31,23 @@
     {
       "id": "MGR03-P0-005",
       "severity": "P0",
-      "dimension": "建议粒度",
-      "check": "task packet 是否继承 Charter 的建议粒度（recommendation_granularity）和不支持细节政策（unsupported_specificity_policy）。",
-      "fix": "原样继承并拦截无来源的执行化扩写（KPI/owner/预算/时间表）。"
+      "dimension": "边界继承",
+      "check": "Worker 是否能从 report charter 与上游 artifact 获得决策问题、范围和证据边界，而无需 Manager 在 task packet 中复制这些字段。",
+      "fix": "保持 charter 为单一任务定义来源；task packet 只写目标、输入路径和返工意见。"
     },
     {
       "id": "MGR03-P0-006",
       "severity": "P0",
       "dimension": "自包含性",
-      "check": "task_packet 是否自包含——Worker 可能以隔离 sub-agent 执行，context 和 input_artifacts 必须是其获取上游信息的唯一通道。对 format task 尤其需确认 report.v1 的 format_handoff 字段存在。",
+      "check": "task_packet 是否自包含——Worker 可能以隔离 sub-agent 执行，input_artifacts 必须包含所需上游产物。Format 只需取得含 report_markdown 的 report.v1。",
       "fix": "确保每个 task_packet 的 input_artifacts 包含该 Worker 所需的所有上游产物路径，不依赖主对话历史。"
     },
     {
       "id": "MGR03-P1-001",
       "severity": "P1",
       "dimension": "evidence readiness",
-      "check": "planning 阶段是否检查了 evidence readiness：有 Raw Materials 无 Catalog 时，是否在 dispatch analysis 前处理了阻塞（触发 evidence_harvester 或 ask_human）。",
-      "improvement": "不要在 evidence 未就绪时直接 dispatch analysis；无素材时通过 blocking_questions 上报用户。"
+      "check": "planning 阶段是否检查 evidence readiness：有 Raw Materials 无 Catalog 时由 Analysis 触发 evidence_harvester；完全无素材时 ask_human。",
+      "improvement": "不要在完全没有材料时 dispatch Analysis。"
     },
     {
       "id": "MGR03-P1-002",
@@ -66,9 +66,9 @@
     {
       "id": "MGR03-P1-004",
       "severity": "P1",
-      "dimension": "upstream_revision_requests 分级",
-      "check": "Storyline 的 upstream_revision_requests 是否按影响范围分级处理：apex 级 → revise Analysis；supporting/edge 级 → dispatch Report 并标注已知 caveat。",
-      "improvement": "不要把每个 upstream_revision_request 都当管线阻断；Storyline 的设计意图是缩小命题范围而非中断流程。"
+      "dimension": "open issues 分级",
+      "check": "Storyline 的 open_issues 是否按影响范围处理：核心答案无法成立才 revise Analysis；已通过缩窄命题消化的 gap 继续传递。",
+      "improvement": "不要把每个数据缺口都当成管线阻断。"
     },
     {
       "id": "MGR03-P0-007",

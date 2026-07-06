@@ -39,34 +39,18 @@ class SchemaValidatorTests(unittest.TestCase):
             [],
         )
 
-    def test_local_ref_validates_qa_question_shape(self) -> None:
+    def test_qa_schema_validates_minimal_question_shape(self) -> None:
         schema = json.loads(
             (
                 ROOT / "skills/qa_preparation/schemas/qa_pack.v1.json"
             ).read_text(encoding="utf-8")
         )
-        question_schema = {
-            "schema": "qa_pack.v1",
-            "topic": "测试",
-            "audience": "strategy_lead",
-            "format": "document",
-            "question_source_coverage": {},
-            "top_questions": [{}],
-            "page_level_questions": [],
-            "risk_register": [],
-            "data_gaps_to_close": [],
-            "pre_meeting_followups": [],
-            "backup_appendix_requests": [],
-            "defensive_notes": [],
-            "meeting_handling_plan": {},
-            "speaker_script_handoff": {},
-            "answer_tone_guidance": "直接",
-        }
+        question_schema = {"questions": [{}]}
         errors = validate(question_schema, schema)
         self.assertTrue(
             any(
-                "$.top_questions[0]" in error
-                and "missing required field 'question_id'" in error
+                "$.questions[0]" in error
+                and "missing required field 'question'" in error
                 for error in errors
             ),
             errors,

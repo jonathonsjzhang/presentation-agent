@@ -1,72 +1,36 @@
 {
   "rubrics": [
     {
-      "id": "FMT-CORE-001",
-      "severity": "P0",
-      "dimension": "input_fidelity",
-      "criterion": "正式材料不得改变 report.v1 的结论、证据含义、强度或缺口状态；载体重排必须留痕。",
-      "check": "逐单元核对 source_section_ids、source_claim_ids、source_evidence_refs、caveats 与转换记录。",
-      "fix": "恢复上游含义并显式保留 caveat 和 gap。"
+      "id": "FORMAT-HIERARCHY-001",
+      "severity": "P1",
+      "dimension": "信息层级",
+      "criterion": "视觉选择帮助读者更快识别判断、证据和边界，而非制造新的内容结构。",
+      "check": "检查视觉是否对应原稿中最需要比较或强调的步骤。",
+      "fix": "删除无助于理解的视觉。"
     },
     {
-      "id": "FMT-CORE-002",
+      "id": "FORMAT-FIDELITY-001",
       "severity": "P0",
-      "dimension": "formal_material_contract",
-      "criterion": "v0.3 产物必须包含 delivery units、render plan、manifest、来源映射和转换审计。",
-      "check": "检查 formatted_material.v2 必需字段及 delivery_units 是否为空。",
-      "fix": "补齐正式材料契约和 renderer handoff。"
+      "dimension": "内容保真",
+      "criterion": "Format 不改写、不删减、不扩写、不调序 report_markdown。",
+      "check": "确认提交中没有正文副本、压缩或 omission 决策。",
+      "fix": "只保留 visual 选择，把正文交给 renderer。"
     },
     {
-      "id": "FMT-CORE-003",
-      "severity": "P0",
-      "dimension": "source_and_gap_preservation",
-      "criterion": "section、claim、evidence、caveat 与省略内容必须可见且可追溯。",
-      "check": "抽查 delivery_units、compression_decisions、omitted_content_register 与 caveat_preservation。",
-      "fix": "恢复来源和缺口，不得把 provisional 内容伪装为完成。"
+      "id": "FORMAT-VISUAL-001",
+      "severity": "P1",
+      "dimension": "视觉叙事",
+      "criterion": "每个 visual 承担比较、关系或强调任务；换回文字会产生明确的信息损失。",
+      "check": "检查图表类型是否匹配证据要表达的问题。",
+      "fix": "删除装饰图或选择更匹配的表达。"
     },
     {
-      "id": "FMT-CORE-004",
+      "id": "FORMAT-SOURCE-001",
       "severity": "P0",
-      "dimension": "renderer_integrity",
-      "criterion": "Format Core 不接 renderer，所有渲染状态必须为 planned。",
-      "check": "检查 render_result、artifact_manifest 与 visual_assets 不含 rendered/completed。",
-      "fix": "恢复 planned render intent，等待后续 renderer 工作包。"
-    },
-    {
-      "id": "FMT-CAVEAT-001",
-      "severity": "P0",
-      "dimension": "caveat_visibility",
-      "criterion": "影响结论强度的 caveat 和不显著结果必须页面可见，不能只留在内部 gap 或被改写成行动建议。",
-      "check": "对照上游 must_keep_caveats、caveat evidence 与正式单元。",
-      "fix": "恢复可见 caveat，并校准标题和建议强度。"
-    },
-    {
-      "id": "FMT-NO-AMPLIFICATION",
-      "severity": "P0",
-      "dimension": "recommendation_scope",
-      "criterion": "Format 不得新增上游 report.v1 中不存在的 timeline、KPI、owner、预算、组织调整、里程碑或路线图。忠实复现上游已有的执行细节（如 'Q1 KPI 超出预期'）不判定为违规。判断标准：新增 vs 上游已有的 diff。",
-      "check": "对照 report.v1 原文检查 headline、finalized_content、visual_object 中的执行化措辞。正则为初筛信号——命中后需与上游交叉比对，只标记新增内容。",
-      "fix": "删除 Format 新增的执行化细节；忠实复现的上游内容保留。",
-      "machine_check": {
-        "each": "delivery_units",
-        "rules": [
-          {
-            "kind": "forbidden_pattern",
-            "paths": [
-              "headline",
-              "content",
-              "visual_asset_refs"
-            ],
-            "patterns": [
-              "(未来|在)?\\s*\\d+\\s*[-–~至]\\s*\\d+\\s*(周|月|季度|年)(内)?\\s*(完成|推进|实现|上线|评估|落地)",
-              "\\bQ[1-4]\\b.{0,8}(路线图|完成|推进|上线|落地)",
-              "\\bH[12]\\b.{0,8}(路线图|完成|推进|上线|落地)",
-              "路线图|甘特图|里程碑|KPI|负责人|成立.{0,8}(团队|小组)"
-            ],
-            "label": "format execution amplification"
-          }
-        ]
-      }
+      "dimension": "真实性与溯源",
+      "criterion": "每个 visual 都能回到报告真实来源，数据与表述没有被补造或升级。",
+      "check": "逐项核对 section_heading、source_refs 和 data。",
+      "fix": "删除无来源视觉或修正为原稿数据。"
     }
   ]
 }

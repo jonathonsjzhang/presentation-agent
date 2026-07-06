@@ -53,19 +53,15 @@ class V03SchemaContractTests(unittest.TestCase):
         fixture = read_json(FIXTURES / "storyline.v3.valid.json")
         self.assertNotIn("pages", schema["properties"])
         self.assertNotIn("pages", fixture)
-        self.assertTrue(fixture["report_outline"]["sections"])
-        self.assertTrue(
-            all(section["content_units"] for section in fixture["report_outline"]["sections"])
-        )
-        self.assertTrue(fixture["executive_summary"]["core_answer"])
-        self.assertTrue(fixture["message_pyramid"]["apex"]["finding_refs"])
+        self.assertTrue(fixture["sections"])
+        self.assertTrue(all(section["brief"] for section in fixture["sections"]))
+        self.assertTrue(fixture["core_answer"])
 
-    def test_non_claim_report_and_structural_format_units_may_have_empty_refs(self) -> None:
+    def test_report_manifest_may_leave_non_authoritative_refs_empty(self) -> None:
         report_schema = read_json(ROOT / "skills/report/schemas/report.v1.json")
         report = read_json(FIXTURES / "report.v1.valid.json")
-        report["sections"][0]["narrative_blocks"][0]["claim_ids"] = []
-        report["sections"][0]["finding_refs"] = []
-        report["sections"][0]["claim_ids"] = []
+        report["section_manifest"][0]["finding_refs"] = []
+        report["section_manifest"][0]["evidence_refs"] = []
         self.assertEqual(validate(report, report_schema), [])
 
         format_schema = read_json(
@@ -82,28 +78,23 @@ class V03SchemaContractTests(unittest.TestCase):
         report = read_json(FIXTURES / "report.v1.valid.json")
         formatted = read_json(FIXTURES / "formatted_material.v2.valid.json")
 
-        analysis_findings = {item["finding_id"] for item in analysis["findings"]}
-        storyline_findings = set(storyline["message_pyramid"]["apex"]["finding_refs"])
+        analysis_findings = {item["id"] for item in analysis["findings"]}
+        storyline_findings = {
+            ref for section in storyline["sections"] for ref in section["finding_refs"]
+        }
         self.assertLessEqual(storyline_findings, analysis_findings)
-
-        report_findings = {
-            finding_id
-            for section in report["sections"]
-            for finding_id in section["finding_refs"]
+        markdown = report["report_markdown"]
+        self.assertTrue(
+            all(section["heading"] in markdown for section in storyline["sections"])
+        )
+        markdown_headings = {
+            line[3:].strip()
+            for line in markdown.splitlines()
+            if line.startswith("## ")
         }
-        self.assertLessEqual(report_findings, analysis_findings)
-
-        report_sections = {item["section_id"] for item in report["sections"]}
-        report_claims = {
-            claim_id
-            for section in report["sections"]
-            for claim_id in section["claim_ids"]
-        }
-        self.assertEqual(set(formatted["source_section_ids"]), report_sections)
-        self.assertEqual(set(formatted["source_claim_ids"]), report_claims)
-        for unit in formatted["delivery_units"]:
-            self.assertLessEqual(set(unit["source_section_ids"]), report_sections)
-            self.assertLessEqual(set(unit["source_claim_ids"]), report_claims)
+        self.assertTrue(
+            all(visual["section_heading"] in markdown_headings for visual in formatted["visuals"])
+        )
 
     def test_v03_agent_contract_is_the_only_active_api(self) -> None:
         config = read_json(ROOT / "configs/agents.json")
@@ -282,25 +273,15 @@ class FormatCoreCompilationTests(unittest.TestCase):
                 with self.assertRaises(CapabilityError):
                     compile_skill_package(ROOT, self.spec, input_data)
 
-    def test_fixture_records_mapping_and_all_translation_audits(self) -> None:
-        report_sections = {row["section_id"] for row in self.report["sections"]}
-        report_claims = {
-            claim_id
-            for section in self.report["sections"]
-            for claim_id in section["claim_ids"]
-        }
-        self.assertEqual(set(self.formatted["source_section_ids"]), report_sections)
-        self.assertEqual(set(self.formatted["source_claim_ids"]), report_claims)
-        protected = set(self.report["format_handoff"]["protected_caveats"])
-        recorded = {
-            row["source_caveat"] for row in self.formatted["caveat_preservation"]
-        }
-        self.assertEqual(recorded, protected)
-        self.assertTrue(self.formatted["compression_decisions"])
-        self.assertTrue(self.formatted["omitted_content_register"])
-        self.assertEqual(self.formatted["render_result"]["status"], "planned")
+    def test_fixture_records_only_model_judgment_required_for_visuals(self) -> None:
+        self.assertTrue(self.formatted["visuals"])
+        visual = self.formatted["visuals"][0]
+        self.assertEqual(
+            set(visual),
+            {"section_heading", "type", "title", "source_refs", "data"},
+        )
 
-    def test_v2_schema_rejects_missing_translation_audit_fields(self) -> None:
+    def test_v2_schema_only_requires_visuals(self) -> None:
         schema = read_json(
             ROOT
             / "skills"
@@ -308,17 +289,22 @@ class FormatCoreCompilationTests(unittest.TestCase):
             / "schemas"
             / "formatted_material.v2.json"
         )
-        for field in (
-            "source_section_ids",
-            "source_claim_ids",
-            "compression_decisions",
-            "omitted_content_register",
-            "caveat_preservation",
-        ):
-            with self.subTest(field=field):
-                invalid = copy.deepcopy(self.formatted)
-                invalid.pop(field)
-                self.assertTrue(validate(invalid, schema))
+        invalid = copy.deepcopy(self.formatted)
+        invalid.pop("visuals")
+        self.assertTrue(validate(invalid, schema))
+        self.assertEqual(schema["required"], ["visuals"])
+
+    def test_format_schema_does_not_request_content_editing_records(self) -> None:
+        schema = read_json(
+            ROOT
+            / "skills"
+            / "format"
+            / "schemas"
+            / "formatted_material.v2.json"
+        )
+        self.assertNotIn("compression_decisions", schema["properties"])
+        self.assertNotIn("omitted_content_register", schema["properties"])
+        self.assertNotIn("quality_checks", schema["properties"])
 
 
 if __name__ == "__main__":

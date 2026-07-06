@@ -1,245 +1,40 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "schema": "storyline.v3",
-  "description": "Storyline Worker 输出契约：Executive Summary + Message Pyramid + Section Outline + 编辑决策 + 待解决问题。",
+  "title": "Storyline worker submission",
   "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "agent_id",
-    "schema",
-    "topic",
-    "audience",
-    "report_type",
-    "executive_summary",
-    "message_pyramid",
-    "report_outline",
-    "editorial_decisions",
-    "upstream_revision_requests",
-    "open_questions"
-  ],
+  "additionalProperties": true,
+  "required": ["core_answer", "sections"],
   "properties": {
-    "agent_id": { "const": "storyline" },
-    "schema": { "const": "storyline.v3" },
-    "topic": { "type": "string", "minLength": 1 },
-    "audience": {
-      "type": "string",
-      "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"]
-    },
-    "report_type": {
-      "type": "string",
-      "enum": ["deep_dive", "business_progress", "quick_sync"]
-    },
-    "executive_summary": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["context", "core_answer", "key_findings", "implications", "expected_action"],
-      "properties": {
-        "context": { "type": "string", "minLength": 1 },
-        "core_answer": { "type": "string", "minLength": 1 },
-        "key_findings": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["statement", "finding_refs"],
-            "properties": {
-              "statement": { "type": "string", "minLength": 1 },
-              "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
-            }
-          }
-        },
-        "implications": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["statement", "finding_refs"],
-            "properties": {
-              "statement": { "type": "string", "minLength": 1 },
-              "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
-            }
-          }
-        },
-        "expected_action": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["statement", "finding_refs"],
-          "properties": {
-            "statement": { "type": "string", "minLength": 1 },
-            "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
-          }
-        }
-      }
-    },
-    "message_pyramid": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["governing_question", "apex", "supporting_messages"],
-      "properties": {
-        "governing_question": { "type": "string", "minLength": 1 },
-        "apex": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["statement", "finding_refs"],
-          "properties": {
-            "statement": { "type": "string", "minLength": 1 },
-            "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
-          }
-        },
-        "supporting_messages": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "message_id",
-              "statement",
-              "relationship_to_apex",
-              "finding_refs",
-              "evidence_refs"
-            ],
-            "properties": {
-              "message_id": { "type": "string", "minLength": 1 },
-              "statement": { "type": "string", "minLength": 1 },
-              "relationship_to_apex": { "type": "string", "minLength": 1 },
-              "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
-              "evidence_refs": { "type": "array", "items": { "type": "string" } }
-            }
-          }
-        }
-      }
-    },
-    "report_outline": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["sections"],
-      "properties": {
-        "sections": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "section_id",
-              "heading",
-              "section_question",
-              "section_thesis",
-              "content_units",
-              "finding_refs",
-              "evidence_refs",
-              "counterarguments",
-              "caveats",
-              "depends_on",
-              "transition_to"
-            ],
-            "properties": {
-              "section_id": { "type": "string", "minLength": 1 },
-              "heading": { "type": "string", "minLength": 1 },
-              "section_question": { "type": "string", "minLength": 1 },
-              "section_thesis": { "type": "string", "minLength": 1 },
-              "depends_on": {
-                "type": "array",
-                "items": { "type": "string" },
-                "description": "本节的论证依赖哪些前序 section 的结论"
-              },
-              "transition_to": {
-                "type": "string",
-                "description": "本节如何引出下一节"
-              },
-              "content_units": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": [
-                    "content_unit_id",
-                    "purpose",
-                    "statement",
-                    "finding_refs",
-                    "evidence_refs",
-                    "caveats"
-                  ],
-                  "properties": {
-                    "content_unit_id": { "type": "string", "minLength": 1 },
-                    "purpose": {
-                      "type": "string",
-                      "enum": ["claim", "evidence", "interpretation", "counterargument", "caveat", "decision"]
-                    },
-                    "statement": { "type": "string", "minLength": 1 },
-                    "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
-                    "evidence_refs": { "type": "array", "items": { "type": "string" } },
-                    "caveats": { "type": "array", "items": { "type": "string" } }
-                  }
-                }
-              },
-              "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
-              "evidence_refs": { "type": "array", "items": { "type": "string" } },
-              "counterarguments": { "type": "array", "items": { "type": "string" } },
-              "caveats": { "type": "array", "items": { "type": "string" } }
-            }
-          }
-        }
-      }
-    },
-    "editorial_decisions": {
+    "core_answer": {"type": "string", "minLength": 1},
+    "sections": {
       "type": "array",
       "minItems": 1,
-      "description": "每个 Analysis finding 的编辑去向。合并了原 appendix_plan、kill_list 和 finding_coverage。",
       "items": {
         "type": "object",
-        "additionalProperties": false,
-        "required": ["finding_id", "disposition", "rationale"],
+        "additionalProperties": true,
+        "required": ["heading", "brief", "finding_refs"],
         "properties": {
-          "finding_id": { "type": "string", "minLength": 1 },
-          "disposition": {
-            "type": "string",
-            "enum": ["main_story", "appendix", "omitted"]
-          },
-          "locations": {
+          "heading": {"type": "string", "minLength": 1},
+          "brief": {"type": "string", "minLength": 1},
+          "finding_refs": {
             "type": "array",
-            "items": { "type": "string" },
-            "description": "出现在哪些 section（main_story 时必填）"
-          },
-          "rationale": {
-            "type": "string",
-            "minLength": 1,
-            "description": "编辑决策理由。omitted 时说明为何被砍，appendix 时说明为何不进入主线"
-          },
-          "appendix_detail": {
-            "type": "object",
-            "description": "仅 disposition=appendix 时填写",
-            "additionalProperties": false,
-            "required": ["title", "purpose"],
-            "properties": {
-              "title": { "type": "string", "minLength": 1 },
-              "purpose": { "type": "string", "minLength": 1 },
-              "source_refs": { "type": "array", "items": { "type": "string" } }
-            }
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true
           }
         }
       }
     },
-    "upstream_revision_requests": {
+    "appendix_finding_refs": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["request_type", "finding_refs", "reason", "blocking_level"],
-        "properties": {
-          "request_type": {
-            "type": "string",
-            "enum": ["unsupported_apex", "missing_evidence", "conflicting_findings", "unclear_decision"]
-          },
-          "finding_refs": { "type": "array", "items": { "type": "string" } },
-          "reason": { "type": "string" },
-          "blocking_level": { "type": "string", "enum": ["advisory", "blocking"] }
-        }
-      }
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
     },
-    "open_questions": { "type": "array", "items": { "type": "string" } }
+    "open_issues": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
   }
 }

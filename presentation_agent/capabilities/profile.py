@@ -45,7 +45,8 @@ def normalize_report_profile(
     if is_report_v1:
         metadata = report.get("report_metadata")
         if not isinstance(metadata, Mapping):
-            raise CapabilityError("report.v1 requires report_metadata")
+            charter = data.get("report_charter")
+            metadata = charter if isinstance(charter, Mapping) else {}
         if "output_format" in data or "material_format" in data:
             raise CapabilityError(
                 "report.v1 Format tasks must use delivery_target, not legacy output_format"
@@ -56,7 +57,9 @@ def normalize_report_profile(
                 "Each report.v1 Format task requires exactly one delivery_target"
             )
         values = {
-            "audience": _normalize_value("audience", metadata.get("audience", ""), config),
+            "audience": _normalize_value(
+                "audience", metadata.get("audience", "strategy_lead"), config
+            ),
             "report_type": _normalize_value(
                 "report_type", metadata.get("report_type", "deep_dive"), config
             ),

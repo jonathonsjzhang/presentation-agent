@@ -4,6 +4,19 @@
   "topic": "AI 助手用户留存改善机会",
   "audience": "strategy_lead",
   "report_type": "deep_dive",
+  "core_answer": "优先验证成果形成与复用闭环，同时用对照实验排除自选择。",
+  "sections": [
+    {
+      "heading": "成果保存与回访共同出现，但因果仍待验证",
+      "brief": "用组间差异建立优先级信号，同时明确非随机分组只支持相关性判断。",
+      "finding_refs": ["F-01"]
+    },
+    {
+      "heading": "可复用成果提供了值得优先验证的回访理由",
+      "brief": "用访谈解释可能机制，并收束到需要随机实验验证的方向。",
+      "finding_refs": ["F-01", "F-02"]
+    }
+  ],
   "executive_summary": {
     "context": "当前新用户首周回访不足，需要在价值闭环与提醒触达之间确定优先验证顺序。",
     "core_answer": "优先验证成果形成与复用闭环，同时用对照实验排除自选择。",

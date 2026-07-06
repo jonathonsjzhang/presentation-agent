@@ -67,28 +67,26 @@ class FormattedDocumentV2Tests(unittest.TestCase):
             for text in (
                 "AI 助手用户留存改善机会",
                 "目录",
-                "执行摘要",
+                "Executive Summary",
                 "34%",
-                "非随机分组，不能直接推断因果。",
-                "访谈样本只用于机制探索。",
-                "Section: S-01 | Claim: C-01 | Evidence: E-Q-01",
-                "主张与证据追溯",
+                "Section: 一、成果保存与回访共同出现，但因果仍待验证",
+                "Evidence: E-Q-01",
+                "结论与战略含义",
             ):
                 self.assertIn(text, extracted)
             self.assertTrue(document.inline_shapes)
 
-    def test_rejects_missing_protected_caveat(self) -> None:
+    def test_renderer_does_not_require_worker_generated_caveat_register(self) -> None:
         formatted = load(FORMATTED)
-        formatted["caveat_preservation"] = formatted["caveat_preservation"][:1]
+        formatted.pop("caveat_preservation")
         with tempfile.TemporaryDirectory() as temp_dir:
             result = render_formatted_document_v2(formatted, load(REPORT), Path(temp_dir))
-        self.assertEqual(result.status, "error")
-        self.assertIn("protected report caveat", result.detail)
+        self.assertEqual(result.status, "rendered", result.detail)
 
     def test_empty_chart_falls_back_to_callout(self) -> None:
         formatted = load(FORMATTED)
-        formatted["visual_assets"][0]["asset_type"] = "chart"
-        formatted["visual_assets"][0]["data"] = {
+        formatted["visuals"][0]["type"] = "chart"
+        formatted["visuals"][0]["data"] = {
             "categories": [],
             "values": [],
         }
@@ -100,58 +98,31 @@ class FormattedDocumentV2Tests(unittest.TestCase):
             )
         self.assertEqual(result.status, "rendered", result.detail)
 
-    def test_diagram_matrix_and_callout_use_supplied_data_and_png_fallback(self) -> None:
+    def test_matrix_and_callout_use_supplied_data_and_png_fallback(self) -> None:
         formatted = load(FORMATTED)
         extras = [
             {
-                "asset_id": "VA-DIAGRAM",
-                "asset_type": "diagram",
-                "title": "真实机制链路",
-                "reader_takeaway": "按报告主张展示机制链路。",
-                "data": {"nodes": ["形成成果", "保存成果", "再次复用"]},
-                "source_section_ids": ["S-02"],
-                "source_claim_ids": ["C-02"],
-                "source_evidence_refs": ["E-I-01"],
-                "source_note": "来源：报告机制主张。",
-                "caveats": ["访谈样本只用于机制探索。"],
-                "render_status": "planned",
-            },
-            {
-                "asset_id": "VA-MATRIX",
-                "asset_type": "matrix",
+                "section_heading": "二、可复用成果提供了值得优先验证的回访理由",
+                "type": "matrix",
                 "title": "实验优先级矩阵",
-                "reader_takeaway": "矩阵标签来自输入。",
                 "data": {"items": ["成果复用", "提醒触达"], "x_label": "证据强度", "y_label": "业务价值"},
-                "source_section_ids": ["S-02"],
-                "source_claim_ids": ["C-03"],
-                "source_evidence_refs": ["E-Q-01", "E-I-01"],
-                "source_note": "来源：报告建议。",
-                "caveats": [],
-                "render_status": "planned",
+                "source_refs": ["E-Q-01", "E-I-01"]
             },
             {
-                "asset_id": "VA-CALLOUT",
-                "asset_type": "callout",
+                "section_heading": "二、可复用成果提供了值得优先验证的回访理由",
+                "type": "callout",
                 "title": "实验原则",
-                "reader_takeaway": "控制初始意愿并设置提醒对照。",
                 "data": {},
-                "source_section_ids": ["S-02"],
-                "source_claim_ids": ["C-03"],
-                "source_evidence_refs": ["E-Q-01"],
-                "source_note": "来源：报告建议。",
-                "caveats": [],
-                "render_status": "planned",
+                "source_refs": ["E-Q-01"]
             },
         ]
-        formatted["visual_assets"].extend(extras)
-        formatted["render_plan"]["asset_order"].extend(item["asset_id"] for item in extras)
+        formatted["visuals"].extend(extras)
         with tempfile.TemporaryDirectory() as temp_dir:
             result = render_formatted_document_v2(formatted, load(REPORT), Path(temp_dir))
             self.assertEqual(result.status, "rendered", result.detail)
             asset_dir = Path(temp_dir) / "report_formatted_assets"
-            for stem in ("VA-DIAGRAM", "VA-MATRIX"):
-                self.assertTrue((asset_dir / f"{stem}.svg").is_file())
-                self.assertTrue((asset_dir / f"{stem}.png").is_file())
+            self.assertTrue((asset_dir / "VIS-02.svg").is_file())
+            self.assertTrue((asset_dir / "VIS-02.png").is_file())
 
 
 if __name__ == "__main__":

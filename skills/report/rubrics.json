@@ -1,86 +1,68 @@
 {
-  "version": "v1",
-  "agent_id": "report",
   "rubrics": [
     {
       "id": "REPORT-SCHEMA-001",
       "severity": "P0",
-      "dimension": "schema_contract",
-      "criterion": "产物必须严格符合 report.v1，且不得回退为 pages、page_content 或 material_units。",
-      "check": "校验 agent_id、schema、必填字段、additionalProperties 和 narrative block 类型。",
-      "fix": "按 report.v1 重建结构并删除旧 Page Filling 语义。"
+      "dimension": "submission_contract",
+      "criterion": "模型提交只包含完整 report_markdown；runtime 字段不由作者填写。",
+      "check": "校验 report.v1 submission schema。",
+      "fix": "保留完整原稿，删除模型生成的 metadata、manifest、registry 与 handoff。"
     },
     {
-      "id": "REPORT-UPSTREAM-001",
+      "id": "REPORT-MANUSCRIPT-001",
       "severity": "P0",
-      "dimension": "storyline_fidelity",
-      "criterion": "Executive Summary、章节顺序、thesis、finding refs、counterarguments 与 caveats 必须忠实覆盖 storyline.v3，且不得新增未支持的关键观点。",
-      "check": "逐项对照 storyline executive_summary、report_outline 和 editorial_decisions。",
-      "fix": "恢复上游主张与边界；证据不足时降级强度并记录 gap。"
+      "dimension": "完整报告",
+      "criterion": "report_markdown 是有开头、推进和收束、可独立通读的完整报告，不是提纲或 blocks 拼接。",
+      "check": "脱离上游 artifact 从头到尾通读。",
+      "fix": "重写为连续文章，补齐必要的论证与收束。"
+    },
+    {
+      "id": "REPORT-STRUCTURE-001",
+      "severity": "P0",
+      "dimension": "写作框架",
+      "criterion": "全文由统一分析框架和核心答案统领；标题链形成递进论证，每节只完成一个主要判断。",
+      "check": "只读标题链，检查能否用因此、但问题是、所以连接。",
+      "fix": "重组并列章节，删除偏离核心答案的旁支。"
+    },
+    {
+      "id": "REPORT-REASONING-001",
+      "severity": "P0",
+      "dimension": "推导分析",
+      "criterion": "每节完成判断—证据—解释—含义闭环；因果表述有对照或识别依据。",
+      "check": "检查数字后是否有解释、节间是否累进、因果判断能否回答和谁比。",
+      "fix": "补足推导或将因果降级为相关性。"
+    },
+    {
+      "id": "REPORT-EVIDENCE-001",
+      "severity": "P0",
+      "dimension": "论据充分",
+      "criterion": "关键判断有代表性原始证据，来源、口径、单位和时间窗清楚；异常与替代解释得到处理。",
+      "check": "逐项核对 Storyline/Analysis 与正文证据。",
+      "fix": "修正来源和强度，补充必要边界或删除无支撑判断。"
+    },
+    {
+      "id": "REPORT-DENSITY-001",
+      "severity": "P1",
+      "dimension": "信息密度",
+      "criterion": "每节都有具体 so what，并推进到下一层问题；结尾向上收束而非重复摘要。",
+      "check": "删除段尾后若信息不减，说明落脚点为空。",
+      "fix": "写清决策含义，删除万能收尾。"
     },
     {
       "id": "REPORT-PROSE-001",
-      "severity": "P0",
-      "dimension": "independent_readability",
-      "criterion": "报告必须包含连续正文和完整章节，读者无需 PPT 或上游 artifact 即可理解论证。",
-      "check": "每个核心章节至少包含一个实质 paragraph，并形成主张、证据、解释、影响和边界。",
-      "fix": "把标题同义改写和碎片 bullets 重写为连续论证段落。"
+      "severity": "P1",
+      "dimension": "文字措辞",
+      "criterion": "语言克制、清楚、证据强度匹配，已删除研究过程话语、情绪化形容词与同义反复。",
+      "check": "检查摘要、标题、段首、段尾之间的重复及过强措辞。",
+      "fix": "用中性判断句替代空话和形容词。"
     },
     {
       "id": "REPORT-TRACE-001",
       "severity": "P0",
-      "dimension": "traceability",
-      "criterion": "全部 section、block、claim、finding、evidence 和 source 引用必须闭合且不存在悬空 ID。",
-      "check": "核对 sections.finding_refs、section.claim_ids、narrative_blocks.claim_ids/evidence_refs 与 source_registry；section.claim_ids 必须等于其 blocks 的 claim_ids 去重并集。",
-      "fix": "补齐映射、来源与定位；无法追溯的内容删除或降级为显式假设。"
-    },
-    {
-      "id": "REPORT-CAVEAT-001",
-      "severity": "P0",
-      "dimension": "claim_calibration",
-      "criterion": "影响结论强度的 caveat、assumption、data gap 和 residual uncertainty 必须显式可见，相关性不得改写为因果。",
-      "check": "比对正文措辞、table/figure notes、caveats_and_limits 和 protected caveats。",
-      "fix": "恢复边界、降低结论强度或补充所需证据。"
-    },
-    {
-      "id": "REPORT-CONTENT-001",
-      "severity": "P1",
-      "dimension": "content_completeness",
-      "criterion": "报告应包含 Executive Summary、正文、表格或结构化证据、引用、方法、反方、建议、来源与附录。",
-      "check": "检查各内容区是否存在且承担独立信息任务。",
-      "fix": "补齐缺失内容区，并避免用附录替代正文关键论证。"
-    },
-    {
-      "id": "REPORT-TABLE-001",
-      "severity": "P1",
-      "dimension": "table_quality",
-      "criterion": "表格只用于真实行列数据，列宽、单位、来源和注释完整，正文解释读者应如何解读。",
-      "check": "核对 columns/rows 对齐、source_refs、notes 和相邻 narrative。",
-      "fix": "修正数据结构和来源；普通段落内容改回正文。"
-    },
-    {
-      "id": "REPORT-QUOTE-001",
-      "severity": "P1",
-      "dimension": "citation_quality",
-      "criterion": "引用准确标识 evidence 与 source，个例只用于机制解释或例证，不外推总体比例。",
-      "check": "检查 quote block、evidence refs、claim strength 和 registry locator。",
-      "fix": "补引用定位并收窄推论。"
-    },
-    {
-      "id": "REPORT-NO-AMPLIFICATION",
-      "severity": "P0",
-      "dimension": "recommendation_scope",
-      "criterion": "Report 不得新增上游不存在的 KPI、owner、预算、组织调整、路线图或里程碑。",
-      "check": "检查正文、recommendations、tables、appendices 和 format_handoff。",
-      "fix": "删除执行化扩写，恢复 Storyline 已批准的 action 粒度。"
-    },
-    {
-      "id": "REPORT-HANDOFF-001",
-      "severity": "P1",
-      "dimension": "format_handoff",
-      "criterion": "Format handoff 必须保护关键 caveat 并指出视觉机会，不混入具体 layout 指令。",
-      "check": "核对 protected_caveats 和 visual_opportunities。",
-      "fix": "补齐 caveat 保护边界与视觉机会，并移除载体实现细节。"
+      "dimension": "上游保真",
+      "criterion": "报告遵循 Storyline 的核心答案和章节顺序，不新增无支持事实、KPI、owner、预算或路线图。",
+      "check": "对照 Storyline 与 Analysis 检查结论方向和边界。",
+      "fix": "删除越界内容，恢复证据允许的表述。"
     }
   ]
 }
