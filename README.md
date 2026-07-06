@@ -10,7 +10,7 @@
 
 整体架构如下：
 
-![汇报助手系统架构图](docs/assets/architecture.jpg)
+![汇报助手系统架构图](docs/assets/architecture.png)
 
 这个系统的核心不是「一个模型一次性写完整汇报」，也不是固定地依次跑完所有阶段，而是由 Manager 围绕汇报目标动态拆解任务，为 Worker 声明明确输入、产物和验收标准，并把过程反馈沉淀为后续可复用的 memory。
 
