@@ -1,15 +1,15 @@
 ---
 name: storyline
-description: Turn an approved analysis.v1 artifact into one internally aligned storyline.v3 containing the Executive Summary, message pyramid, section/content-unit report outline, and editorial decisions. Use after Analysis and before Report.
+description: Turn an approved analysis.v1 artifact into one internally aligned storyline.v3 containing the core answer and an ordered report argument. Use after Analysis and before Report.
 ---
 
 # Storyline Core
 
 ## Role
 
-你不是 findings 的排序工。你是故事线的建筑师——把 Analysis 的判断组织成一条能说服目标受众的决策链。
+把 Analysis 的判断组织成一条能说服目标受众的决策链。
 
-你不重读 Raw Materials，不补做 Analysis，不写正文，不分页，不碰图表和版式。
+不重读 Raw Materials，不补做 Analysis，不写正文，不分页，不处理图表和版式。
 
 ---
 
@@ -21,106 +21,118 @@ description: Turn an approved analysis.v1 artifact into one internally aligned s
 
 **三条结构规则：**
 
-1. **概括下层。** 任一层次的论点必须是其下层论点的概括。自检（层级测试）：把所有观点摊开，能否分出主发现 → 子发现 → 支撑发现 → 附录发现四个层级？全部在同一层级 = 罗列，没有结构。
-2. **同一范畴。** 同一组内的论点必须属于同一逻辑范畴。统一分类维度，不能是"市场维度 + 组织维度 + 用户维度"的拼盘。
-3. **逻辑排序。** 同一组内的论点按逻辑顺序排列：演绎（前提→结论）、时间（先→后）、结构（整体→部分）、程度（最重要→次重要），选一种并贯彻。自检（连接词测试）：逐节读 outline，能用"因此""但问题是""所以"连接 → 真正的 storyline；只能用"另外""同时""还有" → 并列堆叠。
+1. **概括下层。** 任一层次的论点必须是其下层论点的概括。自检（层级测试）：把所有观点摊开，能否分出主发现 → 子发现 → 支撑发现 → 附录发现四个层级？全部在同一层级说明只是在罗列，没有结构。
+2. **同一范畴。** 同一组内的论点必须属于同一逻辑范畴。统一分类维度，避免"市场维度 + 组织维度 + 用户维度"式的拼盘。
+3. **逻辑排序。** 同一组内的论点按逻辑顺序排列：演绎（前提→结论）、时间（先→后）、结构（整体→部分）、程度（最重要→次重要），选一种并贯彻。自检（连接词测试）：逐节读 outline，能用"因此""但问题是""所以"串联说明在推进论证；只能用"另外""同时""还有"串联说明在堆叠并列。
 
-三条合在一起保证 MECE——规则 2 保证互斥，规则 1 + finding coverage 保证穷尽。
+三条合在一起保证 MECE——规则 2 保证互斥，规则 1 与完整的问题覆盖保证穷尽。穷尽是思考要求，不等于要求主线收录每个 finding。
 
-### 二、核心主张淬炼
+### 二、核心观点提炼
 
-一个好的 apex 不是 findings 的摘要，而是一个有张力的判断。三个标准：
+好的核心观点不是一个发现列表的摘要，而是一个有信息量的判断。三个标准：
 
 - **一句话可复述。** 受众离开会议室后能凭记忆说出。
-- **包含张力。** 纯描述不是主张。"市场很大"不是 insight；"市场很大，但获客成本 12 个月升了 40%，旧方法正在失效"才是。张力常见来源：有价值但难获取、有空间但不可控、有优势但感知不充分、增长在继续但结构在恶化。
-- **可被反方挑战。** 如果所有人都同意你的 apex，它可能没有信息量。
+- **包含对立面。** 纯描述不是判断。"市场很大"不等于 insight；"市场很大，但获客成本 12 个月上升了 40%，旧方法在失效"才是。对立面常见形态：有价值但难以获取、规模在增长但结构在恶化、有优势但用户感知不足。
+- **可被反方挑战。** 如果所有人都同意你的判断，它可能没有信息量。
 
-**聚焦主线。** apex 的本质是一个范围承诺——它定义了"这份报告回答什么"，也就定义了"什么不在这份报告里"。围绕 One-line Story 展开的每一步，自问：这个观点是在推进主线，还是在分叉到另一条故事？如果一条分支不能最终汇聚回 apex，它就不属于这份报告。
+**聚焦主线。** 核心观点定义了一份报告回答什么，也就定义了它不回答什么。每展开一步，问自己：这个观点在推进主线，还是在分叉到另一条叙事？如果一条分支最终不能汇聚回核心观点，它就不属于这份报告。
 
-**故事有起落。** 好的 storyline 有重点、有悬念、有转折——读者读完后应有 1-3 个强记忆点，而非一片模糊的"有道理"。但记忆点来自洞察的锐度，不来自措辞的音量。严禁浮夸营销口号（如"生死存亡""颠覆式革命""重新定义"），维持战略分析报告的严谨分寸。
+**让故事有重点。** 读完报告后读者应有 1-3 个清晰的记忆点，而非一片模糊的"有道理"。记忆点来自洞察本身，不来自措辞的力度。避免夸张措辞，维持战略分析报告的严谨分寸。
 
-**矛盾前置。** 不要过早进入方案。先建立"为什么原路径不够"——读者需要先感到认知缺口，新判断才有落脚处。
+**先讲矛盾，再讲出路。** 先让读者理解为什么原来的路径不够，新判断才能站住脚。不要跳过问题直接进入方案。
 
-**给方向，不给方案。** 战略分析报告的核心产出是清晰的决策方向——做/不做、优先级、聚焦何人群/何场景——而非具体执行方案。保持公司整体策略视角，expected action 不需要落到 KPI、owner、预算或 by 时间线的路线图。具体方案应在管理层讨论方向后另行制定。
+**给方向，不给方案。** 报告产出的是清晰的决策方向——做/不做、优先级、聚焦何人群/何场景——而非具体执行方案。保持公司整体策略视角，不需要落到 KPI、owner、预算或 by 时间线的路线图。
 
 ### 三、论证构建
 
 金字塔定义了结构，以下原则定义了如何把结构填成有说服力的论证。
 
-- **分解先于分类。** 对分析主题先做内在结构分解（如"时长 = 次数 × 单次时长""增长 = 获客 × 留存 × 回流"），再用分解结果组织 section 顺序。避免按"数据呈现了什么"的视角平铺模块——那是 analyst 的工作方式，不是 storyteller 的。
-- **框架前置。** 统领全篇的分析框架必须尽早出现（通常在前 2-3 节），后续每个 section 的案例和数据必须显式映射回框架。框架不是一次性的概念介绍——读者在任何一页都应该知道"这一页在框架的哪个位置"。切忌把框架埋在最后的讨论页。
-- **论证累进。** 前文结论必须是后文的输入。不是"上一节讲了 A，这一节讲 B"，而是"因为上一节证明了 A，所以这一节在 A 的基础上论证 B"。自检：删掉第 N 节，第 N+1 节的论证是否仍然成立？如果成立，N 节没有为后续做功。
+- **分解先于分类。** 对分析主题先做内在结构分解，再用分解结果组织 section 顺序。避免按"数据呈现了什么"的视角平铺模块。
+- **框架前置。** 统领全篇的分析框架必须尽早出现，后续每个 section 的案例和数据必须显式映射回框架。
+- **论证累进。** 前文结论必须是后文的输入。自检：删掉第 N 节，第 N+1 节的论证是否仍然成立？如果成立，N 节没有为后续做功。
 - **节奏控制。** 每个复杂观点按三层拆——主线层提出判断，展开层解释为什么，证明层用数据/案例支撑。不要把所有证据塞进主线层。
-- **一节一论。** 每个 section 只聚焦一个核心结论。section 内所有 content unit 全部服务于该结论。若出现两个同等重要的结论，拆成两个 section。可佐证但非关键的额外信息进附录。
-- **标题链即故事线。** 每个 `section_thesis` 必须是完整判断句（陈述/议论/疑问），串联所有 section thesis 应形成一条可独立阅读的故事线——读者只读 thesis 就能把握全文逻辑。禁止 `AA: BBBB` 或 `AA——BBBB` 式的标签化标题。
-- **反证紧跟主结论。** 强结论容易被误读时，反证或边界条件必须紧跟该结论出现，不能后置几个章节。等读者接受错误方向再纠正，storyline 会显得摇摆。
+- **一节一论。** 每个 section 只聚焦一个核心结论。若出现两个同等重要的结论，拆成两个 section。可佐证但非关键的额外信息进附录。
+- **标题链即故事线。** 每个 section heading 必须是完整判断句，串联所有 heading 应形成一条可独立阅读的故事线。禁止标签化标题。
+- **反证紧跟主结论。** 强结论容易被误读时，反证或边界条件必须紧跟该结论出现，不能后置几个章节。
 
 ### 四、受众决策链
 
-storyline 的角度不是"我分析了什么"，而是"受众需要回答什么决策问题"。
+从"受众需要回答什么决策问题"的角度组织 story，而非从"我分析了什么"的角度。
 
-- **起点判断：** 受众已知什么？误解了什么？正在做什么决策？storyline 从受众的认知起点出发，不是从零教育。
-- **决策问题链 > 原材料分类：** 不要沿用 input 的分类顺序（人群/竞品/功能/渠道）。围绕决策问题重排——先回答"问题有多严重"，再"根因是什么"，然后"有哪些可行路径"，最后"代价和收益"。
+- **判断起点：** 受众已知什么？误解了什么？正在做什么决策？storyline 从受众的认知起点出发。
+- **决策问题链优先于原材料分类：** 不要沿用 input 的分类顺序。围绕决策问题重排——先回答"问题有多严重"，再"根因是什么"，然后"有哪些可行路径"，最后"代价和收益"。
 
 ---
 
 ## Input authority
 
-- 唯一观点依据是 `analysis.v1.findings[]`，每个引用必须使用真实 `finding_id`。Raw Materials 即使出现在上下文中也不能作为新增观点依据。
-- `viewpoint_candidates` 用于比较可主张方向，但其 `finding_refs` 仍是最终权威。
-- `supporting_evidence`、`counter_evidence`、`alternative_explanations`、`confidence`、`data_gaps` 决定措辞强度和 caveat，不得丢失或升级。低置信度 finding 不得写成普遍事实或确定因果；Analysis 只支持相关性时不得写成因果。
-- `decision_tensions`、`discussion_points`、`open_questions` 用于确定 governing question 与 expected action。
-- `evidence_refs` 只能来自所引 finding 中已声明的 refs。建议和 expected action 必须能追溯到 finding 的 `so_what` 或 `decision_relevance`，不得新增 KPI、owner、预算、时间表或效果承诺。
+- 唯一观点依据是 `analysis.v1.findings[]`，每个引用必须使用真实 `id`。
+- `evidence_refs`、`confidence`、`challenges` 和 `open_issues` 决定措辞强度与 caveat，不得丢失或升级。低置信度 finding 不得写成普遍事实或确定因果。
+- 决策方向必须能追溯到 finding 的 `so_what`，不得新增 KPI、owner、预算、时间表或效果承诺。
 
 ---
 
 ## Workflow
 
-人类分析师写 storyline 只有五步：读懂素材 → 找到那一句话 → 写出 ES 和金字塔 → 排出章节 → 砍掉多余的、检查一致性。你也一样。
+### 1. 理解素材，确定核心观点
 
-### 1. 读懂素材，找到那句话
-通读 Analysis findings。理解 tensions——什么在打架？什么不确定？什么让这个决策难做？
+通读 Analysis 的 findings，理解其中相互冲突的因素、不确定性和决策难点。
 
-然后确定 **Governing Question**（受众真实面对的决策问题，不是分析框架标题）和 **One-line Story**（一句话答案，10 秒内可理解）。如果写不出这句话，说明你还没理解这个故事。必须符合**准则二**的三个标准：可复述、含张力、可被反方挑战。
+确定这份报告要回答的核心问题（Governing Question），并将答案收敛为一句话的 `core_answer`。`core_answer` 必须符合准则二的三个标准：可复述、包含对立面、可被反方挑战。
 
-若关键 finding 冲突、缺证据或 Analysis 处于 blocking 状态——不要往下写，先创建 `upstream_revision_requests`。应选择证据允许的更窄命题。
+若关键 finding 之间存在冲突或证据不足以支撑 `core_answer`，选择证据允许的更窄命题。仍会改变核心观点的缺口写入 `open_issues`。
 
-### 2. 写出 Executive Summary 与 Message Pyramid
-这是一件事的两种写法。ES 是给读者看的半页故事，Pyramid 是给自己的论证树。
+### 2. 撰写 Executive Summary
 
-**ES 按准则一执行层级测试：** 读者能否一眼看到主矛盾、子判断关系、主路径和辅助路径？如果读完还是"有道理但说不出来"，层级测试失败了。
+ES 是报告的开篇，也是一份可独立阅读的完整论证。读者只读 ES 就应能理解整个故事——核心观点是什么、支撑它的关键发现、这些发现推导出了什么业务含义、以及最终指向什么决策方向。
 
-**Pyramid：** `apex.statement` 与 ES `core_answer` 同一命题。supporting messages 按**准则一**做 MECE 分组和逻辑排序。所有 key findings、implications、expected action 带 `finding_refs`。
+撰写要求：
 
-### 3. 排出章节顺序
-从 pyramid 的自然顺序出发，排出 section outline。每节有完整判断句 thesis，标注 `depends_on`（本节论证依赖哪些前序节的结论），写清 `transition_to`（如何引出下一节）。执行**连接词测试**和**论证累进**检查。
+- **总字数不超过 500 字。** ES 是半页故事，不是全篇摘要。
+- **结构完整。** 包含四部分：背景与核心问题 → 核心观点 → 关键发现及其含义 → 决策方向。各部分之间有清晰的因果推进，不能是分块罗列。
+- **观点明确。** 每个关键发现都必须给出 so what——它改变了什么认识、对决策意味着什么。避免只列事实不作判断。
+- **与后续章节一致。** ES 中的每个实质性观点，都必须在后续的 `sections[]` 中有对应的展开章节。不能出现 ES 讲了一条线、正文讲了另一条线的情况。
 
-复杂观点按主线层 → 展开层 → 证明层拆解为 content units。每节只聚焦一个核心结论（**准则三·一节一论**）。thesis 必须是完整句子，串联起来形成可独立阅读的故事线（**准则三·标题链**）。强结论若有重要反证，反证必须紧跟该结论（**准则三·反证紧跟主结论**）。
+ES 写入 `executive_summary` 字段，是最终输出的组成部分。
 
-### 4. 收束编辑决策
-对每个 Analysis finding 做出去向决定：进主线（main_story）、进附录（appendix）、还是砍掉（omitted）。聚焦主线的自然结果——不在 apex 范围内的天然不进主线。统一写入 `editorial_decisions`。
+### 3. 构建 Message Pyramid，排定章节顺序
 
-### 5. 扫一眼，输出
-快速过一遍：
-- ES 和正文是同一套故事线吗？（ES 每个 claim 对应到一个 section，每个主线 section 的 thesis 在 ES 中有概括）
-- ES ↔ apex 同一命题？
-- 每条 supporting message 落到了至少一个 section？
-- 所有 section 的 depends_on 方向正确？
-- 所有观点能追溯到真实 Analysis finding，且置信度匹配？
+基于 ES 的结构，搭建 Message Pyramid——将 `core_answer` 分解为 3-5 条支撑论点。这些论点必须 MECE，按一种逻辑顺序排列。Pyramid 是内部思考工具，不进入最终输出。
 
-严格按 `storyline.v3` schema 输出单个 JSON 对象。
+从 pyramid 的自然顺序出发，排定 `sections[]`。每节只聚焦一个核心结论：
+
+- `heading`：完整判断句，串联所有 heading 应形成可独立阅读的故事线；
+- `brief`：本节要完成的论证动作，包括关键前提、核心论证、必要边界条件、以及对后续章节的推进；
+- `finding_refs`：本节论证所依据的 Analysis finding ID 列表。
+
+### 4. 决定材料的取舍
+
+对每个 Analysis finding 做出去向判断——进入主线、放入附录、或舍弃。仍有查阅价值但不属于主线的，写入 `appendix_finding_refs`。未被主线引用也未进入附录的 finding 视为主动舍弃，不需要逐条填写 disposition 和理由。
+
+### 5. 自检并输出
+
+逐项检查：
+
+- `core_answer` 与 section heading 链是否表达同一套故事？
+- sections 之间是否构成论证上的递进，而非并列分类？
+- 每节是否只服务一个结论？heading 是否均为完整判断句？
+- 所有 `finding_refs` 是否可追溯到真实存在的 Analysis finding，置信度是否匹配？
+- 重要的反证与边界是否已纳入对应章节的 `brief`，或写入 `open_issues`？
+
+按 `storyline.v3` schema 输出单个 JSON 对象。
 
 ---
 
 ## Output
 
-按 `storyline.v3` schema 一次输出：
+提交：
 
-- **Executive Summary** — 结论地图，半页故事，独立可读
-- **Message Pyramid** — apex + 3-5 条 MECE supporting messages
-- **Section Outline** — 每节 thesis + content units + depends_on + transition_to
-- **Editorial Decisions** — 每个 finding 的编辑去向（主线/附录/砍掉）+ 理由；附录条目附带标题和用途
-- **Upstream Revision Requests** — 需要 Analysis 补充或裁定的缺口
-- **Open Questions** — 当前证据无法闭合的议题
+- `executive_summary`
+- `core_answer`
+- `sections[]`：`heading`、`brief`、`finding_refs`
+- `appendix_finding_refs[]`：可选
+- `open_issues[]`：可选
 
-禁止输出 `pages`、`page_no`、`slide`、`leadline`、layout、chart type 或 visual brief。
+Message pyramid、content units、depends_on、transition_to 和全量 editorial decisions 是构建故事线时完成的内部思考，不进入最终输出。
+
+禁止输出 pages、page_no、slide、leadline、layout、chart type 或 visual brief。
