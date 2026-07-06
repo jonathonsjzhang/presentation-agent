@@ -104,7 +104,7 @@ class ManagerAgentRuntime:
             "## 输出操作",
             "",
             f"只写一个严格符合 manager_decision.v1 的 JSON 对象到 `{output_path}`。",
-            f"`phase` 必须为 `{phase}`。不要输出 Markdown、解释或思考过程。",
+            "phase、schema、task_id 和固定执行链由 runtime 管理。不要输出 Markdown、解释或思考过程。",
         ])
         instruction_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return {
@@ -123,7 +123,7 @@ class ManagerAgentRuntime:
         applies at commit time.
         """
         names = (
-            ("report_charter.v2", "execution_plan.v1", "task_packet.v2")
+            ("report_charter.v2", "task_packet.v2")
             if phase == "planning"
             else ("acceptance_report.v1", "task_packet.v2")
         )
@@ -131,9 +131,7 @@ class ManagerAgentRuntime:
             "",
             "## 嵌套对象 Schema（runtime 提交时使用同一份定义校验）",
             "",
-            "版本号属于各 artifact 自身，不表示流水线 profile 混用："
-            "`report_charter.v2 → analysis.v1 → storyline.v3 → report.v1 "
-            "→ formatted_material.v2` 是 v0.3 的固定契约组合。",
+            "这些 schema 只描述本轮需要作出的专业判断；固定流程、ID 和状态由 runtime 生成。",
         ]
         for name in names:
             lines.extend(
@@ -153,21 +151,17 @@ class ManagerAgentRuntime:
             "",
             "## v0.3 planning 契约速查",
             "",
-            "- report_charter 使用 report_charter.v2；不得添加 run_mode 或 output_format。",
-            "- delivery_targets 固定为 [\"document\"]。",
-            "- execution_plan 的主链严格为 analysis → storyline → report → format。",
-            "- 首个 task_packet 必须派发 analysis。",
-            "- task_packet 使用 task_packet.v2，并继承 recommendation_granularity 与 unsupported_specificity_policy。",
-            "- evidence_harvester 是 Analysis 的内部子任务，不得进入 execution_plan。",
+            "- report_charter 只定义任务，不重复固定流程、质量检查或运行状态。",
+            "- runtime 固定执行 analysis → storyline → report → format，不输出 execution_plan。",
+            "- 首个 task_packet 派发 analysis，只写目标、输入引用和必要返工意见。",
+            "- evidence_harvester 是 Analysis 的内部子任务。",
             "- 如 material_inventory 中无任何素材 → 使用 ask_human，不要 dispatch。",
             "- PPT、HTML、QA 和逐字稿只允许在 document 完成后的 delivery options gate 追加。",
             "",
-            "### acceptance_report 必填字段（acceptance 阶段）",
-            "- task_id: 必须等于当前 task_id",
+            "### acceptance_report（acceptance 阶段）",
             "- verdict: accept / revise / blocked",
-            "- criteria_results: array",
-            "- cross_stage_findings: array",
-            "- reason: string",
+            "- reason: 一句话说明决定",
+            "- revision_requirements: 仅在确需返工时填写",
         ]
 
     def read_decision(self, phase: str) -> dict[str, Any]:
@@ -182,20 +176,12 @@ class ManagerAgentRuntime:
             raise StepError("Manager 输出必须是 JSON 对象")
 
         errors = validate(decision, self._schema("manager_decision.v1"))
-        if decision.get("phase") != phase:
-            errors.append(f"$.phase: expected {phase!r}, got {decision.get('phase')!r}")
-
         action = decision.get("action")
         if phase == "planning":
             charter_schema = "report_charter.v2"
             planning_contracts = [("report_charter", charter_schema)]
             if action == "dispatch":
-                planning_contracts.extend(
-                    [
-                        ("execution_plan", "execution_plan.v1"),
-                        ("task_packet", "task_packet.v2"),
-                    ]
-                )
+                planning_contracts.append(("task_packet", "task_packet.v2"))
             for key, schema_name in planning_contracts:
                 value = decision.get(key)
                 if not isinstance(value, dict):
@@ -203,7 +189,6 @@ class ManagerAgentRuntime:
                 else:
                     errors.extend(validate(value, self._schema(schema_name), f"$.{key}"))
             charter = decision.get("report_charter")
-            plan = decision.get("execution_plan")
             packet = decision.get("task_packet")
             if action not in ("dispatch", "ask_human"):
                 errors.append(
@@ -226,18 +211,9 @@ class ManagerAgentRuntime:
                     )
             if action == "dispatch" and (
                 isinstance(charter, dict)
-                and charter.get("delivery_targets") != ["document"]
-            ):
-                errors.append(
-                    "$.report_charter.delivery_targets: v0.3 initial plan must be "
-                    "['document']; PPT/HTML are offered after document delivery"
-                )
-            if action == "dispatch" and (
-                isinstance(charter, dict)
-                and isinstance(plan, dict)
                 and isinstance(packet, dict)
             ):
-                errors.extend(self._v03_plan_errors(charter, plan, packet))
+                errors.extend(self._v03_plan_errors(charter, packet))
         else:
             report = decision.get("acceptance_report")
             if not isinstance(report, dict):
@@ -268,39 +244,27 @@ class ManagerAgentRuntime:
 
         if errors:
             raise StepError("Manager decision 校验失败:\n- " + "\n- ".join(errors))
+        decision["phase"] = phase
+        decision["schema"] = "manager_decision.v1"
+        packet = decision.get("task_packet")
+        if isinstance(packet, dict):
+            packet.setdefault("task_id", f"{phase}-{packet.get('agent_id', 'worker')}")
         return decision
 
     @staticmethod
     def _v03_plan_errors(
         charter: dict[str, Any],
-        plan: dict[str, Any],
-        packet: dict[str, Any],
+        plan_or_packet: dict[str, Any],
+        packet: Optional[dict[str, Any]] = None,
     ) -> list[str]:
+        # Accept the former (charter, execution_plan, packet) call shape while
+        # deliberately ignoring the fixed execution plan.
+        packet = packet or plan_or_packet
         errors: list[str] = []
-        expected = ["analysis", "storyline", "report", "format"]
-        actual = [
-            str(item.get("agent_id") or "")
-            for item in plan.get("tasks", [])
-            if isinstance(item, dict)
-        ]
-        if actual != expected:
-            errors.append(
-                "$.execution_plan.tasks: v0.3 canonical stages must be exactly "
-                f"{expected}, got {actual}"
-            )
         if packet.get("agent_id") != "analysis":
             errors.append(
                 "$.task_packet.agent_id: v0.3 initial task must be 'analysis'"
             )
-        for key in (
-            "recommendation_granularity",
-            "unsupported_specificity_policy",
-        ):
-            if packet.get(key) != charter.get(key):
-                errors.append(
-                    f"$.task_packet.{key}: expected inherited value "
-                    f"{charter.get(key)!r}, got {packet.get(key)!r}"
-                )
         return errors
 
     @staticmethod
@@ -1230,7 +1194,33 @@ class ManagerOrchestrator:
             self._save_state(state)
             return self._human_gate_result(state)
 
-        plan = decision["execution_plan"]
+        plan = decision.get("execution_plan") or {
+            "plan_id": "runtime-canonical-chain",
+            "tasks": [
+                {
+                    "task_id": f"runtime-{index}-{agent_id}",
+                    "agent_id": agent_id,
+                    "objective": f"complete {agent_id}",
+                    "dependencies": (
+                        [] if index == 1 else [f"runtime-{index - 1}-{previous}"]
+                    ),
+                    "status": "planned",
+                }
+                for index, (agent_id, previous) in enumerate(
+                    (
+                        ("analysis", ""),
+                        ("storyline", "analysis"),
+                        ("report", "storyline"),
+                        ("format", "report"),
+                    ),
+                    1,
+                )
+            ],
+            "human_gates": ["plan", "delivery_options"],
+            "completion_criteria": ["format(document) delivered"],
+            "generated_by": "runtime",
+        }
+        decision["execution_plan"] = plan
         write_json(self.plan_path, plan)
         state["execution_plan"] = plan
         state["current_actor"] = "human"

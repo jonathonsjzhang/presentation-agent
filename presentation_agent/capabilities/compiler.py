@@ -165,17 +165,14 @@ def _canonical_format_rule(delivery_target: str) -> dict[str, Any]:
         "property": "delivery_target_contract",
         "instruction": (
             f"只转译为 delivery_target={delivery_target}；"
-            f"delivery_units[].unit_type={unit_types[delivery_target]}，"
-            f"render_plan.renderer={renderers[delivery_target]}。"
-            "只生成 planned render intent，不调用 renderer，"
-            "并维护 report section/claim/evidence mapping、压缩、省略和 caveat 记录。"
+            f"目标载体使用 {unit_types[delivery_target]} 结构和 "
+            f"{renderers[delivery_target]}。"
+            "Worker 只选择有证据的 visuals，不调用 renderer；"
+            "runtime 负责默认版式、分页与渲染状态，"
+            "report_markdown 始终是内容真相源。"
         ),
         "context_requirements": [
-            "report_metadata",
-            "sections",
-            "source_registry",
-            "caveats_and_limits",
-            "format_handoff",
+            "report_markdown",
             "delivery_target",
         ],
     }

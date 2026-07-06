@@ -206,11 +206,9 @@ class AgentProfileLoaderTests(unittest.TestCase):
             ),
             [],
         )
-        bad_tasks = list(reversed(tasks))
         self.assertTrue(
             ManagerAgentRuntime._v03_plan_errors(
                 charter,
-                {"tasks": bad_tasks},
                 {**packet, "agent_id": "storyline"},
             )
         )
@@ -257,14 +255,10 @@ class AgentProfileLoaderTests(unittest.TestCase):
             )
             self.assertIn("### report_charter.v2", text)
             self.assertIn('"material_inventory"', text)
-            self.assertIn("### execution_plan.v1", text)
-            self.assertIn('"completion_criteria"', text)
+            self.assertNotIn("### execution_plan.v1", text)
             self.assertIn("### task_packet.v2", text)
-            self.assertIn('"recommendation_granularity"', text)
-            self.assertIn(
-                "report_charter.v2 → analysis.v1 → storyline.v3",
-                text,
-            )
+            self.assertIn('"objective"', text)
+            self.assertIn("固定流程、ID 和状态由 runtime 生成", text)
 
     def test_delivery_gate_exposes_structured_choice_and_routes_selection(
         self,

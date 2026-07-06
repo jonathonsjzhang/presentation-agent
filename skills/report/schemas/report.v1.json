@@ -1,115 +1,15 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "schema": "report.v1",
-  "description": "Report Worker 的 Markdown 原稿契约。完整报告正文只存在于 report_markdown；JSON 仅作为提交信封和下游追溯 sidecar。",
+  "title": "Report worker submission",
   "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "agent_id",
-    "schema",
-    "report_metadata",
-    "report_file",
-    "report_markdown",
-    "section_manifest",
-    "source_registry",
-    "format_handoff"
-  ],
+  "additionalProperties": true,
+  "required": ["report_markdown"],
   "properties": {
-    "agent_id": { "const": "report" },
-    "schema": { "const": "report.v1" },
-    "report_metadata": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["title", "topic", "audience", "report_type"],
-      "properties": {
-        "title": { "type": "string", "minLength": 1 },
-        "topic": { "type": "string", "minLength": 1 },
-        "audience": {
-          "type": "string",
-          "enum": ["board", "exec_office", "strategy_lead", "business_team", "external"]
-        },
-        "report_type": {
-          "type": "string",
-          "enum": ["deep_dive", "business_progress", "quick_sync"]
-        }
-      }
-    },
-    "report_file": {
-      "const": "report.md",
-      "description": "Harness 在 Report 完成时物化的 canonical Markdown 文件名。"
-    },
     "report_markdown": {
       "type": "string",
       "minLength": 500,
-      "description": "完整、连续、可从头读到尾的 Markdown 报告原稿；这是唯一内容真相源。"
-    },
-    "section_manifest": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "section_id",
-          "heading",
-          "markdown_anchor",
-          "finding_refs",
-          "claim_ids",
-          "evidence_refs",
-          "caveats"
-        ],
-        "properties": {
-          "section_id": { "type": "string", "minLength": 1 },
-          "heading": { "type": "string", "minLength": 1 },
-          "markdown_anchor": { "type": "string", "minLength": 1 },
-          "finding_refs": {
-            "type": "array",
-            "items": { "type": "string", "minLength": 1 }
-          },
-          "claim_ids": {
-            "type": "array",
-            "minItems": 1,
-            "items": { "type": "string", "minLength": 1 }
-          },
-          "evidence_refs": {
-            "type": "array",
-            "items": { "type": "string", "minLength": 1 }
-          },
-          "caveats": {
-            "type": "array",
-            "items": { "type": "string", "minLength": 1 },
-            "description": "从 storyline outline 逐字继承的 caveat 文本；cross_review 用此字段直接比对而非扫描 Markdown 全文。"
-          }
-        }
-      }
-    },
-    "source_registry": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["source_id", "citation"],
-        "properties": {
-          "source_id": { "type": "string", "minLength": 1 },
-          "citation": { "type": "string", "minLength": 1 },
-          "locator": { "type": "string" }
-        }
-      }
-    },
-    "format_handoff": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["protected_caveats", "visual_opportunities"],
-      "properties": {
-        "protected_caveats": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "visual_opportunities": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        }
-      }
+      "description": "A complete Markdown report that can be read from beginning to end."
     }
   }
 }

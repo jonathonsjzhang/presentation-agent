@@ -29,6 +29,10 @@
   },
   "findings": [
     {
+      "id": "F-01",
+      "claim": "完成一次可复用成果保存的新用户，其第 7 日回访率高于只完成单轮问答的新用户。",
+      "evidence_refs": ["E-Q-01", "E-Q-02"],
+      "challenges": ["高意愿用户可能同时更愿意保存成果，存在自选择。"],
       "finding_id": "F-01",
       "statement": "完成一次可复用成果保存的新用户，其第 7 日回访率高于只完成单轮问答的新用户。",
       "finding_type": "comparison",
@@ -57,6 +61,10 @@
       "decision_relevance": "支持优先设计成果保存与复用实验。"
     },
     {
+      "id": "F-02",
+      "claim": "访谈中，留存用户反复提到可继续使用上次成果；流失用户更常将产品理解为一次性问答工具。",
+      "evidence_refs": ["E-I-01"],
+      "challenges": ["访谈招募偏差可能放大对成果复用的重视。"],
       "finding_id": "F-02",
       "statement": "访谈中，留存用户反复提到可继续使用上次成果；流失用户更常将产品理解为一次性问答工具。",
       "finding_type": "mechanism",

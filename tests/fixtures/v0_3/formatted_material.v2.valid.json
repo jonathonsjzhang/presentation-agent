@@ -7,6 +7,19 @@
   "source_report_ref": "report.v1.valid.json",
   "source_section_ids": ["S-01", "S-02"],
   "source_claim_ids": ["C-01", "C-02", "C-03"],
+  "visuals": [
+    {
+      "section_heading": "一、成果保存与回访共同出现，但因果仍待验证",
+      "type": "chart",
+      "title": "成果保存组的第 7 日回访率更高",
+      "source_refs": ["E-Q-01"],
+      "data": {
+        "categories": ["保存成果", "仅单轮问答"],
+        "values": [34, 18],
+        "unit": "%"
+      }
+    }
+  ],
   "delivery_units": [
     {
       "unit_id": "DU-01",
@@ -22,7 +35,7 @@
       "source_evidence_refs": ["E-Q-01", "E-Q-02"],
       "caveats": ["非随机分组，不能直接推断因果。"],
       "visual_asset_refs": ["VA-01"],
-      "transformation": "compressed"
+      "transformation": "preserved"
     },
     {
       "unit_id": "DU-02",
@@ -35,7 +48,7 @@
       },
       "source_section_ids": ["S-02"],
       "source_claim_ids": ["C-02", "C-03"],
-      "source_evidence_refs": ["E-I-01", "E-Q-02"],
+      "source_evidence_refs": ["E-I-01"],
       "caveats": ["访谈样本只用于机制探索。"],
       "visual_asset_refs": [],
       "transformation": "preserved"
@@ -60,24 +73,8 @@
       "render_status": "planned"
     }
   ],
-  "compression_decisions": [
-    {
-      "decision_id": "CD-01",
-      "source_refs": ["S-01", "B-01", "B-02"],
-      "action": "compress",
-      "rationale": "把重复的口径说明合并到图注与 caveat callout。",
-      "meaning_preserved": true
-    }
-  ],
-  "omitted_content_register": [
-    {
-      "source_ref": "A-01",
-      "content_summary": "完整分组口径与样本限制",
-      "reason": "正文保留关键 caveat，详细口径移至附录。",
-      "risk": "low",
-      "recoverable_location": "document_appendix_A-01"
-    }
-  ],
+  "compression_decisions": [],
+  "omitted_content_register": [],
   "caveat_preservation": [
     {
       "source_caveat": "非随机分组，不能直接推断因果。",

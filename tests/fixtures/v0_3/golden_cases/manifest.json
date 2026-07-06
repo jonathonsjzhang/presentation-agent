@@ -97,7 +97,7 @@
       "human_minimum_quality": [
         "Executive Summary、正文、方法、反方、caveat、来源与附录完整",
         "结论可追溯到跨来源证据，且不同来源的口径不被混用",
-        "内容版 DOCX 即使没有视觉增强也可独立阅读和评审"
+        "Report 阶段的 Markdown 原稿即使没有视觉增强也可独立阅读和评审"
       ]
     }
   ],

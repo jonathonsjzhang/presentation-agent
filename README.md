@@ -24,8 +24,8 @@
 
 - **四阶段文档优先主链**：`analysis → storyline → report → format`。
 - **Evidence 内部化**：由 Analysis 按确定性三路径调用，不再占用顶层 execution plan。
-- **完整报告语义层**：`report.v1` 保存正文、主张、证据、反方、caveat、来源与附录，并生成内容版 DOCX。
-- **三载体转译**：`formatted_material.v2` 从 Report 转译为精装 DOCX、PPT 或 HTML，记录压缩、遗漏和来源映射。
+- **完整 Markdown 原稿层**：Report 基于已批准 Storyline 写出 canonical `report.md`；Worker 只提交 `report_markdown`。
+- **三载体格式化**：Format Worker 只选择必要视觉；runtime 在不重写、不删减、不调序原稿的前提下排版为 DOCX、PPT 或 HTML。
 - **单一活动契约**：v0.3 是唯一运行 profile，run state 会校验契约版本，避免错误恢复。
 - **扩展 gate**：QA list 与逐字稿移至核心材料完成之后。
 
@@ -57,12 +57,12 @@
 
 | 类型 | Agent | 主要职责 | 核心产物 |
 |---|---|---|---|
-| 控制面 | Manager | 定义任务、规划依赖、派发 Worker、验收、返工和完结 | Report charter、execution plan、task packet、acceptance report |
+| 控制面 | Manager | 定义任务、派发 Worker、验收、返工和完结；固定 execution plan 由 runtime 生成 | Report charter、task packet、acceptance decision |
 | 内部子任务 | Evidence Harvester | 读取、拆分、提取和索引材料；不形成战略判断 | Evidence Catalog |
 | Worker | Analysis（观点发现与收敛） | 通读参考材料，发散可能的发现、解释与假设，经过比较、追问和证据检验后，收敛成一组重要且站得住的发现与观点；负责把材料想明白，但不决定汇报的唯一主线 | `analysis.v1` |
 | Worker | Storyline（故事线设计） | 面向汇报目标和受众，从 Analysis 的观点中选择核心主张，取舍信息并组织成一条递进、可说服的论证链；负责把观点讲成故事，但不重新分析材料或撰写完整正文 | `storyline.v3` |
-| Worker | Report（正式写作） | 沿已批准的故事线，把论点展开为完整、严肃、可独立阅读的战略分析报告，补足解释、证据、反方、边界与衔接，但不新增上游未支持的观点 | `report.v1`、内容版 DOCX |
-| Worker | Format（载体化表达） | 在不改变核心判断和证据边界的前提下，把完整报告转译为目标载体，通过信息层级、图表、框架图和版式提升理解效率与交付质量 | `formatted_material.v2`、DOCX/PPTX/HTML |
+| Worker | Report（正式写作） | 基于已批准 Storyline，把论证骨架写成一篇完整、有开头、有推进、有收束、可以从头读到尾的 Markdown 报告 | `report.v1`、`report.md` |
+| Worker | Format（载体化表达） | 以 `report.md` 为内容真相源，只改变标题层级、字体、间距、分页、图表、表格和载体实现，不重写或删减报告 | `formatted_material.v2`、DOCX/PPTX/HTML |
 | 可选扩展 | Q&A 梳理 | 核心材料完成后，按需预判追问与回答策略 | Q&A pack |
 | 可选扩展 | 逐字稿 | 核心材料完成后，按需生成汇报话术和时间节奏 | Speaker script |
 
@@ -173,13 +173,12 @@ Renderers 是 skill 可调用的材料生成能力，位于 `presentation_agent/
 
 当前支持：
 
-- `report_docx.py`：把 `report.v1` 渲染为可独立评审的内容版 Word 报告。
 - `formatted_document_v2.py`：把 Report 与 `formatted_material.v2` 渲染为精装 Word 报告。
 - `ppt.py`：把 Format delivery units 渲染为 PPT。
 - `html.py`：把 Format delivery units 渲染为 HTML。
 - `base.py`：定义统一 `RenderResult` 和渲染入口。
 
-Report 先生成内容正确的 DOCX；Format 再从同一语义报告生成精装 DOCX、PPT 或 HTML。项目中还包含 `presentation_agent/vendor/mck_ppt/`，用于提供 PPT 布局、风格常量、deck builder 和 QA 能力。
+Report 先物化内容正确的 `report.md`；Format 再忠实地把同一原稿排版为 DOCX、PPT 或 HTML。项目中还包含 `presentation_agent/vendor/mck_ppt/`，用于提供 PPT 布局、风格常量、deck builder 和 QA 能力。
 
 这一层是系统从“结构化中间产物”走向“可交付材料”的关键。
 

@@ -1,127 +1,44 @@
 {
-  "version": "v1",
-  "agent_id": "analysis",
   "rubrics": [
     {
-      "id": "AN-EVIDENCE-DECISION-001",
-      "severity": "P0",
-      "dimension": "evidence_readiness",
-      "criterion": "Evidence 决策必须严格匹配三路规则：复用已有 Catalog；有 Raw Materials 且无 Catalog 时调用一次；无材料时记录 evidence gap。",
-      "check": "交叉核对 material_readiness、evidence_execution.invoked、invocation_reason、evidence_catalog_ref 和 data_gaps。",
-      "fix": "重新执行确定性 Evidence 决策，并删除复杂度、预算或多轮重试逻辑。"
-    },
-    {
-      "id": "AN-EVIDENCE-ONCE-002",
-      "severity": "P0",
-      "dimension": "evidence_readiness",
-      "criterion": "单个 Analysis round 最多调用一次 Evidence，且调用对 Manager 用户流程不可见。",
-      "check": "检查 invocation audit；不得存在 retry、second pass 或多个 Evidence subtask。",
-      "fix": "保留唯一一次调用记录；不足部分转为 unresolved unit、data gap 或 blocked。"
-    },
-    {
-      "id": "AN-EVIDENCE-COVERAGE-003",
-      "severity": "P0",
-      "dimension": "evidence_coverage",
-      "criterion": "coverage、unresolved units 和 blocking impact 必须透明；影响核心判断的未解析材料必须阻塞。",
-      "check": "核对 coverage_summary 数量、complete、unresolved_units、blocking_impact 与 data_gaps。",
-      "fix": "修正 coverage 审计；将关键未解析材料升级为 blocking gap。"
-    },
-    {
-      "id": "AN-FINDING-GROUNDING-001",
-      "severity": "P0",
-      "dimension": "finding_grounding",
-      "criterion": "每个 finding 必须有真实 supporting evidence，并明确该证据如何支持 statement。",
-      "check": "逐条核对 supporting_evidence 的 evidence_ref、source_unit_ref 和 supports。",
-      "fix": "补真实引用，或将判断降为有明确 gap 的 hypothesis。",
-      "machine_check": {
-        "each": "findings",
-        "rules": [
-          {
-            "kind": "field_present",
-            "path": "supporting_evidence",
-            "label": "finding supporting evidence"
-          },
-          {
-            "kind": "field_present",
-            "path": "statement",
-            "label": "finding statement"
-          }
-        ]
-      }
-    },
-    {
-      "id": "AN-SO-WHAT-001",
-      "severity": "P0",
-      "dimension": "decision_relevance",
-      "criterion": "每个 finding 必须说明非复述性的 so what 和具体 decision relevance。",
-      "check": "检查 so_what 是否改变理解或优先级，以及 decision_relevance 是否对应决策。",
-      "fix": "分别补充业务含义与决策作用，避免复述 statement。",
-      "machine_check": {
-        "each": "findings",
-        "rules": [
-          {
-            "kind": "field_present",
-            "path": "so_what",
-            "label": "finding so what"
-          },
-          {
-            "kind": "field_present",
-            "path": "decision_relevance",
-            "label": "finding decision relevance"
-          }
-        ]
-      }
-    },
-    {
-      "id": "AN-COUNTER-001",
+      "id": "ANALYSIS-DISCOVERY-001",
       "severity": "P1",
-      "dimension": "counter_evidence",
-      "criterion": "已知反证、边界条件和方向相反的观察必须被记录并反映到判断强度。",
-      "check": "对照 Evidence Catalog 检查 counter_evidence；空数组必须表示确无可引用反证，而非遗漏。",
-      "fix": "补充真实反证，并调整 statement 边界或 confidence。"
+      "dimension": "发现广度",
+      "criterion": "分析先扫描趋势、差异、异常、冲突与框架外强信号，再做收敛。",
+      "check": "检查 findings 是否只沿预设框架机械填充。",
+      "fix": "补做横向比较和异常扫描。"
     },
     {
-      "id": "AN-ALTERNATIVE-001",
+      "id": "ANALYSIS-INSIGHT-001",
+      "severity": "P0",
+      "dimension": "观点质量",
+      "criterion": "findings 是经过比较和解释的判断，不是材料摘要；so_what 说明其决策含义。",
+      "check": "删除 finding 后若只损失原始事实，说明尚未完成分析。",
+      "fix": "补充比较、机制或决策含义，或删除低价值 finding。"
+    },
+    {
+      "id": "ANALYSIS-EVIDENCE-001",
+      "severity": "P0",
+      "dimension": "证据纪律",
+      "criterion": "每个 claim 由真实 evidence_refs 支撑，相关性、访谈和个案没有被升级为因果或总体结论。",
+      "check": "核对引用、数字口径和推断强度。",
+      "fix": "修正引用并收窄超出证据的判断。"
+    },
+    {
+      "id": "ANALYSIS-CHALLENGE-001",
+      "severity": "P0",
+      "dimension": "竞争性解释",
+      "criterion": "会实质削弱判断的反证、异常、替代解释和边界被保留在 challenges。",
+      "check": "优先检查自选择、口径变化、第三变量、反向因果、访谈偏差和外部事件。",
+      "fix": "补充真实挑战并相应调整 confidence。"
+    },
+    {
+      "id": "ANALYSIS-CONVERGENCE-001",
       "severity": "P1",
-      "dimension": "alternative_explanations",
-      "criterion": "除纯原子事实外，finding 应评估最可信的替代解释及其当前状态。",
-      "check": "检查自选择、口径、第三变量、反向因果、样本偏差和外部事件等竞争性解释。",
-      "fix": "加入最可信的替代解释、状态和可用 evidence refs。"
-    },
-    {
-      "id": "AN-CONFIDENCE-001",
-      "severity": "P0",
-      "dimension": "confidence_calibration",
-      "criterion": "confidence 必须与 evidence coverage、方法强度、反证和替代解释一致。",
-      "check": "高置信 finding 不得依赖未解决的关键 source unit、单一弱来源或未排除的关键替代解释。",
-      "fix": "缩窄 statement、降低 confidence、补充验证要求，或设置 blocking gap。",
-      "machine_check": {
-        "each": "findings",
-        "rules": [
-          {
-            "kind": "enum",
-            "path": "confidence",
-            "values": ["high", "medium", "low"],
-            "label": "finding confidence"
-          }
-        ]
-      }
-    },
-    {
-      "id": "AN-ROLE-001",
-      "severity": "P0",
-      "dimension": "role_boundary",
-      "criterion": "Analysis 不得输出最终 Executive Summary、message pyramid、报告章节、页面或视觉方案。",
-      "check": "检查是否越界生成 storyline、report 或 format 内容。",
-      "fix": "删除下游产物，只保留 findings、观点候选、不确定性和讨论项。"
-    },
-    {
-      "id": "AN-SCHEMA-001",
-      "severity": "P0",
-      "dimension": "schema_contract",
-      "criterion": "最终产物必须是无额外前后文、无未声明字段且可通过 schemas/analysis.v1.json 校验的 JSON object。",
-      "check": "解析输出并执行 analysis.v1 schema validation。",
-      "fix": "只输出严格的 analysis.v1 JSON，补齐必填字段并删除额外字段。"
+      "dimension": "收敛",
+      "criterion": "观点池去重并删除琐碎内容，同时没有越界设计唯一故事线。",
+      "check": "检查重复 finding、低信息量结论和 Storyline 产物。",
+      "fix": "合并重复项，保留观点池边界。"
     }
   ]
 }

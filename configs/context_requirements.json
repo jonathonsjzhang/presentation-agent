@@ -9,8 +9,7 @@
         "analysis": {
           "required_fields": [
             "report_charter",
-            "analysis_objective",
-            "acceptance_criteria"
+            "decision_question"
           ],
           "conditional_full_fields": [
             "raw_materials",
@@ -21,14 +20,7 @@
         "storyline": {
           "upstream_schema": "analysis.v1",
           "required_fields": [
-            "analysis_questions",
-            "findings",
-            "viewpoint_candidates",
-            "decision_tensions",
-            "assumptions",
-            "data_gaps",
-            "discussion_points",
-            "open_questions"
+            "findings"
           ],
           "excluded_fields": [
             "raw_materials"
@@ -38,26 +30,15 @@
         "report": {
           "upstream_schema": "storyline.v3",
           "required_fields": [
-            "executive_summary",
-            "message_pyramid",
-            "report_outline",
-            "editorial_decisions",
-            "upstream_revision_requests",
-            "open_questions"
+            "core_answer",
+            "sections"
           ],
           "output_schema": "report.v1"
         },
         "format": {
           "upstream_schema": "report.v1",
           "required_fields": [
-            "report_metadata",
-            "executive_summary",
-            "sections",
-            "source_registry",
-            "caveats_and_limits",
-            "recommendations",
-            "appendices",
-            "format_handoff"
+            "report_markdown"
           ],
           "task_fields": [
             "delivery_target"
@@ -73,25 +54,15 @@
           "upstream_schema": "formatted_material.v2",
           "required_fields": [
             "delivery_target",
-            "delivery_units",
-            "visual_assets",
-            "caveat_preservation",
-            "omitted_content_register",
-            "quality_checks",
-            "artifact_manifest"
+            "visuals",
+            "render_result"
           ],
           "output_schema": "qa_pack.v1"
         },
         "speaker_script": {
           "required_fields": [
             "delivery_target",
-            "delivery_units",
-            "caveat_preservation",
-            "quality_checks",
-            "top_questions",
-            "risk_register",
-            "speaker_script_handoff",
-            "data_gaps_to_close"
+            "visuals"
           ],
           "output_schema": "speaker_script.v1"
         }

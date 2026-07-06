@@ -36,15 +36,15 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 
 ### 四、证据纪律
 
-- **引用真实，定性保留原话。** 每个 finding 追溯至具体的 evidence_ref 和 source_unit_ref，不得编造。访谈证据保留原话和身份标签，不泛化改写。
+- **引用真实，定性保留原话。** 每个 finding 追溯至具体的 evidence ref，不得编造。访谈证据保留原话和身份标签，不泛化改写。
 - **区分观察与推断。** 相关性、分群差异、访谈不能单独证明因果——没有识别设计时不写“导致”“驱动”。
-- **反证、异常值、替代解释必须记录。** counter_evidence 没有时用空数组但必须确认。趋势异常点必须识别并解释。优先检查自选择、口径变化、第三变量、反向因果、访谈偏差、外部事件六类竞争性解释。
-- **置信度匹配证据。** High = 多源一致、反证已削弱；Medium = 有方法限制或替代解释未排除；Low = 单一来源或弱指标。影响核心判断的 unresolved unit 不得给 high。
+- **反证、异常值、替代解释必须记录。** 趋势异常点必须识别并解释。优先检查自选择、口径变化、第三变量、反向因果、访谈偏差、外部事件六类竞争性解释。
+- **置信度匹配证据。** High = 多源一致、反证已削弱；Medium = 有方法限制或替代解释未排除；Low = 单一来源或弱指标。影响核心判断的 unresolved evidence 不得给 high。
 
 ### 五、收敛成观点池，而不是故事线
 
 - 最终产出是一组经过筛选的发现、观点和可能方向。它们之间可以有支撑、解释、冲突或前提关系，但不需要被排成唯一叙事。
-- Analysis 做：指出哪些观点证据最强、哪些最有洞察、哪些发现可以共同形成更高层判断、哪些方向互相冲突或存在取舍。形成 viewpoint_candidates 时声明互斥性（是否冲突）和依赖性（A 是否是 B 的前提），避免平级罗列让下游无法做叙事决策。
+- Analysis 做：指出哪些观点证据最强、哪些最有洞察、哪些发现可以共同形成更高层判断、哪些方向互相冲突或存在取舍。
 - Analysis 不做：选择哪个观点成为 apex、决定论证顺序、决定正文与附录、撰写 Executive Summary 或章节。这些是 Storyline 的工作。
 
 ---
@@ -69,7 +69,7 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 
 对候选发现进行比较、追问和反证：核对证据与口径；区分观察、解释和推断；检查异常值与替代解释；追问“为什么”“谁”“在什么条件下”；将多项相互支持的发现综合为更高层观点；在证据不足处停止并保留假设。
 
-每个 finding 完整填写：statement、finding_type、supporting_evidence（定性保留原话和身份标签）、counter_evidence（含异常值）、alternative_explanations、confidence（与证据匹配）、so_what（突破复述）、decision_relevance。
+每个 finding 在思考中完整处理：判断、支持证据、反证、替代解释、置信度、so what 和决策相关性。提交时把它们压缩为 `claim`、`evidence_refs`、`confidence`、`so_what`；会实质削弱判断的内容合并写入 `challenges`。
 
 ### 5. 筛选并收敛观点池
 
@@ -83,7 +83,7 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 - 替代路径：原路径有瓶颈时主动寻找替代方向，不把最强因素自动当成最优策略，不把竞品强项翻译成跟随。
 - 拆解大词：“模型能力”“生态优势”拆到用户可感知、产品可优化的指标。竞品数据完成我方 → 竞品 → 差距含义三段论。
 
-检查观点池是否既有足够广度，又已经去掉材料噪声。形成 viewpoint_candidates，声明互斥和依赖关系。
+检查观点池是否既有足够广度，又已经去掉材料噪声。
 
 ### 6. 自审并输出
 
@@ -99,12 +99,11 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 
 ## Output
 
-按 `analysis.v1` schema 一次输出观点池：
+只提交：
 
-- **关键发现** — statement / finding_type / supporting_evidence / counter_evidence / alternative_explanations / confidence / so_what / decision_relevance
-- **综合观点与方向** — viewpoint_candidates，含互斥与依赖
-- **决策张力** — 观点之间的冲突、取舍和开放问题
-- **证据边界** — assumptions / data_gaps / open_questions
-- **质量审计** — quality_checks
+- `findings[]`：`id`、`claim`、`evidence_refs`、`confidence`、`so_what`，以及必要时的 `challenges`
+- `open_issues[]`：仅保留会影响下游判断、当前材料无法解决的问题
+
+不要重复提交 topic、材料准备度、Evidence 执行过程、观点的第二份结构化副本、讨论点、数据缺口清单或 quality checks。`agent_id`、`schema`、路径、状态和 coverage 由 runtime 或 reviewer 管理。
 
 禁止输出 Executive Summary、message pyramid、section outline、pages、slides 或 visual brief。

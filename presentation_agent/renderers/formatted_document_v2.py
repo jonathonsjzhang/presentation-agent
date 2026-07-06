@@ -9,17 +9,11 @@ from typing import Any, Iterable
 from presentation_agent.renderers.base import RenderResult
 from presentation_agent.renderers.diagram import render_svg_with_png_fallback
 from presentation_agent.renderers.report_docx import (
-    CONTENT_WIDTH_DXA,
     _add_bullets,
-    _add_citation,
     _add_data_table,
     _add_heading,
     _add_note_box,
     _add_page_field,
-    _render_appendices,
-    _render_method_and_risks,
-    _render_narrative_block,
-    _render_recommendations,
     _set_run_font,
     _style_document,
 )
@@ -35,26 +29,8 @@ def _validate(formatted: dict[str, Any], report: dict[str, Any]) -> None:
         raise ValueError("formatted document renderer only accepts delivery_target=document")
     if report.get("agent_id") != "report" or report.get("schema") != "report.v1":
         raise ValueError("formatted document renderer requires report.v1")
-    section_ids = {item.get("section_id") for item in report.get("sections") or []}
-    claim_ids = {
-        str(claim_id)
-        for section in report.get("sections") or []
-        if isinstance(section, dict)
-        for claim_id in section.get("claim_ids") or []
-    }
-    for asset in formatted.get("visual_assets") or []:
-        if not set(asset.get("source_section_ids") or []) <= section_ids:
-            raise ValueError(f"{asset.get('asset_id')}: unknown source section mapping")
-        if not set(asset.get("source_claim_ids") or []) <= claim_ids:
-            raise ValueError(f"{asset.get('asset_id')}: unknown source claim mapping")
-    protected = set((report.get("format_handoff") or {}).get("protected_caveats") or [])
-    preserved = {
-        item.get("source_caveat")
-        for item in formatted.get("caveat_preservation") or []
-        if item.get("status") in {"preserved", "reworded_equivalent"}
-    }
-    if not protected <= preserved:
-        raise ValueError("formatted_material.v2 does not preserve every protected report caveat")
+    if not str(report.get("report_markdown") or "").strip():
+        raise ValueError("report.v1 requires report_markdown")
 
 
 def _add_toc(doc: Any, report: dict[str, Any]) -> None:
@@ -62,12 +38,11 @@ def _add_toc(doc: Any, report: dict[str, Any]) -> None:
     from docx.shared import Pt
 
     _add_heading(doc, "目录", 1)
-    entries = ["执行摘要"]
-    entries.extend(
-        f"{index}. {section.get('heading', '')}"
-        for index, section in enumerate(report.get("sections") or [], 1)
-    )
-    entries.extend(["方法与边界", "风险与反方观点", "建议", "附录"])
+    entries = [
+        line[3:].strip()
+        for line in str(report.get("report_markdown") or "").splitlines()
+        if line.startswith("## ")
+    ]
     for index, entry in enumerate(entries):
         paragraph = doc.add_paragraph()
         paragraph.paragraph_format.left_indent = Pt(0 if index == 0 else 12)
@@ -204,6 +179,22 @@ def _chart_data_ready(asset: dict[str, Any]) -> bool:
 
 
 def _assets_by_section(formatted: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    if "visuals" in formatted:
+        result: dict[str, list[dict[str, Any]]] = {}
+        for index, visual in enumerate(formatted.get("visuals") or [], 1):
+            if not isinstance(visual, dict):
+                continue
+            prepared = {
+                "asset_id": f"VIS-{index:02d}",
+                "asset_type": visual.get("type"),
+                "title": visual.get("title"),
+                "data": visual.get("data", {}),
+                "source_evidence_refs": visual.get("source_refs", []),
+                "source_section_ids": [visual.get("section_heading")],
+                "source_claim_ids": [],
+            }
+            result.setdefault(str(visual.get("section_heading") or ""), []).append(prepared)
+        return result
     ordered_ids = formatted.get("render_plan", {}).get("asset_order") or []
     lookup = {item.get("asset_id"): item for item in formatted.get("visual_assets") or []}
     assets = [lookup[item] for item in ordered_ids if item in lookup]
@@ -235,6 +226,79 @@ def _protected_caveats_for_section(
         if caveat and destinations & unit_ids and caveat not in caveats:
             caveats.append(caveat)
     return caveats
+
+
+def _markdown_sections(markdown: str) -> list[tuple[str, list[str]]]:
+    """Split canonical Markdown into H2 sections while preserving body lines."""
+
+    sections: list[tuple[str, list[str]]] = []
+    heading = ""
+    body: list[str] = []
+    for raw in markdown.splitlines():
+        if raw.startswith("# ") and not raw.startswith("## "):
+            continue
+        if raw.startswith("## "):
+            if heading or any(line.strip() for line in body):
+                sections.append((heading, body))
+            heading = raw[3:].strip()
+            body = []
+        else:
+            body.append(raw)
+    if heading or any(line.strip() for line in body):
+        sections.append((heading, body))
+    return sections
+
+
+def _render_markdown_body(doc: Any, lines: list[str]) -> None:
+    """Render a conservative Markdown subset without rewriting its wording."""
+
+    index = 0
+    while index < len(lines):
+        line = lines[index].rstrip()
+        if not line:
+            index += 1
+            continue
+        if line.startswith("### "):
+            _add_heading(doc, line[4:].strip(), 2)
+            index += 1
+            continue
+        if line.startswith("> "):
+            _add_note_box(doc, "边界说明", line[2:].strip(), caveat=True)
+            index += 1
+            continue
+        if line.startswith(("- ", "* ")):
+            items: list[str] = []
+            while index < len(lines) and lines[index].startswith(("- ", "* ")):
+                items.append(lines[index][2:].strip())
+                index += 1
+            _add_bullets(doc, items)
+            continue
+        if line.startswith("|") and index + 1 < len(lines) and lines[index + 1].startswith("|"):
+            table_lines: list[str] = []
+            while index < len(lines) and lines[index].startswith("|"):
+                table_lines.append(lines[index])
+                index += 1
+            rows = [
+                [cell.strip() for cell in row.strip().strip("|").split("|")]
+                for row in table_lines
+            ]
+            if len(rows) >= 2:
+                columns = rows[0]
+                data_rows = rows[2:] if set("".join(rows[1])) <= {"-", ":", " "} else rows[1:]
+                _add_data_table(doc, "", columns, data_rows)
+            continue
+        paragraph_lines = [line]
+        index += 1
+        while (
+            index < len(lines)
+            and lines[index].strip()
+            and not lines[index].startswith(("### ", "> ", "- ", "* ", "|"))
+        ):
+            paragraph_lines.append(lines[index].strip())
+            index += 1
+        paragraph = doc.add_paragraph()
+        run = paragraph.add_run(" ".join(paragraph_lines))
+        _set_run_font(run, color="253746")
 
 
 def _set_update_fields(doc: Any) -> None:
@@ -290,10 +354,20 @@ def render_formatted_document_v2(
         doc = Document()
         _style_document(doc)
         _set_update_fields(doc)
-        metadata = report["report_metadata"]
+        metadata = report.get("report_metadata") or {}
+        markdown = str(report.get("report_markdown") or "")
+        markdown_title = next(
+            (
+                line[2:].strip()
+                for line in markdown.splitlines()
+                if line.startswith("# ") and not line.startswith("## ")
+            ),
+            "分析报告",
+        )
+        title = str(metadata.get("title") or markdown_title)
         section = doc.sections[0]
         header = section.header.paragraphs[0]
-        header_run = header.add_run(str(metadata.get("title") or formatted.get("topic") or "分析报告"))
+        header_run = header.add_run(title)
         _set_run_font(header_run, size=8, color="666666")
         _add_page_field(section.footer.paragraphs[0])
 
@@ -301,7 +375,7 @@ def render_formatted_document_v2(
         cover = doc.add_paragraph()
         cover.paragraph_format.space_before = Pt(120)
         cover.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = cover.add_run(str(metadata.get("title") or formatted.get("topic") or "分析报告"))
+        run = cover.add_run(title)
         _set_run_font(run, size=30, color="0B2545", bold=True)
         subtitle = doc.add_paragraph()
         subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -314,36 +388,13 @@ def render_formatted_document_v2(
         _add_toc(doc, report)
         doc.add_page_break()
 
-        summary = report.get("executive_summary") or {}
-        _add_heading(doc, "执行摘要", 1)
-        paragraph = doc.add_paragraph(str(summary.get("context") or ""))
-        _add_note_box(doc, "核心答案", str(summary.get("core_answer") or ""))
-        _add_heading(doc, "关键发现", 2)
-        _add_bullets(doc, summary.get("key_findings") or [])
-        _add_heading(doc, "业务含义", 2)
-        _add_bullets(doc, summary.get("implications") or [])
-        _add_note_box(doc, "需要确认", str(summary.get("expected_action") or ""))
-
         section_assets = _assets_by_section(formatted)
-        for index, report_section in enumerate(report.get("sections") or [], 1):
-            _add_heading(doc, f"{index}. {report_section.get('heading', '')}", 1)
-            _add_note_box(doc, "本节判断", str(report_section.get("section_thesis") or ""))
-            for block in report_section.get("narrative_blocks") or []:
-                _render_narrative_block(doc, report, block)
-            for asset in section_assets.get(report_section.get("section_id"), []):
+        markdown_sections = _markdown_sections(markdown)
+        for heading, body in markdown_sections:
+            _add_heading(doc, heading, 1)
+            _render_markdown_body(doc, body)
+            for asset in section_assets.get(heading, []):
                 _render_visual_asset(doc, asset, out_dir / f"{file_stem}_assets")
-            for caveat in _protected_caveats_for_section(formatted, report_section):
-                _add_note_box(doc, "关键边界", caveat, caveat=True)
-            _add_note_box(doc, "本节结论", str(report_section.get("section_conclusion") or ""))
-            transition = str(report_section.get("transition") or "")
-            if transition:
-                paragraph = doc.add_paragraph(style="Report Citation")
-                run = paragraph.add_run("承接：" + transition)
-                _set_run_font(run, size=8.5, color="666666", italic=True)
-
-        _render_method_and_risks(doc, report)
-        _render_recommendations(doc, report.get("recommendations") or [])
-        _render_appendices(doc, report)
         _normalize_east_asia_font(doc)
         output_path = out_dir / f"{file_stem}.docx"
         doc.save(output_path)
@@ -353,14 +404,14 @@ def render_formatted_document_v2(
             fidelity="formatted",
             output_path=str(output_path),
             file_bytes=output_path.stat().st_size,
-            unit_count=len(formatted.get("delivery_units") or []),
-            detail=f"preset={PRESET_NAME}; visual_assets={len(formatted.get('visual_assets') or [])}",
+            unit_count=len(markdown_sections),
+            detail=f"preset={PRESET_NAME}; visuals={len(formatted.get('visuals') or [])}",
         )
     except Exception as exc:
         return RenderResult(
             status="error",
             fmt="document",
             fidelity="formatted",
-            unit_count=len(formatted.get("delivery_units") or []),
+            unit_count=len(_markdown_sections(str(report.get("report_markdown") or ""))),
             detail=str(exc),
         )

@@ -118,20 +118,7 @@ class DefaultManagerChainTests(unittest.TestCase):
                     data_root=temp / "data",
                     contract_profile="v0_3",
                 )
-                if agent_id == "report":
-                    result = RenderResult(
-                        status="rendered",
-                        fmt="document",
-                        fidelity="content",
-                        output_path=str(task_dir / "report.docx"),
-                        file_bytes=1,
-                    )
-                    with patch(
-                        "presentation_agent.renderers.report_docx.render_report_docx",
-                        return_value=result,
-                    ):
-                        worker_result = runner.commit()
-                elif agent_id == "format":
+                if agent_id == "format":
                     result = RenderResult(
                         status="rendered",
                         fmt="document",

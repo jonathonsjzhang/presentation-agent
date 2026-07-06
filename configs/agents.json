@@ -48,8 +48,7 @@
             "charter_schema": "report_charter.v2",
             "required_inputs": [
               "report_charter",
-              "analysis_objective",
-              "acceptance_criteria"
+              "decision_question"
             ],
             "conditional_inputs": [
               "raw_materials",
@@ -60,16 +59,7 @@
           "output_schema": "analysis.v1",
           "output_contract": {
             "required_handoff_fields": [
-              "analysis_questions",
-              "material_readiness",
-              "evidence_execution",
-              "findings",
-              "viewpoint_candidates",
-              "decision_tensions",
-              "assumptions",
-              "data_gaps",
-              "discussion_points",
-              "open_questions"
+              "findings"
             ],
             "downstream": "storyline"
           },
@@ -122,20 +112,13 @@
           "name": "故事线",
           "stage": 2,
           "skill": "storyline",
-          "description": "基于 Analysis 收敛 Executive Summary、动态 message pyramid、章节级叙事序列和报告大纲；不输出 pages。",
+          "description": "基于 Analysis 收敛核心答案和递进章节；金字塔与 Executive Summary 是构思方法，不重复序列化。",
           "previous_agent_id": "analysis",
           "next_agent_id": "report",
           "input_schema": "analysis.v1",
           "input_contract": {
             "required_inputs": [
-              "analysis_questions",
-              "findings",
-              "viewpoint_candidates",
-              "decision_tensions",
-              "assumptions",
-              "data_gaps",
-              "discussion_points",
-              "open_questions"
+              "findings"
             ],
             "forbidden_inputs_as_authority": [
               "raw_materials"
@@ -144,12 +127,8 @@
           "output_schema": "storyline.v3",
           "output_contract": {
             "required_handoff_fields": [
-              "executive_summary",
-              "message_pyramid",
-              "report_outline",
-              "editorial_decisions",
-              "upstream_revision_requests",
-              "open_questions"
+              "core_answer",
+              "sections"
             ],
             "forbidden_handoff_fields": [
               "pages"
@@ -200,36 +179,26 @@
           "name": "报告产出",
           "stage": 3,
           "skill": "report",
-          "description": "把 Storyline 展开为完整、严肃、可独立阅读的分析报告语义结构，并声明内容版 DOCX 交付。",
+          "description": "基于已批准的 Storyline，写成一篇完整、有开头、有推进、有收束、可从头读到尾的 Markdown 报告。",
           "previous_agent_id": "storyline",
           "next_agent_id": "format",
           "input_schema": "storyline.v3",
           "input_contract": {
             "required_inputs": [
-              "executive_summary",
-              "message_pyramid",
-              "report_outline",
-              "editorial_decisions",
-              "upstream_revision_requests",
-              "open_questions"
+              "core_answer",
+              "sections"
             ]
           },
           "output_schema": "report.v1",
           "output_contract": {
             "required_handoff_fields": [
-              "report_metadata",
-              "executive_summary",
-              "sections",
-              "source_registry",
-              "caveats_and_limits",
-              "recommendations",
-              "appendices",
-              "format_handoff"
+              "report_markdown"
             ],
             "downstream": "format"
           },
           "memory_dimensions": [
-            "连续正文",
+            "完整原稿",
+            "连续写作",
             "论证完整性",
             "可追溯性",
             "Caveat",
@@ -252,7 +221,8 @@
             "global_writes": [],
             "agent_memory_scope": "report_v0_3_only",
             "generation_memory_dimensions": [
-              "连续正文",
+              "完整原稿",
+              "连续写作",
               "论证完整性",
               "可追溯性",
               "Caveat"
@@ -262,9 +232,7 @@
             "skill_package": "skills/report",
             "runtime_adapter": "generic_llm_skill_runtime",
             "review_policy": "schema_validation + machine_check + llm_p1",
-            "connectors": [
-              "docx_writer"
-            ],
+            "connectors": [],
             "implementation_status": "profile_runtime_ready"
           },
           "implementation_status": "implemented"
@@ -274,34 +242,21 @@
           "name": "可视化",
           "stage": 4,
           "skill": "format",
-          "description": "把 report.v1 转译为单一目标载体，维护来源映射并记录压缩、省略、caveat 与渲染状态。",
+          "description": "以 canonical Markdown 为内容权威，选择必要视觉；默认版式、分页和渲染状态由 runtime 管理。",
           "previous_agent_id": "report",
           "next_agent_id": null,
           "input_schema": "report.v1",
           "input_contract": {
             "required_inputs": [
               "report",
-              "delivery_target",
-              "format_handoff"
+              "delivery_target"
             ],
             "delivery_target_cardinality": "exactly_one"
           },
           "output_schema": "formatted_material.v2",
           "output_contract": {
             "required_handoff_fields": [
-              "delivery_target",
-              "source_report_ref",
-              "source_section_ids",
-              "source_claim_ids",
-              "delivery_units",
-              "visual_assets",
-              "compression_decisions",
-              "omitted_content_register",
-              "caveat_preservation",
-              "artifact_manifest",
-              "render_plan",
-              "render_result",
-              "quality_checks"
+              "visuals"
             ],
             "downstream": "extension_gate"
           },

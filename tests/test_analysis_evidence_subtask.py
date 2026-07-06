@@ -303,7 +303,7 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
             / "evidence_catalog.json"
         )
         self.assertEqual(catalog["agent_id"], "evidence_harvester")
-        self.assertEqual(catalog["unresolved_units"], [])
+        self.assertEqual(catalog["unresolved"], [])
         self.assertTrue(catalog["schema_warnings"])
         review = read_json(
             task_dir / "subtasks" / "evidence_harvester" / "review.json"
@@ -319,8 +319,7 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         write_json(
             Path(first["output_path"]),
             {
-                "source_units": {},
-                "evidence_items": [],
+                "items": {},
             },
         )
 
@@ -373,7 +372,7 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         artifact = json.loads(
             (FIXTURES / "analysis.v1.valid.json").read_text(encoding="utf-8")
         )
-        artifact["legacy_pages"] = []
+        artifact.pop("findings")
         write_json(Path(generation["output_path"]), artifact)
         review = runner.commit()
         write_json(Path(review["output_path"]), {"objections": []})
