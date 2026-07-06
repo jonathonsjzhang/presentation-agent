@@ -85,6 +85,21 @@ class FormattedDocumentV2Tests(unittest.TestCase):
         self.assertEqual(result.status, "error")
         self.assertIn("protected report caveat", result.detail)
 
+    def test_empty_chart_falls_back_to_callout(self) -> None:
+        formatted = load(FORMATTED)
+        formatted["visual_assets"][0]["asset_type"] = "chart"
+        formatted["visual_assets"][0]["data"] = {
+            "categories": [],
+            "values": [],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = render_formatted_document_v2(
+                formatted,
+                load(REPORT),
+                Path(temp_dir),
+            )
+        self.assertEqual(result.status, "rendered", result.detail)
+
     def test_diagram_matrix_and_callout_use_supplied_data_and_png_fallback(self) -> None:
         formatted = load(FORMATTED)
         extras = [

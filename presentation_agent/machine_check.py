@@ -142,7 +142,7 @@ def _eval_rule(
                 match = re.search(str(pattern), text, flags=re.IGNORECASE)
             except re.error:
                 continue
-            if match:
+            if match and not _negated_forbidden_match(text, match.start()):
                 return f"`{label}` 命中禁止表达 {match.group(0)!r}"
         return None
 
@@ -231,6 +231,20 @@ def _eval_rule(
         return None
 
     return None
+
+
+def _negated_forbidden_match(text: str, start: int) -> bool:
+    """Ignore policy statements that explicitly reject the forbidden detail."""
+
+    prefix = text[max(0, start - 18):start]
+    return bool(
+        re.search(
+            r"(?:不涉及|不包括|不包含|不含|无需|禁止|避免|不得|未新增|不会新增)"
+            r"[\s、，,:：/]*$",
+            prefix,
+            flags=re.IGNORECASE,
+        )
+    )
 
 
 def _is_exempt(node: Any, exempt: dict[str, Any]) -> bool:

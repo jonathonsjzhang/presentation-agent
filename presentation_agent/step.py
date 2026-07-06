@@ -122,12 +122,12 @@ class StepRunner:
         )
         self.memory = MemoryStore(root, self.spec.id, data_root=self.data_root)
         compiled_path = self.run_dir / "compiled_skill_package.json"
-        if compiled_path.exists():
-            self.skill_package = SkillPackage.from_dict(read_json(compiled_path))
-        else:
-            input_data = self._load_input(state)
-            self.skill_package = compile_skill_package(root, self.spec, input_data)
-            write_json(compiled_path, self.skill_package.to_dict())
+        # The compiled package is an audit artifact, not a cache authority.
+        # Rebuild it from the current task input on every runner construction so
+        # delivery_target/profile edits cannot leave stale format capabilities.
+        input_data = self._load_input(state)
+        self.skill_package = compile_skill_package(root, self.spec, input_data)
+        write_json(compiled_path, self.skill_package.to_dict())
         state["selected_capabilities"] = self.skill_package.selected_capabilities
         state["skill_fingerprint"] = self.skill_package.fingerprint
         state["skill_budget"] = self.skill_package.budget

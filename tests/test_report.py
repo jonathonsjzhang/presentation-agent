@@ -24,7 +24,7 @@ class ReportCoreTests(unittest.TestCase):
     def test_report_skill_and_rubrics_are_report_specific(self) -> None:
         skill = (ROOT / "skills" / "report" / "SKILL.md").read_text(encoding="utf-8")
         rubrics = read_json(ROOT / "skills" / "report" / "rubrics.json")
-        self.assertIn("按 schema 输出", skill)
+        self.assertIn("Markdown 报告", skill)
         self.assertIn("连续段落", skill)
         self.assertIn("report.v1", skill)
         self.assertNotIn("material_units 作为输出", skill)

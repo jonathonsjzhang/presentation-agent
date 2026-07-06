@@ -18,6 +18,7 @@ from presentation_agent.context import ContextAssembler
 from presentation_agent.cli import build_parser, _worker_spawn_response
 from presentation_agent.step import PipelineStepper, StepError, StepRunner
 from presentation_agent.spawn import WorkBuddySpawnAdapter
+from presentation_agent.skill_package import load_skill_package
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -378,6 +379,57 @@ class AgentProfileLoaderTests(unittest.TestCase):
             )
             task_state = read_json(Path(task["task_dir"]) / "run_state.json")
             self.assertFalse(task_state["review_subagents_enabled"])
+
+    def test_step_runner_recompiles_stale_format_capabilities_from_input(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            task_dir = Path(temp_dir)
+            input_path = task_dir / "input.json"
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "worker_context.v1",
+                        "report": read_json(
+                            FIXTURES / "report.v1.valid.json"
+                        ),
+                        "delivery_target": "document",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (task_dir / "run_state.json").write_text(
+                json.dumps(
+                    {
+                        "agent_id": "format",
+                        "contract_profile": "v0_3",
+                        "input_path": str(input_path),
+                        "current_step": "init",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stale = load_skill_package(ROOT, "format").to_dict()
+            stale["selected_capabilities"] = ["format.ppt"]
+            (task_dir / "compiled_skill_package.json").write_text(
+                json.dumps(stale),
+                encoding="utf-8",
+            )
+
+            runner = StepRunner(
+                ROOT,
+                task_dir,
+                data_root=task_dir / "data",
+                contract_profile="v0_3",
+            )
+
+            self.assertIn(
+                "format.document",
+                runner.skill_package.selected_capabilities,
+            )
+            self.assertNotIn(
+                "format.ppt",
+                runner.skill_package.selected_capabilities,
+            )
 
     def test_v03_downstream_task_requires_resolved_upstream_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
