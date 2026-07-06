@@ -1032,7 +1032,11 @@ class StepRunner:
         # substantive) is a model failure — reject it before it propagates.
         # output_review.json is exempt; reviewers may legitimately return
         # short verdicts.
-        if filename == "output_gen.json" and len(data) <= 3:
+        # Note: `len(data) <= 2` means ONLY schema + agent_id, no content
+        # fields at all.  A valid report has {report_markdown, schema,
+        # agent_id} = 3 keys; a valid analysis has {findings, schema,
+        # agent_id} and so on.
+        if filename == "output_gen.json" and len(data) <= 2:
             raise StepError(
                 f"Worker {self.spec.id} 产出了空 artifact "
                 f"(仅含 schema/agent_id，无实质内容)"
