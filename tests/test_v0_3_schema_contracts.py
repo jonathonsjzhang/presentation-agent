@@ -60,6 +60,22 @@ class V03SchemaContractTests(unittest.TestCase):
         self.assertTrue(fixture["executive_summary"]["core_answer"])
         self.assertTrue(fixture["message_pyramid"]["apex"]["finding_refs"])
 
+    def test_non_claim_report_and_structural_format_units_may_have_empty_refs(self) -> None:
+        report_schema = read_json(ROOT / "skills/report/schemas/report.v1.json")
+        report = read_json(FIXTURES / "report.v1.valid.json")
+        report["sections"][0]["narrative_blocks"][0]["claim_ids"] = []
+        report["sections"][0]["finding_refs"] = []
+        report["sections"][0]["claim_ids"] = []
+        self.assertEqual(validate(report, report_schema), [])
+
+        format_schema = read_json(
+            ROOT / "skills/format/schemas/formatted_material.v2.json"
+        )
+        formatted = read_json(FIXTURES / "formatted_material.v2.valid.json")
+        formatted["delivery_units"][0]["source_section_ids"] = []
+        formatted["delivery_units"][0]["source_claim_ids"] = []
+        self.assertEqual(validate(formatted, format_schema), [])
+
     def test_handoffs_are_traceable_across_the_four_stage_chain(self) -> None:
         analysis = read_json(FIXTURES / "analysis.v1.valid.json")
         storyline = read_json(FIXTURES / "storyline.v3.valid.json")

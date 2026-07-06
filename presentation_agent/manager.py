@@ -151,23 +151,43 @@ class ManagerAgentRuntime:
         action = decision.get("action")
         if phase == "planning":
             charter_schema = "report_charter.v2"
-            packet_schema = "task_packet.v2"
-            for key, schema_name in (
-                ("report_charter", charter_schema),
-                ("execution_plan", "execution_plan.v1"),
-                ("task_packet", packet_schema),
-            ):
+            planning_contracts = [("report_charter", charter_schema)]
+            if action == "dispatch":
+                planning_contracts.extend(
+                    [
+                        ("execution_plan", "execution_plan.v1"),
+                        ("task_packet", "task_packet.v2"),
+                    ]
+                )
+            for key, schema_name in planning_contracts:
                 value = decision.get(key)
                 if not isinstance(value, dict):
                     errors.append(f"$: planning decision missing object '{key}'")
                 else:
                     errors.extend(validate(value, self._schema(schema_name), f"$.{key}"))
-            if action != "dispatch":
-                errors.append("$.action: planning must produce dispatch; runtime applies the plan human gate")
             charter = decision.get("report_charter")
             plan = decision.get("execution_plan")
             packet = decision.get("task_packet")
-            if (
+            if action not in ("dispatch", "ask_human"):
+                errors.append(
+                    "$.action: planning must dispatch a runnable plan or ask_human "
+                    "for blocking input"
+                )
+            if action == "ask_human":
+                questions = decision.get("questions_for_human")
+                if not isinstance(questions, list) or not any(
+                    str(item).strip() for item in questions
+                ):
+                    errors.append(
+                        "$.questions_for_human: planning ask_human requires at "
+                        "least one concrete question"
+                    )
+                if isinstance(charter, dict) and charter.get("material_inventory"):
+                    errors.append(
+                        "$.action: planning ask_human is reserved for missing "
+                        "blocking input; material_inventory is not empty"
+                    )
+            if action == "dispatch" and (
                 isinstance(charter, dict)
                 and charter.get("delivery_targets") != ["document"]
             ):
@@ -175,7 +195,7 @@ class ManagerAgentRuntime:
                     "$.report_charter.delivery_targets: v0.3 initial plan must be "
                     "['document']; PPT/HTML are offered after document delivery"
                 )
-            if (
+            if action == "dispatch" and (
                 isinstance(charter, dict)
                 and isinstance(plan, dict)
                 and isinstance(packet, dict)
@@ -1157,9 +1177,7 @@ class ManagerOrchestrator:
 
     def _commit_plan(self, state: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
         charter = decision["report_charter"]
-        plan = decision["execution_plan"]
         write_json(self.charter_path, charter)
-        write_json(self.plan_path, plan)
         global_state = dict(charter.get("global_state_seed") or {})
         global_state.update({
             "report_charter": charter,
@@ -1167,6 +1185,16 @@ class ManagerOrchestrator:
         })
         write_json(self.run_dir / "state.json", global_state)
         state["report_charter"] = charter
+        if decision.get("action") == "ask_human":
+            state["current_actor"] = "human"
+            state["human_gate"] = "decision"
+            state["pending_decision"] = decision
+            state["status"] = "awaiting_human_decision"
+            self._save_state(state)
+            return self._human_gate_result(state)
+
+        plan = decision["execution_plan"]
+        write_json(self.plan_path, plan)
         state["execution_plan"] = plan
         state["current_actor"] = "human"
         state["human_gate"] = "plan"

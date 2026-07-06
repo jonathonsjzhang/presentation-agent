@@ -109,8 +109,8 @@
                 },
                 "claim_ids": {
                   "type": "array",
-                  "minItems": 1,
-                  "items": { "type": "string", "minLength": 1 }
+                  "items": { "type": "string", "minLength": 1 },
+                  "description": "正文主张应绑定 claim；方法、过渡与 caveat 等非主张 block 可为空"
                 },
                 "evidence_refs": { "type": "array", "items": { "type": "string" } }
               }
@@ -118,10 +118,13 @@
           },
           "section_conclusion": { "type": "string", "minLength": 1 },
           "transition": { "type": "string" },
-          "finding_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "finding_refs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "分析章节应绑定 finding；导言、方法与附录型章节可为空"
+          },
           "claim_ids": {
             "type": "array",
-            "minItems": 1,
             "items": { "type": "string", "minLength": 1 },
             "description": "本节正文 block 中 claim_ids 的去重并集，供 Format 做稳定映射"
           }
