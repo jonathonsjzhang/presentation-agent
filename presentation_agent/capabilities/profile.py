@@ -118,8 +118,10 @@ def _load_config(root: Optional[Path]) -> dict[str, Any]:
                 "外部分享": "external",
             },
             "report_type": {
+                "分析类": "deep_dive",
                 "深度分析": "deep_dive",
                 "业务进展汇报": "business_progress",
+                "梳理类": "quick_sync",
                 "快速同步": "quick_sync",
             },
             "output_format": {

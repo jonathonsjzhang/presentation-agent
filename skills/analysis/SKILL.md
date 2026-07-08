@@ -42,10 +42,10 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 - **反证、异常值、替代解释必须记录。** 趋势异常点必须识别并解释。优先检查自选择、口径变化、第三变量、反向因果、访谈偏差、外部事件六类竞争性解释。
 - **置信度匹配证据。** High = 多源一致、反证已削弱；Medium = 有方法限制或替代解释未排除；Low = 单一来源或弱指标。影响核心判断的 unresolved evidence 不得给 high。
 
-### 五、收敛成观点池，而不是故事线
+### 五、收敛成观点池和论点组选项，而不是故事线
 
 - 最终产出是一组经过筛选的发现、观点和可能方向。它们之间可以有支撑、解释、冲突或前提关系，但不需要被排成唯一叙事。
-- Analysis 做：指出哪些观点证据最强、哪些最有洞察、哪些发现可以共同形成更高层判断、哪些方向互相冲突或存在取舍。
+- Analysis 做：指出哪些观点证据最强、哪些最有洞察、哪些发现可以共同形成更高层判断、哪些方向互相冲突或存在取舍；并给出 2-3 组可供用户确认的主论点方案，每组包含一个主论点和 2-4 个分论点。
 - Analysis 不做：选择哪个观点成为 apex、决定论证顺序、决定正文与附录、撰写 Executive Summary 或章节。这些是 Storyline 的工作。
 
 ### 六、控制观点卡粒度，守住任务边界
@@ -77,7 +77,7 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 
 每个 finding 在思考中完整处理：判断、支持证据、反证、替代解释、置信度、so what 和决策相关性。提交时把它们压缩为 `claim`、`evidence_refs`、`confidence`、`so_what`；会实质削弱判断的内容合并写入 `challenges`。写 `claim` 时保持单一判断；写 `so_what` 时回到当前任务，不顺手扩展成另一份战略报告。
 
-### 4. 分层筛选观点池，并输出
+### 4. 分层筛选观点池，形成论点组选项，并输出
 
 删除重复、琐碎、与问题无关或无法支撑的内容。两轮筛选：
 
@@ -90,6 +90,15 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 - 拆解大词：“模型能力”“生态优势”拆到用户可感知、产品可优化的指标。竞品数据完成我方 → 竞品 → 差距含义三段论。
 
 在输出前做一次分层：主发现是否直接回答当前任务；支撑发现是否可以合并进相关主 finding；相邻议题是否应进入 `open_issues` 或舍弃。检查观点池是否既有足够广度，又已经去掉材料噪声。
+
+随后形成 `thesis_options[]`，用于 Analysis 完成后的人审确认：
+
+- 给出 2-3 组候选论点组，不要只给一个“最佳答案”。每组都必须包含 `option_id`、`main_thesis` 和 2-4 个 `sub_theses`。
+- `main_thesis` 是本组汇报可采用的主论点，不是章节标题或 Executive Summary；`sub_theses[]` 是支撑它成立的分论点，不排序成报告结构。
+- 每个分论点写 `claim`、`finding_refs`、`confidence` 和 `why_it_matters`。`finding_refs` 必须引用真实 finding id；confidence 不得高于所依赖 findings 的证据强度。
+- 每组写清 `best_for`、`evidence_strength` 和 `tradeoffs`，帮助用户判断该组适合引导什么讨论、牺牲什么、有哪些边界。
+- 如果用户在上一轮反馈中选择“都不好”或“我自己修改”，根据 feedback 重新整理 `thesis_options`；不要丢弃已有 findings 和证据边界，不要新开上下文。
+- 不要把 `thesis_options` 写成 Storyline。它只表达可选主张方向，不决定唯一主线、章节顺序、正文篇幅或附录取舍。
 
 观点发现：是否因框架遗漏了框架外的重要信号？候选发现是否覆盖了问题的主要方面？
 
@@ -106,8 +115,9 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 只提交：
 
 - `findings[]`：`id`、`claim`、`evidence_refs`、`confidence`、`so_what`，以及必要时的 `challenges`
+- `thesis_options[]`：2-3 组候选论点组；每组含 `option_id`、`main_thesis`、2-4 个 `sub_theses`、`best_for`、`evidence_strength`、`tradeoffs`
 - `open_issues[]`：仅保留会影响下游判断、当前材料无法解决的问题
 
-不要重复提交 topic、材料准备度、Evidence 执行过程、观点的第二份结构化副本、讨论点、数据缺口清单或 quality checks。`agent_id`、`schema`、路径、状态和 coverage 由 runtime 或 reviewer 管理。
+不要重复提交 topic、材料准备度、Evidence 执行过程、讨论点、数据缺口清单或 quality checks。除 `thesis_options` 外，不要再输出观点的第二份结构化副本。`agent_id`、`schema`、路径、状态和 coverage 由 runtime 或 reviewer 管理。
 
 禁止输出 Executive Summary、message pyramid、section outline、pages、slides 或 visual brief。

@@ -57,6 +57,13 @@ class AnalysisSkillTests(unittest.TestCase):
                 self.assertTrue(finding["evidence_refs"])
                 self.assertIn(finding["confidence"], {"high", "medium", "low"})
                 self.assertTrue(finding["so_what"])
+        self.assertIn("thesis_options", self.schema["properties"])
+        self.assertGreaterEqual(len(self.artifact["thesis_options"]), 2)
+        for option in self.artifact["thesis_options"]:
+            with self.subTest(option=option["option_id"]):
+                self.assertTrue(option["main_thesis"])
+                self.assertGreaterEqual(len(option["sub_theses"]), 2)
+                self.assertLessEqual(len(option["sub_theses"]), 4)
         self.assertNotIn("viewpoint_candidates", self.schema["properties"])
         self.assertNotIn("quality_checks", self.schema["properties"])
 
@@ -79,6 +86,15 @@ class AnalysisSkillTests(unittest.TestCase):
                     ),
                     errors,
                 )
+
+    def test_schema_review_rejects_missing_thesis_options(self) -> None:
+        invalid = copy.deepcopy(self.artifact)
+        invalid.pop("thesis_options")
+        errors = validate(invalid, self.schema)
+        self.assertTrue(
+            any("missing required field 'thesis_options'" in error for error in errors),
+            errors,
+        )
 
     def test_schema_rejects_empty_grounding_so_what_and_confidence(self) -> None:
         invalid = copy.deepcopy(self.artifact)

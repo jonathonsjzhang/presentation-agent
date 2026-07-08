@@ -4,7 +4,7 @@
   "title": "Analysis worker submission",
   "type": "object",
   "additionalProperties": true,
-  "required": ["findings"],
+  "required": ["findings", "thesis_options"],
   "properties": {
     "findings": {
       "type": "array",
@@ -24,6 +24,47 @@
           "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
           "so_what": {"type": "string", "minLength": 1},
           "challenges": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "thesis_options": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["option_id", "main_thesis", "sub_theses"],
+        "properties": {
+          "option_id": {"type": "string", "minLength": 1},
+          "main_thesis": {"type": "string", "minLength": 1},
+          "sub_theses": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": ["claim", "finding_refs", "confidence"],
+              "properties": {
+                "claim": {"type": "string", "minLength": 1},
+                "finding_refs": {
+                  "type": "array",
+                  "items": {"type": "string", "minLength": 1},
+                  "uniqueItems": true
+                },
+                "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                "why_it_matters": {"type": "string"}
+              }
+            }
+          },
+          "best_for": {"type": "string"},
+          "evidence_strength": {"type": "string"},
+          "tradeoffs": {
             "type": "array",
             "items": {"type": "string", "minLength": 1},
             "uniqueItems": true

@@ -168,6 +168,7 @@ class GenericSkill:
             blocks.append(
                 "\n".join(
                     f"- [{o.severity}/{o.dimension}] {o.message}"
+                    + (f" 证据/反馈: {o.evidence}" if o.evidence else "")
                     + (f" 修复建议: {o.suggestion}" if o.suggestion else "")
                     for o in objections
                 )

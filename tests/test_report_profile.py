@@ -5,7 +5,7 @@ from pathlib import Path
 
 from presentation_agent.capabilities.models import CapabilityError
 from presentation_agent.capabilities.profile import normalize_report_profile
-from presentation_agent.launch import normalize_brief
+from presentation_agent.launch import BriefError, normalize_brief
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +66,39 @@ class ReportProfileTests(unittest.TestCase):
                 },
                 ROOT,
             )
+
+    def test_raw_brief_uses_new_confirmation_defaults(self) -> None:
+        brief = normalize_brief(
+            {
+                "user_intent": "分析 AI 广告产品机会",
+            },
+            ROOT,
+        )
+        self.assertEqual(brief["audience"], "exec_office")
+        self.assertEqual(brief["project_type"], "分析类")
+        self.assertEqual(brief["delivery_format"], "文档")
+        self.assertEqual(brief["report_length"], "3页")
+        self.assertEqual(brief["output_format"], "document")
+        self.assertEqual(brief["delivery_targets"], ["document"])
+
+    def test_raw_brief_presets_ppt_length_and_defers_delivery(self) -> None:
+        brief = normalize_brief(
+            {
+                "topic": "AI 产品",
+                "output_format": "PPT",
+            },
+            ROOT,
+        )
+        self.assertEqual(brief["requested_delivery_targets"], ["ppt"])
+        self.assertEqual(brief["requested_followup_targets"], ["ppt"])
+        self.assertEqual(brief["delivery_format"], "PPT")
+        self.assertEqual(brief["report_length"], "10页PPT")
+        self.assertEqual(brief["delivery_targets"], ["document"])
+        self.assertEqual(brief["output_format"], "document")
+
+    def test_raw_brief_requires_at_least_one_starting_signal(self) -> None:
+        with self.assertRaises(BriefError):
+            normalize_brief({}, ROOT)
 
     def test_free_form_audience_survives_raw_brief_normalization(self) -> None:
         brief = normalize_brief(

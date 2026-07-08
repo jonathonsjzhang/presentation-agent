@@ -24,7 +24,25 @@
       "enum": ["deep_dive", "business_progress", "quick_sync"]
     },
     "decision_question": {"type": "string", "minLength": 1},
+    "research_purpose": {"type": "string", "minLength": 1},
+    "research_direction": {"type": "string", "minLength": 1},
     "expected_action": {"type": "string", "minLength": 1},
+    "project_type": {
+      "type": "string",
+      "enum": ["分析类", "梳理类"]
+    },
+    "report_length": {"type": "string", "minLength": 1},
+    "requested_delivery_targets": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["document", "ppt", "html"]
+      }
+    },
+    "high_confidence_evidence": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
     "scope": {
       "type": "array",
       "items": {
