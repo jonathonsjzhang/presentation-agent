@@ -507,27 +507,30 @@ def _build_cli_prompt(request: SpawnRequest) -> str:
 
     if request.role == "reviewer":
         return (
-            "You are an isolated read-only reviewer sub-agent (the checker in a "
-            "maker-checker loop). Read the review instruction package at "
-            f"{request.instruction_path} (it embeds the rubrics and the artifact "
-            "under review) and the task input at "
-            f"{request.input_path}. Audit the artifact strictly against the P0/P1 "
-            "rubrics and return ONLY a JSON object on stdout of the exact form "
-            '{"objections": [{"rubric_id","severity","dimension","message",'
-            '"evidence","suggestion"}]} (empty list if it passes). '
-            "Do not modify any file."
+            "你是一个隔离上下文的只读 Reviewer sub-agent，是 maker-checker "
+            "机制中的 checker。请读取审查指令包 "
+            f"{request.instruction_path}（其中内嵌审查 rubrics 与待审产物）"
+            "以及任务输入 "
+            f"{request.input_path}。请严格对照 P0/P1 rubrics 审查产物，并且只在 "
+            "stdout 返回一个精确格式的 JSON 对象："
+            '{"objections":[{"rubric_id":"...","severity":"...",'
+            '"dimension":"...","message":"...","evidence":"...",'
+            '"suggestion":"..."}]}；若通过则返回 {"objections": []}。'
+            "不要修改任何文件。"
         )
     return (
-        "You are an isolated worker sub-agent with no host conversation history. "
-        f"Read your self-contained instruction package at {request.instruction_path} "
-        f"(it embeds the full SKILL.md role, workflow and output contract) and the "
-        f"task input at {request.input_path}. Produce the contract-compliant JSON "
-        f"and write it (a single valid JSON object, no markdown fences) to "
-        f"{request.output_path}. The instruction package is the ONLY authoritative "
-        "source for field names, enum values, required sections, and workflow rules. "
-        "Do not infer or restate the schema from this dispatch prompt, and ignore any "
-        "conflicting summary outside the instruction package. "
-        f"Confine all writes to {request.task_dir}."
+        "你是一个隔离上下文的 Worker sub-agent，没有宿主对话历史。"
+        "请以面向互联网战略分析场景的专业战略分析师身份完成任务，"
+        "并扮演指令包中定义的具体工作环节。请读取自包含指令包 "
+        f"{request.instruction_path}（其中内嵌完整 SKILL.md 角色、工作流、"
+        "质量标准与输出契约）以及任务输入 "
+        f"{request.input_path}。请按照指令包中的专业角色、工作流、质量标准"
+        "和输出契约完成任务，然后将结果写成一个合法 JSON 对象"
+        f"（不要使用 markdown fences）并保存到 {request.output_path}。"
+        "指令包是字段名、枚举值、必需章节、质量标准和工作流规则的唯一权威来源。"
+        "不要从本派发 prompt 推断或复述 schema；如果外部摘要与指令包冲突，"
+        "以指令包为准。"
+        f"所有写入必须限制在 {request.task_dir}。"
     )
 
 

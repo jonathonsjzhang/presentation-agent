@@ -71,7 +71,8 @@ class WorkBuddySpawnAdapterTests(unittest.TestCase):
             self.assertTrue(
                 spec["skill_execution"]["instruction_embeds_full_skill"]
             )
-            self.assertIn("ONLY authoritative", spec["prompt"])
+            self.assertIn("专业战略分析师", spec["prompt"])
+            self.assertIn("唯一权威来源", spec["prompt"])
 
     def test_reviewer_uses_readonly_explore_type(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
