@@ -72,10 +72,11 @@ class V03SchemaContractTests(unittest.TestCase):
         formatted["delivery_units"][0]["source_claim_ids"] = []
         self.assertEqual(validate(formatted, format_schema), [])
 
-    def test_handoffs_are_traceable_across_the_four_stage_chain(self) -> None:
+    def test_handoffs_are_traceable_across_the_five_stage_chain(self) -> None:
         analysis = read_json(FIXTURES / "analysis.v1.valid.json")
         storyline = read_json(FIXTURES / "storyline.v3.valid.json")
         report = read_json(FIXTURES / "report.v1.valid.json")
+        qa_report = read_json(FIXTURES / "report_with_questions.v1.valid.json")
         formatted = read_json(FIXTURES / "formatted_material.v2.valid.json")
 
         analysis_findings = {item["id"] for item in analysis["findings"]}
@@ -98,6 +99,8 @@ class V03SchemaContractTests(unittest.TestCase):
         self.assertTrue(
             all(visual["section_heading"] in markdown_headings for visual in formatted["visuals"])
         )
+        self.assertIn("## 听众可能追问的问题", qa_report["report_markdown"])
+        self.assertTrue(qa_report["qa_question_list"])
 
     def test_v03_agent_contract_is_the_only_active_api(self) -> None:
         config = read_json(ROOT / "configs/agents.json")
@@ -120,7 +123,7 @@ class V03SchemaContractTests(unittest.TestCase):
         self.assertEqual(profile["activation"], "default_user_entry")
         self.assertEqual(
             profile["canonical_stages"],
-            ["analysis", "storyline", "report", "format", "qa_preparation"],
+            ["analysis", "storyline", "report", "qa_preparation", "format"],
         )
         self.assertEqual(profile["default_delivery_targets"], ["document"])
         self.assertEqual(profile["internal_subagents"], ["evidence_harvester"])
@@ -134,11 +137,9 @@ class V03SchemaContractTests(unittest.TestCase):
         self.assertEqual(workers["analysis"]["output_schema"], "analysis.v1")
         self.assertEqual(workers["storyline"]["input_schema"], "analysis.v1")
         self.assertEqual(workers["report"]["input_schema"], "storyline.v3")
+        self.assertEqual(workers["qa_preparation"]["input_schema"], "report.v1")
+        self.assertEqual(workers["qa_preparation"]["output_schema"], "report.v1")
         self.assertEqual(workers["format"]["input_schema"], "report.v1")
-        self.assertEqual(
-            workers["qa_preparation"]["input_schema"],
-            "formatted_material.v2",
-        )
         frozen_schemas = {contract["schema"] for contract in self.manifest["contracts"]}
         for worker in workers.values():
             self.assertIn(worker["input_schema"], frozen_schemas)

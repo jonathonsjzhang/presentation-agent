@@ -53,8 +53,8 @@
 ```json
 {
   "format_expansion": "offer_ppt_html_after_document",
-  "qa_preparation": "default_after_format",
-  "gate": "after_document_delivery"
+  "qa_preparation": "default_after_report",
+  "gate": "after_default_chain"
 }
 ```
 

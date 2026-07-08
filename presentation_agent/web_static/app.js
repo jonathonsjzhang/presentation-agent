@@ -707,6 +707,7 @@ function fallbackOverview() {
     ["analysis", "分析", "report_charter.v2", "analysis.v1", "形成发现、so what、反证、替代解释和置信度"],
     ["storyline", "故事线", "analysis.v1", "storyline.v3", "形成 Executive Summary、message pyramid 与章节结构"],
     ["report", "报告产出", "storyline.v3", "report.v1", "生成完整、可独立阅读的战略分析报告"],
+    ["qa_preparation", "Q&A 梳理", "report.v1", "report.v1", "在报告末尾追加听众可能提出的深度问题"],
     ["format", "可视化", "report.v1", "formatted_material.v2", "默认生成精装文档，再按用户选择转译 PPT / HTML"],
   ];
   return {

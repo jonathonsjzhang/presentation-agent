@@ -136,7 +136,7 @@ class CrossStageReviewer:
             "storyline": "analysis",
             "report": "storyline",
             "format": "report",
-            "qa_preparation": "formatted_material",
+            "qa_preparation": "report",
         }.get(agent_id)
         canonical = data.get(alias) if alias else None
         return canonical if isinstance(canonical, dict) else None
@@ -177,17 +177,34 @@ class CrossStageReviewer:
         }]
 
     def _check_qa(self, upstream: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
-        upstream_text = flatten_text(upstream)
-        current_text = flatten_text(artifact)
-        risk_markers = [word for word in ("风险", "risk", "open_questions", "待补") if word in upstream_text]
-        if risk_markers and not any(word in current_text for word in ("风险", "追问", "question", "answer")):
-            return self._result("warn", [{
-                "severity": "P1",
-                "dimension": "risk_coverage",
-                "message": "Q&A 可能未覆盖正式材料中的风险或待补问题",
-                "suggested_owner": "qa_preparation",
-            }], "qa risk coverage checked")
-        return self._result("pass", [], "qa risk coverage checked")
+        upstream_markdown = str(upstream.get("report_markdown") or "").strip()
+        current_markdown = str(artifact.get("report_markdown") or "").strip()
+        issues: list[dict[str, Any]] = []
+        if not current_markdown.startswith(upstream_markdown):
+            issues.append(self._issue(
+                "P0",
+                "qa_rewrites_report",
+                "Q&A 只能在报告末尾追加追问清单，不应改写既有正文",
+                {},
+                "qa_preparation",
+            ))
+        appended = current_markdown[len(upstream_markdown):].strip()
+        question_markers = ("?", "？")
+        if not appended or "追问" not in appended or not any(
+            marker in appended for marker in question_markers
+        ):
+            issues.append(self._issue(
+                "P1",
+                "missing_question_list",
+                "Q&A 未在报告末尾追加可识别的深度追问清单",
+                {},
+                "qa_preparation",
+            ))
+        return self._result(
+            "block" if any(issue["severity"] == "P0" for issue in issues) else "warn" if issues else "pass",
+            issues,
+            "qa appended-question section checked",
+        )
 
     @staticmethod
     def _result(status: str, issues: list[dict[str, Any]], note: str) -> dict[str, Any]:

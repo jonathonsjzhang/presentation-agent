@@ -39,18 +39,17 @@ class SchemaValidatorTests(unittest.TestCase):
             [],
         )
 
-    def test_qa_schema_validates_minimal_question_shape(self) -> None:
+    def test_qa_schema_validates_augmented_report_shape(self) -> None:
         schema = json.loads(
             (
-                ROOT / "skills/qa_preparation/schemas/qa_pack.v1.json"
+                ROOT / "skills/qa_preparation/schemas/report.v1.json"
             ).read_text(encoding="utf-8")
         )
-        question_schema = {"questions": [{}]}
-        errors = validate(question_schema, schema)
+        errors = validate({"schema": "report.v1", "qa_question_list": ["为什么？"]}, schema)
         self.assertTrue(
             any(
-                "$.questions[0]" in error
-                and "missing required field 'question'" in error
+                "$" in error
+                and "missing required field 'report_markdown'" in error
                 for error in errors
             ),
             errors,

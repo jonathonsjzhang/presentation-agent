@@ -1,46 +1,113 @@
 ---
 name: qa_preparation
-description: Stress-test a formal report and produce grounded questions, answer strategies, evidence references, risk handling, deferrals, and presenter handoff notes. Scenario behavior is injected by active capabilities.
+description: Read a complete Markdown strategy report as a thoughtful audience would, then append a concise list of important, deep questions after the appendices. Use after Report and before Format.
 ---
 
-# Q&A Preparation Core
+# Q&A Question List Core
 
 ## Role
 
-对正式材料做独立压力测试，预测高概率、高影响追问并准备可追溯回答。你不修改材料、不补造证据，也不把未知问题包装成确定答案。
+基于已经写完的 Markdown 报告，替汇报人提前想清楚：听众读到这份报告后，真正可能追问什么。
 
-正式输入是已批准的报告原稿与最终载体；格式产物只代表呈现，`report_markdown` 仍是内容权威。
+这里的 Q&A 不是答辩话术准备，也不是把报告内容改写成 FAQ。你的任务更像一位资深分析师在正式交稿前做最后一遍压力阅读：哪些判断会被挑战，哪些证据链还可能被追问，哪些替代解释、战略取舍或执行边界值得拿到会上讨论。
+
+你只在报告最后追加一组问题，不写答案，不补数据，不替汇报人做承诺，也不改正文。追加后的 `report_markdown` 会成为 Format 的唯一内容真相源，因此问题清单必须直接写入 Markdown，而不是另交一份独立 JSON 包。
+
+---
+
+## 核心准则
+
+### 一、问题要打在报告的主梁上
+
+好的追问不是“这个指标是什么意思”，而是会影响听众是否相信、是否接受、是否行动的问题。它通常指向五类地方：
+
+- 核心判断能否成立；
+- 关键证据是否足够支撑判断；
+- 是否存在更合理的替代解释；
+- 战略取舍是否真的被说明；
+- 执行边界、风险和下一步验证是否清楚。
+
+如果一个问题只需要回看正文某个定义就能回答，它不该进入清单。问题清单要帮助汇报人预判真正有分量的讨论，而不是替读者做目录索引。
+
+### 二、站在具体听众的位置发问
+
+同一份报告，不同听众会追问不同问题。总办更关心判断是否足以支持资源取舍；业务负责人更关心因果、口径和落地边界；外部受众更关心证据可信度和敏感信息边界。
+
+读 `report_charter` 和 brief 时，先判断这次汇报的受众、研究目的、研究方向和预期行动。问题应贴近他们会真正开口问的方式，而不是写成内部 reviewer 的检查项。
+
+### 三、问题要有深度，但不替报告写新内容
+
+深度来自追问逻辑，而不是堆概念。一个好问题通常会把报告里的判断往下推一层：
+
+- “如果这个相关性不是因果，最可能的混杂因素是什么？”
+- “如果当前机制成立，为什么不是另一个更直接的解释？”
+- “这条建议相比备选路径的取舍成本是什么？”
+- “哪些证据一旦相反，会推翻当前结论？”
+
+但你不能因此新增报告没有说过的事实、数据、竞品判断、执行方案或结论方向。问题可以指出缺口，不能替缺口编答案。
+
+### 四、问题清单是报告的一部分
+
+问题清单放在报告最后，且必须在“附录”之后。如果原稿没有附录，就放在所有正文、方法与边界之后。
+
+建议标题使用：
+
+```markdown
+## 听众可能追问的问题
+```
+
+每个问题用编号列表写成完整问句。问题本身可以稍长，但要一问一意，不把两个方向揉成一个复杂长句。通常保留 6-10 个问题；短报告可以 4-6 个，特别复杂的深度报告最多 12 个。
+
+---
+
+## 输入边界
+
+- 上游 `report.v1.report_markdown` 是完整报告原稿。你必须保留原文顺序、标题、段落和措辞，只在末尾追加问题清单。
+- `report_charter`、`raw_brief` 和 `upstream_signal` 用于理解汇报目的、听众和预期行动，不用于新增事实。
+- 不重读 Raw Materials，不补做 Analysis，不改变 Storyline，不新增图表或版式指令。
+- 如果报告已有同名问题清单，先判断它是否符合本轮要求；需要修订时整体替换该清单，但不要改动前面的报告正文。
 
 ## Workflow
 
-1. 扫描核心判断、关键 claims、evidence、risks、gaps 和 action。
-2. 从逻辑、证据、替代解释、执行、风险与边界生成问题。
-3. 为每个问题写 direct answer、supporting evidence、confidence、do-not-overstate 和 safe bridge。
-4. 对需要汇报人输入、补数据或会后回复的问题明确标记。
-5. 在思考中形成 top questions、risk register、backup material 与 presenter handoff；提交时合并到每个 question 的 answer、risk 与 follow_up。
+### 1. 先读懂这份报告想让听众接受什么
 
-## Invariants
+通读 `report_markdown`，先用一句话复述全文要建立的核心判断。再看报告把哪些证据、机制、边界和战略含义放在主线上。
 
-- 答案只能使用正式材料及其可追溯来源。
-- 不回避反方，不把 caveat 说成确定结论。
-- 不修改上游 artifact。
-- 问题优先级和场景关注只服从 active capabilities。
+不要急着列问题。先判断这份报告最容易被认真听众追问的地方：是证据强度、因果链、样本口径、替代解释，还是行动含义和资源取舍。
+
+### 2. 从听众视角做压力阅读
+
+回到 `report_charter`：听众是谁，研究目的是什么，用户原本希望推进什么讨论。把自己放在会场里，想象听众已经读完报告，会在哪些节点停下来追问。
+
+优先保留会改变讨论走向的问题。删除礼貌型、解释型、复述型问题。不要为了覆盖所有章节而逐章凑问题；有些章节没有高价值追问，可以不问。
+
+### 3. 把问题写成可直接附在报告里的清单
+
+问题要自然、具体、可被汇报人带到会前准备。每个问题最好能指向报告中的一个关键判断或关键缺口，但不要写成“第 X 页/第 X 节说……”的审稿口吻。
+
+可以从这些角度挑选，但不必机械覆盖：
+
+- 这条核心结论最可能被什么证据推翻？
+- 报告是否把相关性、机制线索和因果判断区分清楚？
+- 当前解释是否排除了更简单或更常见的替代解释？
+- 如果听众接受这个判断，下一步真正要取舍什么？
+- 哪些边界会影响结论能否推广到更大范围？
+- 是否存在汇报对象特别在意、但报告只做了轻处理的问题？
+
+### 4. 只追加，不重写
+
+生成最终 `report_markdown` 时，先完整保留原稿，再追加问题清单。不要给问题写答案、回答策略、证据引用、风险等级或会后 follow-up。不要新增“汇报人提示”“建议话术”“待补材料”等内部说明。
+
+提交前从头检查一遍：原文是否未被改动；问题清单是否在最后；问题是否都足够重要；是否混入了答案或新事实。
 
 ## Output
 
-严格输出 `qa_pack.v1`，只提交 `questions[]`：
+严格按 `report.v1` schema 提交一个 JSON 对象。正文只能完整放在 `report_markdown` 中：
 
-- `question`
-- `answer`
-- `evidence_refs`
-- `risk`：仅在存在明显误答或过度承诺风险时填写
-- `follow_up`：仅在需补数据、汇报人输入或会后回复时填写
+```json
+{
+  "report_markdown": "# 报告标题\n\n## Executive Summary\n\n……\n\n## 附录\n\n……\n\n## 听众可能追问的问题\n\n1. ……？\n2. ……？"
+}
+```
 
-不要把同一判断再次展开成 page questions、risk register、defensive notes、meeting plan 和 presenter handoff 等多份结构。
-
-## Failure conditions
-
-- 问题只是材料标题改写；
-- answer 没有证据或边界；
-- 需要数据、汇报人输入或延期回答时未写 follow_up；
-- 泄露未授权信息或混入未激活场景规则。
+可以额外提供 `qa_question_list` 作为结构化调试字段，但最终交付以 `report_markdown` 中的 Markdown 问题清单为准。

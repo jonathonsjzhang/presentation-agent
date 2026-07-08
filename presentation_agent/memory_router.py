@@ -38,7 +38,7 @@ class MemoryRouter:
         ("storyline", "结构", ("论点", "结论", "标题", "leadline", "故事线", "storyline", "结构", "塔尖", "主线", "executive summary"), "故事线、核心主张或结构反馈"),
         ("report", "报告内容", ("正文", "章节", "段落", "论证链", "来源标注", "引用", "报告", "claim", "caveat"), "报告正文、论证或来源反馈"),
         ("format", "可读性", ("版式", "格式", "ppt", "html", "docx", "视觉", "可读性", "排版", "模板"), "载体格式或可读性反馈"),
-        ("qa_preparation", "风险", ("追问", "q&a", "qa", "风险", "回答", "质疑", "挑战问题"), "Q&A 或风险反馈"),
+        ("qa_preparation", "挑战问题", ("追问", "q&a", "qa", "质疑", "挑战问题", "听众问题", "问题清单"), "深度追问或问题清单反馈"),
     ]
 
     def __init__(self, root: Path, data_root: Optional[Path] = None) -> None:

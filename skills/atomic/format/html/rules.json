@@ -47,7 +47,7 @@
       "phase": ["generation", "review"],
       "level": "P1",
       "property": "format_fit",
-      "instruction": "按模块和证据展开层级定位问题，引用可展开证据而不是假设听众看过全部内容。"
+      "instruction": "HTML 尚未排版时，不按模块追问；基于 Markdown 报告的主判断、证据链和浏览后可能产生的战略疑问生成末尾深度问题清单，不写答案。"
     }
   ]
 }

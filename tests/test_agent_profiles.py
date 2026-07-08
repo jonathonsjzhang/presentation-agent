@@ -137,7 +137,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             ):
                 self.assertNotIn(hidden_worker, confirmation)
             self.assertIn(
-                "analysis（分析） → storyline（故事线） → report（报告产出） → format（可视化排版）",
+                "analysis（分析） → storyline（故事线） → report（报告产出） → qa_preparation（追问清单） → format（可视化排版）",
                 confirmation,
             )
             self.assertIn("是否发起review sub_agent", confirmation)
@@ -224,7 +224,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             )
             instructions = manager.agent.package.instructions
             self.assertIn(
-                "analysis → storyline → report → format(document) → qa_preparation",
+                "analysis → storyline → report → qa_preparation → format(document)",
                 instructions,
             )
             for legacy_worker in (
@@ -247,7 +247,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 "status": "planned",
             }
             for index, agent_id in enumerate(
-                ("analysis", "storyline", "report", "format", "qa_preparation"),
+                ("analysis", "storyline", "report", "qa_preparation", "format"),
                 start=1,
             )
         ]
@@ -298,20 +298,20 @@ class AgentProfileLoaderTests(unittest.TestCase):
             ),
             [],
         )
-        format_state = {
-            "current_task": {"agent_id": "format"},
+        qa_state = {
+            "current_task": {"agent_id": "qa_preparation"},
             "last_event": "worker_completed",
         }
         self.assertTrue(
             ManagerAgentRuntime._v03_acceptance_route_errors(
-                "complete", format_state, None
+                "complete", qa_state, None
             )
         )
         self.assertEqual(
             ManagerAgentRuntime._v03_acceptance_route_errors(
                 "dispatch",
-                format_state,
-                {"agent_id": "qa_preparation"},
+                qa_state,
+                {"agent_id": "format"},
             ),
             [],
         )
@@ -1105,7 +1105,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 self.assertEqual(prepared["missing_fields"], [])
                 self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
                 self.assertIn(
-                    "analysis（分析） → storyline（故事线） → report（报告产出） → format（可视化排版）",
+                    "analysis（分析） → storyline（故事线） → report（报告产出） → qa_preparation（追问清单） → format（可视化排版）",
                     prepared["present_to_user"],
                 )
 
@@ -1118,7 +1118,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
         )
         self.assertEqual(
             [spec.id for spec in profile.ordered_specs],
-            ["analysis", "storyline", "report", "format", "qa_preparation"],
+            ["analysis", "storyline", "report", "qa_preparation", "format"],
         )
         self.assertNotIn("evidence_harvester", profile.specs)
         self.assertIn("evidence_harvester", profile.support_specs)
@@ -1140,7 +1140,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertEqual(manager.contract_profile, "v0_3")
         self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
         self.assertIn(
-            "analysis（分析） → storyline（故事线） → report（报告产出） → format（可视化排版）",
+            "analysis（分析） → storyline（故事线） → report（报告产出） → qa_preparation（追问清单） → format（可视化排版）",
             prepared["present_to_user"],
         )
         self.assertNotIn("evidence_harvester", prepared["present_to_user"])
@@ -1149,7 +1149,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
         profile = load_agent_profile(ROOT, "v0_3")
         self.assertEqual(
             [spec.id for spec in profile.ordered_specs],
-            ["analysis", "storyline", "report", "format", "qa_preparation"],
+            ["analysis", "storyline", "report", "qa_preparation", "format"],
         )
         for spec in profile.ordered_specs:
             with self.subTest(agent=spec.id):
@@ -1162,12 +1162,12 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertEqual(profile.specs["analysis"].previous_agent_id, "manager")
         self.assertEqual(profile.specs["analysis"].next_agent_id, "storyline")
         self.assertEqual(profile.specs["storyline"].next_agent_id, "report")
-        self.assertEqual(profile.specs["report"].next_agent_id, "format")
-        self.assertEqual(profile.specs["format"].next_agent_id, "qa_preparation")
-        self.assertIsNone(profile.specs["qa_preparation"].next_agent_id)
+        self.assertEqual(profile.specs["report"].next_agent_id, "qa_preparation")
+        self.assertEqual(profile.specs["qa_preparation"].next_agent_id, "format")
+        self.assertIsNone(profile.specs["format"].next_agent_id)
         self.assertEqual(
             profile.specs["qa_preparation"].input_schema,
-            "formatted_material.v2",
+            "report.v1",
         )
 
     def test_loop_runner_accepts_explicit_profile_without_running_a_model(self) -> None:
@@ -1175,7 +1175,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertEqual(runner.contract_profile, "v0_3")
         self.assertEqual(
             [spec.id for spec in runner.list_agents()],
-            ["analysis", "storyline", "report", "format", "qa_preparation"],
+            ["analysis", "storyline", "report", "qa_preparation", "format"],
         )
 
 
@@ -1201,7 +1201,7 @@ class V03StepRuntimeTests(unittest.TestCase):
         self.assertEqual(initialized["agent_id"], "analysis")
         self.assertEqual(
             [row["agent_id"] for row in stepper.pipeline_status()["stages"]],
-            ["analysis", "storyline", "report", "format", "qa_preparation"],
+            ["analysis", "storyline", "report", "qa_preparation", "format"],
         )
 
         fixtures = {

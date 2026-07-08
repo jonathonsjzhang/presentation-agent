@@ -91,7 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
     report_approve.add_argument(
         "--pause-after",
         action="append",
-        choices=["analysis", "storyline", "report", "format", "qa_preparation"],
+        choices=["analysis", "storyline", "report", "qa_preparation", "format"],
         default=[],
         help="Worker pause point for --run-mode custom; repeat as needed.",
     )

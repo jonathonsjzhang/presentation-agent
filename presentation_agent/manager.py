@@ -154,7 +154,7 @@ class ManagerAgentRuntime:
             "## v0.3 planning 契约速查",
             "",
             "- report_charter 只定义任务，不重复固定流程、质量检查或运行状态。",
-            "- runtime 固定执行 analysis → storyline → report → format → qa_preparation，不输出 execution_plan。",
+            "- runtime 固定执行 analysis → storyline → report → qa_preparation → format，不输出 execution_plan。",
             "- 首个 task_packet 派发 analysis，只写目标、输入引用和必要返工意见。",
             "- evidence_harvester 是 Analysis 的内部子任务。",
             "- 如 material_inventory 中无任何素材 → 使用 ask_human，不要 dispatch。",
@@ -286,8 +286,8 @@ class ManagerAgentRuntime:
         expected_next = {
             "analysis": "storyline",
             "storyline": "report",
-            "report": "format",
-            "format": "qa_preparation",
+            "report": "qa_preparation",
+            "qa_preparation": "format",
         }
         if action == "dispatch" and current_agent in expected_next:
             expected = expected_next[current_agent]
@@ -404,7 +404,7 @@ class WorkerExecutor:
                 "storyline": "analysis.v1",
                 "report": "storyline.v3",
                 "format": "report.v1",
-                "qa_preparation": "formatted_material.v2",
+                "qa_preparation": "report.v1",
             }.get(agent_id)
             available_schemas = {
                 str(data.get("schema") or "")
@@ -1258,14 +1258,14 @@ class ManagerOrchestrator:
                         ("analysis", ""),
                         ("storyline", "analysis"),
                         ("report", "storyline"),
-                        ("format", "report"),
-                        ("qa_preparation", "format"),
+                        ("qa_preparation", "report"),
+                        ("format", "qa_preparation"),
                     ),
                     1,
                 )
             ],
             "human_gates": ["plan", "delivery_options"],
-            "completion_criteria": ["qa_preparation delivered"],
+            "completion_criteria": ["format delivered"],
             "generated_by": "runtime",
         }
         decision["execution_plan"] = plan
@@ -1365,7 +1365,7 @@ class ManagerOrchestrator:
             action == "complete"
             and self.contract_profile == "v0_3"
             and isinstance(task, dict)
-            and task.get("agent_id") == "qa_preparation"
+            and self._is_default_document_format_task(task)
         ):
             state["human_gate"] = "delivery_options"
             state["status"] = "awaiting_delivery_option_selection"
@@ -1382,6 +1382,20 @@ class ManagerOrchestrator:
             )
         self._save_state(state)
         return self._human_gate_result(state)
+
+    @staticmethod
+    def _is_default_document_format_task(task: dict[str, Any]) -> bool:
+        """Return true for the main-chain document Format task.
+
+        Format also handles optional PPT/HTML translations after the delivery
+        options gate. Those follow-up tasks should complete the run instead of
+        reopening the same gate.
+        """
+        if task.get("agent_id") != "format":
+            return False
+        context = task.get("context") if isinstance(task.get("context"), dict) else {}
+        target = task.get("delivery_target") or context.get("delivery_target") or "document"
+        return str(target) == "document"
 
     def _dispatch(
         self,
@@ -1510,8 +1524,8 @@ class ManagerOrchestrator:
                 "analysis",
                 "storyline",
                 "report",
-                "format",
                 "qa_preparation",
+                "format",
             ],
             "optional_after_document": [
                 "format(ppt)",
@@ -1809,7 +1823,7 @@ class ManagerOrchestrator:
             f"| **项目类型** | {project_type} |",
             f"| **交付形式** | {delivery} |",
             f"| **报告篇幅** | {report_length} |",
-            "| **agent执行流程** | analysis（分析） → storyline（故事线） → report（报告产出） → format（可视化排版） |",
+            "| **agent执行流程** | analysis（分析） → storyline（故事线） → report（报告产出） → qa_preparation（追问清单） → format（可视化排版） |",
             "| **是否发起review sub_agent** | 否（更高效） |",
         ])
 

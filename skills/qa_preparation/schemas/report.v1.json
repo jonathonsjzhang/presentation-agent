@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema": "report.v1",
+  "title": "Q&A-augmented report submission",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["report_markdown"],
+  "properties": {
+    "schema": {"const": "report.v1"},
+    "report_markdown": {
+      "type": "string",
+      "minLength": 500,
+      "description": "The original Markdown report with a final audience-question section appended."
+    },
+    "qa_question_list": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

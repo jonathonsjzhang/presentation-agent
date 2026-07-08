@@ -4,7 +4,7 @@
       "id": "MGR03-P0-001",
       "severity": "P0",
       "dimension": "主链",
-      "check": "初始计划是否严格为 analysis → storyline → report → format → qa_preparation。",
+      "check": "初始计划是否严格为 analysis → storyline → report → qa_preparation → format。",
       "fix": "恢复固定五阶段。Evidence Harvester 可作为 analysis 的前置条件运行，但不放入主链任务列表。"
     },
     {
@@ -18,7 +18,7 @@
       "id": "MGR03-P0-003",
       "severity": "P0",
       "dimension": "输入依赖",
-      "check": "下游 task_packet 是否引用真实、已批准的必需上游 artifact，且路径符合 worker 输入契约（storyline ← analysis.v1, report ← storyline.v3, format ← report.v1）。",
+      "check": "下游 task_packet 是否引用真实、已批准的必需上游 artifact，且路径符合 worker 输入契约（storyline ← analysis.v1, report ← storyline.v3, qa_preparation ← report.v1, format ← report.v1）。",
       "fix": "使用 artifact_catalog 中的真实路径并保持阶段依赖；不得虚构路径或跳过必需的中间产物。"
     },
     {
@@ -39,7 +39,7 @@
       "id": "MGR03-P0-006",
       "severity": "P0",
       "dimension": "自包含性",
-      "check": "task_packet 是否自包含——Worker 可能以隔离 sub-agent 执行，input_artifacts 必须包含所需上游产物。Format 只需取得含 report_markdown 的 report.v1。",
+      "check": "task_packet 是否自包含——Worker 可能以隔离 sub-agent 执行，input_artifacts 必须包含所需上游产物。QA 与 Format 都只需取得含 report_markdown 的 report.v1。",
       "fix": "确保每个 task_packet 的 input_artifacts 包含该 Worker 所需的所有上游产物路径，不依赖主对话历史。"
     },
     {
@@ -74,7 +74,7 @@
       "id": "MGR03-P0-007",
       "severity": "P0",
       "dimension": "管线完整",
-      "check": "是否严格按 analysis → storyline → report → format → qa_preparation 顺序执行，未跳过任何阶段。最终产物（DOCX/PPT/HTML）是否只由 Format worker 产出，Q&A 是否只由 QA worker 产出，不存在管线外生成的最终材料。",
+      "check": "是否严格按 analysis → storyline → report → qa_preparation → format 顺序执行，未跳过任何阶段。最终产物（DOCX/PPT/HTML）是否只由 Format worker 产出，追问清单是否只由 QA worker 追加，不存在管线外生成的最终材料。",
       "fix": "拒绝接受非管线产物。遇到阻塞时通过 revise 或 ask_human 解决，不得绕过管线。"
     }
   ]

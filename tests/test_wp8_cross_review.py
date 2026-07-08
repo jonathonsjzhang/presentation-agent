@@ -19,6 +19,14 @@ class WP8CrossReviewTests(unittest.TestCase):
         self.analysis = read_json(FIXTURES / "analysis.v1.valid.json")
         self.storyline = read_json(FIXTURES / "storyline.v3.valid.json")
         self.report = read_json(FIXTURES / "report.v1.valid.json")
+        self.qa_report = copy.deepcopy(self.report)
+        self.qa_report["agent_id"] = "qa_preparation"
+        self.qa_report["report_markdown"] = (
+            self.report["report_markdown"].rstrip()
+            + "\n\n## 听众可能追问的问题\n\n"
+            + "1. 如果成果保存组本身就是高意愿用户，当前证据如何区分意愿和机制？\n"
+            + "2. 哪些证据一旦相反，会推翻优先验证成果复用闭环的判断？\n"
+        )
         self.formatted = read_json(FIXTURES / "formatted_material.v2.valid.json")
 
     def test_frozen_chain_passes_all_checks(self) -> None:
@@ -36,8 +44,12 @@ class WP8CrossReviewTests(unittest.TestCase):
         )
         self.assertEqual(
             self.reviewer._check_report_to_format(
-                self.report, self.formatted
+                self.qa_report, self.formatted
             )["status"],
+            "pass",
+        )
+        self.assertEqual(
+            self.reviewer._check_qa(self.report, self.qa_report)["status"],
             "pass",
         )
 
@@ -85,9 +97,19 @@ class WP8CrossReviewTests(unittest.TestCase):
     def test_format_blocks_visual_for_unknown_section(self) -> None:
         artifact = copy.deepcopy(self.formatted)
         artifact["visuals"][0]["section_heading"] = "不存在的章节"
-        result = self.reviewer._check_report_to_format(self.report, artifact)
+        result = self.reviewer._check_report_to_format(self.qa_report, artifact)
         self.assertEqual(result["status"], "block")
         self.assertEqual(result["issues"][0]["dimension"], "visual_section_mapping")
+
+    def test_qa_blocks_when_original_report_is_rewritten(self) -> None:
+        artifact = copy.deepcopy(self.qa_report)
+        artifact["report_markdown"] = artifact["report_markdown"].replace(
+            "当前新用户首周回访不足",
+            "被改写的开头",
+        )
+        result = self.reviewer._check_qa(self.report, artifact)
+        self.assertEqual(result["status"], "block")
+        self.assertEqual(result["issues"][0]["dimension"], "qa_rewrites_report")
 
 
 if __name__ == "__main__":

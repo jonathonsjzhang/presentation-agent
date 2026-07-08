@@ -30,7 +30,7 @@
   ],
   "extension_policy": {
     "format_expansion": "offer_ppt_html_after_document",
-    "qa_preparation": "default_after_format",
+    "qa_preparation": "default_after_report",
     "gate": "after_default_chain"
   },
   "global_state_seed": {

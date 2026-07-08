@@ -13,13 +13,13 @@ from presentation_agent.step import StepRunner
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "v0_3"
-STAGES = ("analysis", "storyline", "report", "format", "qa_preparation")
+STAGES = ("analysis", "storyline", "report", "qa_preparation", "format")
 ARTIFACTS = {
     "analysis": "analysis.v1.valid.json",
     "storyline": "storyline.v3.valid.json",
     "report": "report.v1.valid.json",
+    "qa_preparation": "report_with_questions.v1.valid.json",
     "format": "formatted_material.v2.valid.json",
-    "qa_preparation": "qa_pack.v1.valid.json",
 }
 
 
@@ -109,9 +109,22 @@ class DefaultManagerChainTests(unittest.TestCase):
             for index, agent_id in enumerate(STAGES):
                 task_dir = Path(dispatched["task"]["task_dir"])
                 instruction = dispatched["instruction"]
+                artifact = read_json(FIXTURES / ARTIFACTS[agent_id])
+                if agent_id == "qa_preparation":
+                    artifact = read_json(FIXTURES / "report.v1.valid.json")
+                    artifact["report_markdown"] = (
+                        artifact["report_markdown"].rstrip()
+                        + "\n\n## 听众可能追问的问题\n\n"
+                        + "1. 如果成果保存组本身就是高意愿用户，当前证据如何区分意愿和机制？\n"
+                        + "2. 哪些证据一旦相反，会推翻优先验证成果复用闭环的判断？\n"
+                    )
+                    artifact["qa_question_list"] = [
+                        "如果成果保存组本身就是高意愿用户，当前证据如何区分意愿和机制？",
+                        "哪些证据一旦相反，会推翻优先验证成果复用闭环的判断？",
+                    ]
                 write_json(
                     Path(instruction["output_path"]),
-                    read_json(FIXTURES / ARTIFACTS[agent_id]),
+                    artifact,
                 )
                 runner = StepRunner(
                     ROOT,
@@ -144,7 +157,7 @@ class DefaultManagerChainTests(unittest.TestCase):
                 decision = {
                     "schema": "manager_decision.v1",
                     "phase": "acceptance",
-                    "action": "complete" if agent_id == "qa_preparation" else "dispatch",
+                    "action": "complete" if agent_id == "format" else "dispatch",
                     "reason_summary": f"accept {agent_id}",
                     "acceptance_report": {
                         "task_id": f"t{index + 1}",

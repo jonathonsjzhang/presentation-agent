@@ -13,8 +13,8 @@
         "analysis",
         "storyline",
         "report",
-        "format",
-        "qa_preparation"
+        "qa_preparation",
+        "format"
       ],
       "default_delivery_targets": [
         "document"
@@ -170,7 +170,7 @@
           "skill": "report",
           "description": "基于已批准的 Storyline，写成一篇完整、有开头、有推进、有收束、可从头读到尾的 Markdown 报告。",
           "previous_agent_id": "storyline",
-          "next_agent_id": "format",
+          "next_agent_id": "qa_preparation",
           "input_schema": "storyline.v3",
           "input_contract": {
             "required_inputs": [
@@ -183,7 +183,7 @@
             "required_handoff_fields": [
               "report_markdown"
             ],
-            "downstream": "format"
+            "downstream": "qa_preparation"
           },
           "memory_dimensions": [
             "完整原稿",
@@ -229,11 +229,11 @@
         {
           "id": "format",
           "name": "可视化",
-          "stage": 4,
+          "stage": 5,
           "skill": "format",
-          "description": "以 canonical Markdown 为内容权威，选择必要视觉；默认版式、分页和渲染状态由 runtime 管理。",
-          "previous_agent_id": "report",
-          "next_agent_id": "qa_preparation",
+          "description": "以已追加深度追问清单的 canonical Markdown 为内容权威，选择必要视觉；默认版式、分页和渲染状态由 runtime 管理。",
+          "previous_agent_id": "qa_preparation",
+          "next_agent_id": null,
           "input_schema": "report.v1",
           "input_contract": {
             "required_inputs": [
@@ -247,7 +247,7 @@
             "required_handoff_fields": [
               "visuals"
             ],
-            "downstream": "qa_preparation"
+            "downstream": "delivery_options"
           },
           "memory_dimensions": [
             "版式",
@@ -295,54 +295,48 @@
         {
           "id": "qa_preparation",
           "name": "Q&A 梳理",
-          "stage": 5,
+          "stage": 4,
           "skill": "qa_preparation",
-          "description": "基于正式材料和汇报对象，梳理可能提问、挑战角度、回答策略，以及需要汇报人补充的信息。",
-          "previous_agent_id": "format",
-          "next_agent_id": null,
-          "input_schema": "formatted_material.v2",
-          "output_schema": "qa_pack.v1",
+          "description": "基于完整 Markdown 报告和汇报对象，追加一组重要、深度、关乎逻辑与底层论据的听众追问，不写答案。",
+          "previous_agent_id": "report",
+          "next_agent_id": "format",
+          "input_schema": "report.v1",
+          "output_schema": "report.v1",
           "input_contract": {
             "required_inputs": [
-              "formatted material",
-              "audience_profile"
+              "report_markdown",
+              "report_charter"
             ],
             "optional_inputs": [
-              "历史 Q&A",
+              "历史追问",
               "敏感问题列表",
-              "已知管理层关注点",
-              "补充数据"
+              "已知管理层关注点"
             ],
             "accepted_material_formats": [
               "json",
-              "pptx",
-              "html",
-              "docx"
+              "md"
             ],
-            "input_preparation_focus": "逐页识别最可能被追问的证据、口径、假设、资源诉求和决策风险"
+            "input_preparation_focus": "围绕核心判断、证据链、替代解释、战略取舍和执行边界，生成会改变讨论质量的深度追问"
           },
           "output_contract": {
-            "primary_artifact": "Q&A pack",
+            "primary_artifact": "report.v1 with appended question list",
             "required_handoff_fields": [
-              "questions",
-              "answerability",
-              "risk_level",
-              "answer_strategy",
-              "required_presenter_input"
+              "report_markdown"
             ],
-            "downstream_use": "作为最终汇报准备包，帮助汇报人处理高影响追问和未闭合问题"
+            "downstream": "format",
+            "downstream_use": "作为 Format 的唯一内容真相源，确保最终 DOCX/PPT/HTML 在附录之后包含深度追问清单"
           },
           "memory_dimensions": [
             "挑战问题",
-            "回答策略",
-            "风险",
-            "数据口径",
+            "逻辑压力测试",
+            "证据边界",
+            "战略取舍",
             "受众关注"
           ],
           "rubrics": [
-            "必须覆盖关键追问并区分可答、需汇报人补充、需补数据和应延后处理",
-            "必须标记高风险问题和建议前置化解的话术",
-            "不得替汇报人编造无法确认的答案"
+            "问题必须抓住核心判断、证据链、替代解释、战略取舍或执行边界，不做浅层释义",
+            "问题必须附着在报告最后一部分，且位于附录之后",
+            "不得写答案、回答策略或补造上游没有的新论据"
           ],
           "max_revision_rounds": 2,
           "loop": {
@@ -363,8 +357,8 @@
             "agent_memory_scope": "qa_preparation_only",
             "generation_memory_dimensions": [
               "挑战问题",
-              "回答策略",
-              "风险",
+              "逻辑压力测试",
+              "证据边界",
               "受众关注"
             ]
           },
@@ -372,19 +366,10 @@
             "skill_package": "skills/qa_preparation",
             "runtime_adapter": "generic_llm_skill_runtime",
             "review_policy": "schema_validation + machine_check + llm_p1",
-            "connectors": [
-              "formatted_material_reader"
-            ],
+            "connectors": [],
             "implementation_status": "profile_runtime_ready"
           },
-          "implementation_status": "implemented",
-          "optional_features": {
-            "multi_candidate": {
-              "enabled_by_default": true,
-              "max_candidates": 3,
-              "selection_owner": "review_sub_agent_then_human"
-            }
-          }
+          "implementation_status": "implemented"
         }
       ]
     }
@@ -422,8 +407,8 @@
       "analysis",
       "storyline",
       "report",
-      "format",
-      "qa_preparation"
+      "qa_preparation",
+      "format"
     ],
     "human_review_required": true,
     "automatic_backtracking": false,

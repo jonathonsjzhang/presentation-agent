@@ -103,7 +103,7 @@
       "phase": ["generation", "review"],
       "level": "P1",
       "property": "format_fit",
-      "instruction": "按页面标题、关键图表和附录逐页扫描追问，并为高风险页准备 backup appendix。"
+      "instruction": "PPT 尚未排版时，不按页面追问；基于 Markdown 报告的主判断、证据链和取舍边界生成末尾深度问题清单，不写答案或 backup。"
     }
   ]
 }
