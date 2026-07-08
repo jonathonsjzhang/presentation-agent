@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from presentation_agent.connectors.base import ConnectorContext, SuffixConnector
+from presentation_agent.connectors.table_profiler import (
+    data_assets_from_profile,
+    profile_csv_table,
+)
 
 
 class CsvConnector(SuffixConnector):
@@ -53,11 +57,14 @@ class CsvConnector(SuffixConnector):
                 f"无法以任何已知编码读取 {path}: {last_error}"
             )
 
+        data_profile = profile_csv_table(name=path.stem, columns=columns, rows=rows)
         return {
             "topic": path.stem,
             "source_path": str(path),
             "source_type": "csv",
             "target_agent": context.agent_id,
+            "data_profile": data_profile,
+            "data_assets": data_assets_from_profile(data_profile),
             "tables": [
                 {
                     "name": path.stem,

@@ -332,6 +332,9 @@ class StepRunner:
     ) -> None:
         input_data["evidence_catalog"] = catalog
         input_data["evidence_catalog_ref"] = catalog_ref
+        for key in ("evidence_index", "evidence_assets", "material_resolution"):
+            if catalog.get(key) not in (None, "", [], {}):
+                input_data[key] = catalog[key]
         input_path = Path(state["input_path"])
         write_json(input_path, input_data)
 
@@ -1041,13 +1044,31 @@ class StepRunner:
                 f"Worker {self.spec.id} 产出了空 artifact "
                 f"(仅含 schema/agent_id，无实质内容)"
             )
-        if self.spec.id == "format":
+        if filename in {"output_gen.json", "output_revise.json"}:
             input_data = self._load_input(state)
-            target = input_data.get("delivery_target")
-            if not target and isinstance(input_data.get("manager_task"), dict):
-                target = input_data["manager_task"].get("delivery_target")
-            data["delivery_target"] = target or "document"
+            self._attach_runtime_evidence_fields(data, input_data)
+            if self.spec.id == "format":
+                target = input_data.get("delivery_target")
+                if not target and isinstance(input_data.get("manager_task"), dict):
+                    target = input_data["manager_task"].get("delivery_target")
+                data["delivery_target"] = target or "document"
+                from presentation_agent.evidence_assets import (
+                    enrich_format_visuals_with_evidence_assets,
+                )
+
+                enrich_format_visuals_with_evidence_assets(data, input_data)
         return data
+
+    @staticmethod
+    def _attach_runtime_evidence_fields(
+        artifact: dict[str, Any],
+        input_data: dict[str, Any],
+    ) -> None:
+        from presentation_agent.evidence_assets import evidence_runtime_fields
+
+        fields = evidence_runtime_fields(input_data)
+        for key, value in fields.items():
+            artifact.setdefault(key, value)
 
     def _write_instruction(
         self,

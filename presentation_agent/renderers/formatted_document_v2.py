@@ -82,6 +82,9 @@ def _chart_png(asset: dict[str, Any], path: Path) -> Path:
 
     data = asset.get("data") or {}
     categories = list(data.get("categories") or [])
+    series = data.get("series")
+    if isinstance(series, list) and series:
+        return _line_chart_png(asset, path, categories, series)
     values = list(data.get("values") or [])
     if not categories or len(categories) != len(values):
         raise ValueError(f"{asset.get('asset_id')}: chart requires equally sized categories and values")
@@ -104,6 +107,111 @@ def _chart_png(asset: dict[str, Any], path: Path) -> Path:
         draw.text((left + bar_width + 18, y + 20), value_label, fill="#0B2545", font=_font(25))
     image.save(path, "PNG")
     return path
+
+
+def _line_chart_png(
+    asset: dict[str, Any],
+    path: Path,
+    categories: list[Any],
+    series: list[Any],
+) -> Path:
+    from PIL import Image, ImageDraw
+
+    from presentation_agent.renderers.diagram import _font
+
+    if not categories:
+        raise ValueError(f"{asset.get('asset_id')}: line chart requires categories")
+    normalized_series = []
+    for row in series:
+        if not isinstance(row, dict):
+            continue
+        values = [_to_float(value) for value in row.get("values") or []]
+        if len(values) != len(categories):
+            continue
+        if any(value is not None for value in values):
+            normalized_series.append(
+                {"name": str(row.get("name") or ""), "values": values}
+            )
+    if not normalized_series:
+        raise ValueError(f"{asset.get('asset_id')}: line chart requires numeric series")
+
+    width, height = 1400, 650
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+    draw.text((55, 30), str(asset.get("title") or ""), fill="#0B2545", font=_font(34))
+
+    left, top, right, bottom = 105, 130, 1320, 535
+    draw.line((left, bottom, right, bottom), fill="#94A3B8", width=2)
+    draw.line((left, top, left, bottom), fill="#94A3B8", width=2)
+
+    numeric = [
+        value
+        for row in normalized_series
+        for value in row["values"]
+        if value is not None
+    ]
+    minimum = min(numeric)
+    maximum = max(numeric)
+    if minimum == maximum:
+        minimum -= 1
+        maximum += 1
+    span = maximum - minimum
+    colors = ("#006BA6", "#007A53", "#D46A00", "#7C3AED", "#64748B", "#B91C1C")
+
+    def xy(index: int, value: float) -> tuple[float, float]:
+        x = left + (right - left) * index / max(1, len(categories) - 1)
+        y = bottom - (bottom - top) * (value - minimum) / span
+        return x, y
+
+    for tick in range(5):
+        value = minimum + span * tick / 4
+        y = bottom - (bottom - top) * tick / 4
+        draw.line((left, y, right, y), fill="#E2E8F0", width=1)
+        draw.text((35, y - 12), _format_tick(value), fill="#64748B", font=_font(18))
+
+    for series_index, row in enumerate(normalized_series):
+        color = colors[series_index % len(colors)]
+        previous: tuple[float, float] | None = None
+        for index, value in enumerate(row["values"]):
+            if value is None:
+                previous = None
+                continue
+            point = xy(index, value)
+            if previous is not None:
+                draw.line((previous[0], previous[1], point[0], point[1]), fill=color, width=4)
+            draw.ellipse((point[0] - 4, point[1] - 4, point[0] + 4, point[1] + 4), fill=color)
+            previous = point
+        legend_x = 125 + series_index * 205
+        draw.rectangle((legend_x, 88, legend_x + 26, 104), fill=color)
+        draw.text((legend_x + 34, 82), row["name"], fill="#253746", font=_font(20))
+
+    label_step = max(1, len(categories) // 6)
+    for index, label in enumerate(categories):
+        if index not in (0, len(categories) - 1) and index % label_step:
+            continue
+        x = left + (right - left) * index / max(1, len(categories) - 1)
+        draw.text((x - 45, bottom + 18), str(label)[:10], fill="#64748B", font=_font(16))
+
+    note = str((asset.get("data") or {}).get("sampling_note") or "")
+    if note:
+        draw.text((55, 590), note, fill="#64748B", font=_font(18))
+    image.save(path, "PNG")
+    return path
+
+
+def _to_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(str(value).replace("%", "").replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_tick(value: float) -> str:
+    if abs(value) >= 100:
+        return f"{value:.0f}"
+    return f"{value:.1f}".rstrip("0").rstrip(".")
 
 
 def _matrix_png(asset: dict[str, Any], path: Path) -> Path:
@@ -183,6 +291,9 @@ def _chart_data_ready(asset: dict[str, Any]) -> bool:
     if not isinstance(data, dict):
         return False
     categories = data.get("categories")
+    series = data.get("series")
+    if isinstance(categories, list) and categories and isinstance(series, list) and series:
+        return True
     values = data.get("values")
     return (
         isinstance(categories, list)

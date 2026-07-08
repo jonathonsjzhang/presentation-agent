@@ -11,17 +11,19 @@ description: Build a complete, source-traceable evidence catalog before argument
 
 ## Workflow
 
-1. 检查 `input_readiness`。若需要盘点的字段只有 preview、存在未读取引用，或图片/表格未检查，将对应内容记为 unresolved，不得声称盘点完整。
-2. 逐一读取 connector 提供的 source units，保留稳定来源定位、原文、模态和归属。
-3. 原子化识别定量数据、访谈原话、案例、caveat、反证、解释变量、作者判断和方法定义。一个 source unit 可以生成多个 evidence item。
-4. 对每个 evidence item 想清 observation、scope、limitations 和 attribution。不得把访谈外推为总体事实，不得把作者判断改写成已验证事实。
-5. 在内部完成 source-unit coverage 与 disposition 检查。完整性仍来自 source coverage，而不是主观自检；但这些运行过程不再要求逐项写入模型输出。
+1. 检查 `input_readiness`、`material_resolution` 和 `evidence_index`。若材料无法读取、只有 preview、存在未读取引用，或图片/表格未检查，将对应内容记为 unresolved，不得声称盘点完整。
+2. 先以 `evidence_index` 作为证据目录骨架：每个 E-id 对应一个文件/材料，保留稳定来源定位、解析状态、summary、key_findings、data_assets 和 `parsed_artifact_path`。
+3. 逐一读取 connector 内联提供的 source units；若大型表格只内联预览，不要逐行抄表，必须引用该 E-id 的 `parsed_artifact_path` 和 data_assets，供下游按需回查原始数据、切片和绘图。
+4. 原子化识别定量数据、访谈原话、案例、caveat、反证、解释变量、作者判断和方法定义。一个 source unit 或一个 data asset 可以生成多个 evidence item。
+5. 对每个 evidence item 想清 observation、scope、limitations 和 attribution。不得把访谈外推为总体事实，不得把作者判断改写成已验证事实。
+6. 在内部完成 source-unit coverage 与 disposition 检查。完整性仍来自 source coverage，而不是主观自检；但这些运行过程不再要求逐项写入模型输出。
 
 ## Invariants
 
 - 不遗漏、不合并掉独立访谈、caveat、反证或解释变量。
 - `content` 必须忠实于输入，不补写、不润色、不拼接不存在的原话。
 - 所有 item 必须有真实 `source_ref`。
+- 表格型 item 优先引用 E-id + data_asset/表名/行列范围；不要把大型原始表逐行复制到 catalog。
 - 图片、扫描页或图表未实际检查时只能写入 `unresolved`。
 - 不生成 thesis、claim、recommendation、timeline、KPI、owner、预算或路线图。
 
