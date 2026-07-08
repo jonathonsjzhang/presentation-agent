@@ -27,17 +27,66 @@ BriefInput = Union[str, Path, dict]
 
 RAW_BRIEF_SCHEMA = "raw_brief.v1"
 
-# Only these must be present (possibly via defaults below) for the pipeline to
-# have something meaningful to chew on. Everything else is optional context.
-_REQUIRED_FIELDS = ("topic", "audience", "decision_goal")
+# The opening brief gate now asks the user to complete research purpose,
+# direction, and evidence confidence. Normalization only needs enough signal to
+# start that gate; defaults cover the rest.
+_STARTING_CONTEXT_FIELDS = (
+    "topic",
+    "user_intent",
+    "context",
+    "decision_goal",
+    "expected_action",
+    "research_purpose",
+    "research_direction",
+    "hypothesis",
+    "materials",
+    "source_units",
+    "rows",
+    "evidence_index",
+    "evidence_catalog",
+)
 
 _DEFAULTS: dict[str, Any] = {
+    "audience": "总办",
     "report_type": "deep_dive",
-    "output_format": "ppt",
+    "output_format": "document",
+    "project_type": "分析类",
+    "delivery_format": "文档",
     "context": "",
     "materials": [],
     "constraints": [],
     "user_intent": "",
+    "decision_goal": "",
+    "expected_action": "",
+    "research_purpose": "",
+    "research_direction": "",
+}
+
+_PROJECT_TYPE_ALIASES = {
+    "分析": "分析类",
+    "分析类": "分析类",
+    "analysis": "分析类",
+    "deep_dive": "分析类",
+    "专题汇报": "分析类",
+    "专题深度分析": "分析类",
+    "梳理": "梳理类",
+    "梳理类": "梳理类",
+    "整理": "梳理类",
+    "整理类": "梳理类",
+    "summary": "梳理类",
+    "quick_sync": "梳理类",
+}
+
+_DELIVERY_ALIASES = {
+    "文档": "document",
+    "word": "document",
+    "docx": "document",
+    "document": "document",
+    "ppt": "ppt",
+    "pptx": "ppt",
+    "幻灯片": "ppt",
+    "html": "html",
+    "网页": "html",
 }
 
 
@@ -89,26 +138,62 @@ def normalize_brief(
     selected_profile = load_agent_profile(root, contract_profile).contract_profile
     data = _coerce_to_dict(brief, root)
 
+    if not _has_starting_context(data):
+        raise BriefError(
+            "brief 缺少可用于启动汇报的需求信息：请提供 topic、user_intent、"
+            "context、decision_goal、materials 或原始材料。"
+        )
+
     normalized: dict[str, Any] = {**_DEFAULTS, **data}
     normalized["schema"] = RAW_BRIEF_SCHEMA
 
-    missing = [f for f in _REQUIRED_FIELDS if not str(normalized.get(f, "")).strip()]
-    if missing:
-        raise BriefError(
-            "brief 缺少必填字段：" + ", ".join(missing) + "。"
-            "（topic=汇报主题、audience=汇报对象、decision_goal=希望支撑的决策）"
-        )
-
     normalized["materials"] = _normalize_materials(normalized.get("materials"))
     normalized["constraints"] = _as_str_list(normalized.get("constraints"))
+    normalized["research_purpose"] = _first_text(
+        normalized,
+        "research_purpose",
+        "decision_goal",
+        "analysis_objective",
+    )
+    normalized["research_direction"] = _first_text(
+        normalized,
+        "research_direction",
+        "hypothesis",
+        "hypo",
+        "expected_action",
+        "discussion_direction",
+    )
+    if not str(normalized.get("decision_goal", "")).strip():
+        normalized["decision_goal"] = normalized["research_purpose"]
+    if not str(normalized.get("expected_action", "")).strip():
+        normalized["expected_action"] = normalized["research_direction"]
+
+    project_type = _normalize_project_type(
+        data.get("project_type") or data.get("project_kind")
+    )
+    report_type_as_project_type = _normalize_project_type(data.get("report_type"))
+    normalized["project_type"] = (
+        project_type or report_type_as_project_type or str(normalized["project_type"])
+    )
+    if project_type and "report_type" not in data:
+        normalized["report_type"] = _report_type_for_project_type(project_type)
+    elif report_type_as_project_type:
+        normalized["report_type"] = _report_type_for_project_type(
+            report_type_as_project_type
+        )
+
+    requested_targets = _requested_delivery_targets(data, normalized)
+    normalized["requested_delivery_targets"] = requested_targets
+    normalized["delivery_format"] = _display_delivery_targets(requested_targets)
+    if not str(normalized.get("report_length", "")).strip():
+        normalized["report_length"] = _default_report_length(requested_targets)
+
     if selected_profile == "v0_3":
-        targets = normalized.get("delivery_targets") or ["document"]
-        if isinstance(targets, str):
-            targets = [targets]
         allowed = {"document", "ppt", "html"}
         requested_targets = [
-            str(item) for item in targets if str(item) in allowed
-        ]
+            item for item in requested_targets if item in allowed
+        ] or ["document"]
+        normalized["requested_delivery_targets"] = requested_targets
         normalized["requested_followup_targets"] = [
             item for item in requested_targets if item != "document"
         ]
@@ -124,6 +209,73 @@ def normalize_brief(
     normalized["output_format"] = profile.output_format
     normalized["report_profile_version"] = selected_profile
     return normalized
+
+
+def _has_starting_context(data: dict[str, Any]) -> bool:
+    for field in _STARTING_CONTEXT_FIELDS:
+        value = data.get(field)
+        if isinstance(value, str) and value.strip():
+            return True
+        if isinstance(value, (list, tuple, set, dict)) and value:
+            return True
+    return False
+
+
+def _first_text(data: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _normalize_project_type(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    lowered = text.lower()
+    return _PROJECT_TYPE_ALIASES.get(text) or _PROJECT_TYPE_ALIASES.get(lowered, "")
+
+
+def _report_type_for_project_type(project_type: str) -> str:
+    return "quick_sync" if project_type == "梳理类" else "deep_dive"
+
+
+def _requested_delivery_targets(
+    data: dict[str, Any], normalized: dict[str, Any]
+) -> list[str]:
+    raw_targets = data.get("delivery_targets")
+    if raw_targets is None:
+        raw = (
+            data.get("delivery_format")
+            or data.get("output_format")
+            or data.get("material_format")
+            or normalized.get("output_format")
+        )
+        raw_targets = [raw]
+    elif isinstance(raw_targets, str):
+        raw_targets = [raw_targets]
+    targets = [
+        target
+        for target in (_canonical_delivery_target(item) for item in raw_targets)
+        if target
+    ]
+    return targets or ["document"]
+
+
+def _canonical_delivery_target(value: Any) -> str:
+    text = str(value or "").strip()
+    lowered = text.lower()
+    return _DELIVERY_ALIASES.get(text) or _DELIVERY_ALIASES.get(lowered, lowered)
+
+
+def _display_delivery_targets(targets: list[str]) -> str:
+    labels = {"document": "文档", "ppt": "PPT", "html": "HTML"}
+    return " / ".join(labels.get(item, item) for item in targets)
+
+
+def _default_report_length(targets: list[str]) -> str:
+    return "10页PPT" if "ppt" in targets else "3页"
 
 
 def _normalize_materials(materials: Any) -> list[dict[str, Any]]:

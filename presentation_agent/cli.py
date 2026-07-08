@@ -82,8 +82,11 @@ def build_parser() -> argparse.ArgumentParser:
     report_approve.add_argument(
         "--run-mode",
         choices=["full_auto", "step_by_step", "custom"],
-        default="full_auto",
-        help="Brief gate execution mode.",
+        default=None,
+        help=(
+            "Brief gate execution mode. Omit for the default checkpoints after "
+            "analysis and storyline."
+        ),
     )
     report_approve.add_argument(
         "--pause-after",

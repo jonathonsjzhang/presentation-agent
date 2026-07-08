@@ -33,6 +33,8 @@ MANAGER_MEMORY_DIMENSIONS = [
     "跨阶段一致性",
 ]
 
+DEFAULT_CHECKPOINT_PAUSE_AGENTS = ["analysis", "storyline"]
+
 
 class ManagerAgentRuntime:
     """Build and validate host-executed Manager Agent turns."""
@@ -156,6 +158,7 @@ class ManagerAgentRuntime:
             "- 首个 task_packet 派发 analysis，只写目标、输入引用和必要返工意见。",
             "- evidence_harvester 是 Analysis 的内部子任务。",
             "- 如 material_inventory 中无任何素材 → 使用 ask_human，不要 dispatch。",
+            "- high_confidence_evidence 表示用户勾选的重要/高可信论据，只影响分析优先级，不提升证据因果强度。",
             "- PPT、HTML 只允许在默认五阶段完成后的 delivery options gate 追加。",
             "",
             "### acceptance_report（acceptance 阶段）",
@@ -630,7 +633,7 @@ class ManagerOrchestrator:
             "tasks": [],
             "accepted_artifacts": [],
             "project_state": {},
-            "run_mode": None,  # set during brief confirmation: "full_auto" | "step_by_step"
+            "run_mode": None,  # set during brief confirmation; default pauses after analysis/storyline
             "review_mode": "schema_only",
             "review_subagents_enabled": False,
             "created_at": now_iso(),
@@ -651,26 +654,25 @@ class ManagerOrchestrator:
         if phase == "brief_confirmation":
             brief = read_json(self.raw_brief_path, default={})
             missing = []
-            if not brief.get("topic"):
-                missing.append("topic（汇报主题）")
-            if not brief.get("audience"):
-                missing.append("audience（汇报对象）")
-            available_workers = [
-                str(item["agent_id"])
-                for item in self.workers.capabilities()
-                if item.get("agent_id")
-            ]
-            selected_workers = brief.get("selected_workers")
-            if not selected_workers:
-                selected_workers = available_workers
-            user_message = self._format_brief_confirmation(brief, selected_workers)
+            if not self._first_brief_text(
+                brief, "research_purpose", "decision_goal", "analysis_objective"
+            ):
+                missing.append("研究目的")
+            if not self._first_brief_text(
+                brief,
+                "research_direction",
+                "hypothesis",
+                "hypo",
+                "expected_action",
+                "discussion_direction",
+            ):
+                missing.append("研究方向 / 论点 hypo")
+            user_message = self._format_brief_confirmation(brief)
             state["current_actor"] = "human"
             state["human_gate"] = "brief"
             state["pending_decision"] = {
                 "brief": brief,
                 "missing_fields": missing,
-                "available_workers": available_workers,
-                "selected_workers": selected_workers,
                 "user_message": user_message,
             }
             state["status"] = "awaiting_brief_confirmation"
@@ -896,8 +898,11 @@ class ManagerOrchestrator:
                 state["custom_pause_agents"] = raw_run_mode
             elif raw_run_mode == "step_by_step":
                 state["run_mode"] = "step_by_step"
+            elif raw_run_mode == "full_auto":
+                state["run_mode"] = "full_auto"
             else:
-                state["run_mode"] = "full_auto"  # default
+                state["run_mode"] = list(DEFAULT_CHECKPOINT_PAUSE_AGENTS)
+                state["custom_pause_agents"] = list(DEFAULT_CHECKPOINT_PAUSE_AGENTS)
             selected_review_mode = (
                 review_mode
                 or decision.get("review_mode")
@@ -933,6 +938,29 @@ class ManagerOrchestrator:
             return self._dispatch(state, packet, reason="human approved Manager plan")
         if gate == "worker_result":
             # In step_by_step mode: user reviewed intermediate output, proceed to next worker
+            if self._is_analysis_thesis_gate(state):
+                selection = self._analysis_thesis_selection(state)
+                if not selection:
+                    state["analysis_feedback_error"] = (
+                        "请先选择一个 Analysis 主论点组；如果都不合适，请选择“都不好，重新写”并说明原因。"
+                    )
+                    self._save_state(state)
+                    return self._human_gate_result(state)
+                packet = decision.get("task_packet")
+                if isinstance(packet, dict):
+                    packet["selected_analysis_thesis"] = selection
+                    objective = str(packet.get("objective") or "").strip()
+                    suffix = (
+                        f"沿用用户确认的 Analysis 主论点组 {selection.get('option_id', '')}。"
+                    )
+                    packet["objective"] = (
+                        f"{objective}；{suffix}" if objective else suffix
+                    )
+            elif self._is_storyline_confirmation_gate(state):
+                state.setdefault("project_state", {})["storyline_confirmation"] = {
+                    "status": "approved",
+                    "confirmed_at": now_iso(),
+                }
             state["human_gate"] = None
             state["pending_decision"] = None
             packet = decision.get("task_packet")
@@ -1003,6 +1031,10 @@ class ManagerOrchestrator:
             "gate": gate,
             "text": feedback,
         })
+        if gate == "worker_result" and self._is_analysis_thesis_gate(state):
+            return self._record_analysis_thesis_feedback(state, feedback)
+        if gate == "worker_result" and self._is_storyline_confirmation_gate(state):
+            return self._record_storyline_confirmation_feedback(state, feedback)
         state["current_actor"] = "manager"
         _phase_after_feedback = {
             "brief": "brief_confirmation",
@@ -1298,10 +1330,17 @@ class ManagerOrchestrator:
             self._set_plan_task_status(str(task.get("task_id") or ""), task["status"])
             state["execution_plan"] = read_json(self.plan_path, default={})
             if task["status"] == "accepted" and task.get("artifact_path"):
+                state["accepted_artifacts"] = [
+                    item
+                    for item in state.get("accepted_artifacts", [])
+                    if item.get("task_id") != task.get("task_id")
+                    and item.get("task_dir") != task.get("task_dir")
+                ]
                 state.setdefault("accepted_artifacts", []).append({
                     "task_id": task.get("task_id"),
                     "agent_id": task.get("agent_id"),
                     "artifact_path": task.get("artifact_path"),
+                    "task_dir": task.get("task_dir"),
                 })
 
         if action in ("dispatch", "revise"):
@@ -1550,56 +1589,229 @@ class ManagerOrchestrator:
         return catalog
 
     @staticmethod
-    def _format_brief_confirmation(
-        brief: dict[str, Any], selected_workers: list[str]
-    ) -> str:
+    def _first_brief_text(brief: dict[str, Any], *keys: str) -> str:
+        for key in keys:
+            value = brief.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
+    @staticmethod
+    def _brief_evidence_options(brief: dict[str, Any]) -> list[dict[str, str]]:
+        options: list[dict[str, str]] = []
+        seen: set[str] = set()
+
+        def add_option(value: str, label: str, description: str = "") -> None:
+            clean_label = str(label or "").strip()
+            if not clean_label:
+                return
+            clean_value = str(value or clean_label).strip()
+            key = clean_value or clean_label
+            if key in seen:
+                return
+            seen.add(key)
+            option = {
+                "label": clean_label[:80],
+                "value": clean_value[:120],
+                "description": str(description or "用户可标记为高可信论据")[:180],
+            }
+            options.append(option)
+
+        def evidence_description(item: dict[str, Any]) -> str:
+            for key in ("summary", "observation", "so_what", "description"):
+                value = item.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+            evidence = item.get("evidence")
+            if isinstance(evidence, list):
+                return "；".join(
+                    str(part) for part in evidence[:2] if str(part).strip()
+                )
+            if isinstance(evidence, str):
+                return evidence.strip()
+            findings = item.get("key_findings")
+            if isinstance(findings, list):
+                return "；".join(
+                    str(part) for part in findings[:2] if str(part).strip()
+                )
+            return ""
+
+        catalog = brief.get("evidence_catalog")
+        catalog_items: list[Any] = []
+        if isinstance(catalog, dict):
+            raw_items = catalog.get("evidence_items") or catalog.get("evidence_index")
+            if isinstance(raw_items, list):
+                catalog_items = raw_items
+        for index, item in enumerate(catalog_items, 1):
+            if not isinstance(item, dict):
+                continue
+            evidence_id = str(
+                item.get("evidence_id") or item.get("id") or f"EV-{index}"
+            )
+            label = str(
+                item.get("claim")
+                or item.get("summary")
+                or item.get("source_name")
+                or evidence_id
+            )
+            add_option(evidence_id, label, evidence_description(item))
+
+        evidence_index = brief.get("evidence_index")
+        if isinstance(evidence_index, list):
+            for index, item in enumerate(evidence_index, 1):
+                if not isinstance(item, dict):
+                    continue
+                evidence_id = str(
+                    item.get("id") or item.get("evidence_id") or f"E{index}"
+                )
+                label = str(
+                    item.get("summary")
+                    or item.get("claim")
+                    or item.get("source_name")
+                    or item.get("material_id")
+                    or evidence_id
+                )
+                add_option(evidence_id, label, evidence_description(item))
+
+        materials = brief.get("materials") or []
+        if isinstance(materials, list):
+            for index, material in enumerate(materials, 1):
+                if isinstance(material, dict):
+                    value = str(
+                        material.get("evidence_id")
+                        or material.get("material_id")
+                        or material.get("id")
+                        or f"M{index}"
+                    )
+                    label = str(
+                        material.get("claim")
+                        or material.get("summary")
+                        or material.get("description")
+                        or material.get("path")
+                        or material.get("fixture")
+                        or material.get("file")
+                        or value
+                    )
+                    add_option(value, label, evidence_description(material))
+                else:
+                    add_option(f"M{index}", str(material))
+        return options[:12]
+
+    @staticmethod
+    def _display_audience(value: Any) -> str:
+        labels = {
+            "board": "董事会",
+            "exec_office": "总办",
+            "strategy_lead": "战略负责人",
+            "business_team": "业务负责人",
+            "external": "外部听众",
+        }
+        text = str(value or "exec_office").strip()
+        return labels.get(text, text or "总办")
+
+    @staticmethod
+    def _display_project_type(brief: dict[str, Any]) -> str:
+        raw = str(brief.get("project_type") or "").strip()
+        if raw:
+            return raw
+        report_type = str(brief.get("report_type") or "deep_dive")
+        return "梳理类" if report_type == "quick_sync" else "分析类"
+
+    @staticmethod
+    def _display_delivery(brief: dict[str, Any]) -> str:
+        labels = {"document": "文档", "ppt": "PPT", "html": "HTML"}
+        targets = brief.get("requested_delivery_targets") or brief.get(
+            "delivery_targets"
+        )
+        if isinstance(targets, str):
+            targets = [targets]
+        if isinstance(targets, list) and targets:
+            return " / ".join(labels.get(str(item), str(item)) for item in targets)
+        raw = str(
+            brief.get("delivery_format")
+            or brief.get("output_format")
+            or "document"
+        ).strip()
+        return labels.get(raw, raw or "文档")
+
+    @staticmethod
+    def _brief_report_length(brief: dict[str, Any]) -> str:
+        value = str(brief.get("report_length") or "").strip()
+        if value:
+            return value
+        delivery = ManagerOrchestrator._display_delivery(brief)
+        return "10页PPT" if "PPT" in delivery else "3页"
+
+    @staticmethod
+    def _format_brief_confirmation(brief: dict[str, Any]) -> str:
         """Build a structured Markdown brief confirmation for the user.
 
         The host agent simply echo this string to the user verbatim.
         Structured so the user can scan it in one glance and confirm
         accuracy, missing info, or run_mode preference.
         """
-        topic = str(brief.get("topic", "（未指定）"))
-        audience = str(brief.get("audience", "（未指定）"))
-        decision_goal = str(brief.get("decision_goal", "（未指定）"))
-        report_type = str(brief.get("report_type", "deep_dive"))
-        output_format = str(brief.get("output_format", "ppt"))
-        delivery_targets = brief.get("delivery_targets") or []
-        constraints = brief.get("constraints") or []
-        page_limit = next(
-            (c for c in constraints if "页" in str(c)), ""
+        topic = str(
+            brief.get("topic") or "Manager 将根据输入信息和论据总结"
         )
+        research_purpose = ManagerOrchestrator._first_brief_text(
+            brief, "research_purpose", "decision_goal", "analysis_objective"
+        ) or "待用户补充"
+        research_direction = ManagerOrchestrator._first_brief_text(
+            brief,
+            "research_direction",
+            "hypothesis",
+            "hypo",
+            "expected_action",
+            "discussion_direction",
+        ) or "待用户补充"
+        audience = ManagerOrchestrator._display_audience(
+            brief.get("audience") or "exec_office"
+        )
+        project_type = ManagerOrchestrator._display_project_type(brief)
+        delivery = ManagerOrchestrator._display_delivery(brief)
+        report_length = ManagerOrchestrator._brief_report_length(brief)
+        evidence_options = ManagerOrchestrator._brief_evidence_options(brief)
         materials = brief.get("materials") or []
-
-        # ---- Worker pipeline label ----
-        worker_labels = {
-            "format": "可视化",
-            "qa_preparation": "QA 梳理",
-            "analysis": "分析",
-            "storyline": "故事线",
-            "report": "报告产出",
-        }
-        pipeline = " → ".join(
-            f"`{w}` {worker_labels.get(w, w)}" for w in selected_workers
-        )
 
         lines = [
             "## Brief 确认",
             "",
+            "### 1. 项目需求",
+            "",
             "| 项目 | 内容 |",
             "|------|------|",
-            f"| **汇报主题** | {topic} |",
-            f"| **汇报对象** | {audience} |",
-            f"| **决策目标** | {decision_goal} |",
-            f"| **报告类型** | {report_type} |",
-            f"| **输出格式** | {', '.join(delivery_targets) if delivery_targets else output_format} |",
+            f"| **研究目的** | {research_purpose} |",
+            f"| **研究方向 / 论点 hypo** | {research_direction} |",
         ]
-        if page_limit:
-            lines.append(f"| **页数约束** | {page_limit} |")
 
-        lines.append("")
-        lines.append(f"**选定的 Worker 管线**（{len(selected_workers)} 个环节）：")
-        lines.append(pipeline)
+        lines.extend([
+            "",
+            "### 2. 论据可信度分类",
+            "",
+        ])
+        if evidence_options:
+            lines.append("以下是 agent 根据当前输入整理的论据列表，请在提问中勾选你认为高可信的论据：")
+            for index, item in enumerate(evidence_options, 1):
+                description = item.get("description", "")
+                suffix = f"：{description}" if description else ""
+                lines.append(f"{index}. **{item['label']}**{suffix}")
+        else:
+            lines.append("当前还没有可勾选的论据；如已有材料或证据，请在回复中补充。")
+
+        lines.extend([
+            "",
+            "### 3-7. 报告设定",
+            "",
+            "| 项目 | 内容 |",
+            "|------|------|",
+            f"| **报告主题** | {topic} |",
+            f"| **听众** | {audience} |",
+            f"| **项目类型** | {project_type} |",
+            f"| **交付形式** | {delivery} |",
+            f"| **报告篇幅** | {report_length} |",
+            "| **agent执行流程** | analysis（分析） → storyline（故事线） → report（报告产出） → format（可视化排版） |",
+            "| **是否发起review sub_agent** | 否（更高效） |",
+        ])
 
         if materials:
             lines.append("")
@@ -1614,7 +1826,10 @@ class ManagerOrchestrator:
         lines.append("")
         lines.append("---")
         lines.append("")
-        lines.append("请通过下方选项确认 Brief。默认运行模式为 full_auto，默认不启用独立 Review sub-agent；如需逐步确认或严格审查，可在确认时说明。")
+        lines.append(
+            "请先回答研究目的、研究方向，并勾选高可信论据；若报告设定无误，再确认继续。"
+            "默认会在 analysis 和 storyline 完成后各暂停确认一次，之后自动走到最终报告。"
+        )
 
         return "\n".join(lines)
 
@@ -1625,11 +1840,10 @@ class ManagerOrchestrator:
         if gate == "brief" and not decision.get("user_message"):
             present_to_user = self._format_brief_confirmation(
                 decision.get("brief", {}) if isinstance(decision.get("brief"), dict) else {},
-                decision.get("selected_workers", []) or [],
             )
         else:
             present_to_user = decision.get("user_message") or {
-            "brief": "请确认以下 brief 信息是否完整、准确。可补充 topic、audience、output_format，并选择 run_mode（full_auto 一次性跑完 / step_by_step 每步确认）。",
+            "brief": "请确认 brief 信息是否完整、准确。请补充研究目的、研究方向，并勾选高可信论据；可调整报告主题、听众、项目类型、交付形式和报告篇幅。",
             "plan": "请确认 Manager 的任务定义和执行计划。",
             "worker_result": "当前步骤已完成，请查看中间产物。如需继续，确认后进入下一步。",
             "final": "所有任务已完成，请确认最终交付物。",
@@ -1648,54 +1862,55 @@ class ManagerOrchestrator:
         }
 
         if gate == "brief":
-            result["brief"] = decision.get("brief", {})
+            brief_payload = decision.get("brief", {})
+            if not isinstance(brief_payload, dict):
+                brief_payload = {}
+            result["brief"] = brief_payload
             result["missing_fields"] = decision.get("missing_fields", [])
-            result["available_workers"] = decision.get("available_workers", [])
-            result["selected_workers"] = decision.get("selected_workers", [])
-            result["run_mode_options"] = {
-                "full_auto": "默认：全程自动，不中断",
-                "step_by_step": "每个 Worker 完成后暂停确认",
-                "custom": "指定暂停的 Worker 列表，如 [\"analysis\", \"format\"]",
-            }
-            result["review_mode_options"] = {
-                "schema_only": "默认：不启用独立 Reviewer，仅保留确定性检查",
-                "independent": "启用独立 Review sub-agent（质量优先）",
+            evidence_options = self._brief_evidence_options(brief_payload)
+            result["evidence_options"] = evidence_options
+            result["brief_defaults"] = {
+                "report_topic": self._first_brief_text(
+                    brief_payload, "topic",
+                )
+                or "Manager 根据输入信息和论据总结",
+                "report_length": self._brief_report_length(brief_payload),
+                "audience": self._display_audience(
+                    brief_payload.get("audience", "exec_office")
+                ),
+                "project_type": self._display_project_type(brief_payload),
+                "delivery": self._display_delivery(brief_payload),
             }
             result["next_action"] = "human_feedback"
             # Structured questions for host AskUserQuestion
             result["questions"] = [
                 {
+                    "header": "研究目的",
+                    "question": "项目的研究目的是什么（如需要回答的问题，或某话题的延伸汇报），越详细则 agent 更能理解需求。",
+                    "inputType": "text",
+                    "multiSelect": False,
+                    "options": [],
+                },
+                {
+                    "header": "研究方向",
+                    "question": "项目的研究方向是什么（如论点 hypo，希望引导的讨论或行动方向），越详细则 agent 更能理解需求。",
+                    "inputType": "text",
+                    "multiSelect": False,
+                    "options": [],
+                },
+                {
+                    "header": "高可信论据",
+                    "question": "以下是 agent 整理的证据列表，请选择你认为重要性高的论据，汇报助手将根据重要性判断子论点的可信度和引用优先级。",
+                    "multiSelect": True,
+                    "options": evidence_options,
+                },
+                {
                     "header": "Brief确认",
-                    "question": "Brief 信息是否准确？有无需要补充或修改的地方？",
+                    "question": "报告主题、听众、项目类型、交付形式和报告篇幅是否准确？有无需要补充或修改的地方？",
                     "multiSelect": False,
                     "options": [
                         {"label": "准确，继续", "description": "信息完整，直接进入 Manager 规划阶段"},
                         {"label": "需要修改", "description": "稍后通过 report feedback 提交修改意见"},
-                    ],
-                },
-                {
-                    "header": "运行模式",
-                    "question": "选择运行模式",
-                    "multiSelect": False,
-                    "options": [
-                        {"label": "full_auto", "description": "全程自动，一口气跑完，不中断"},
-                        {"label": "step_by_step", "description": "每个 Worker 完成后暂停，逐环节确认"},
-                        {"label": "custom", "description": "只在指定环节暂停，如 [\"analysis\", \"format\"]"},
-                    ],
-                },
-                {
-                    "header": "Review模式",
-                    "question": "是否启用独立 Review sub-agent？",
-                    "multiSelect": False,
-                    "options": [
-                        {
-                            "label": "不启用（默认）",
-                            "description": "仅保留确定性检查，常规运行更稳更快",
-                        },
-                        {
-                            "label": "启用（质量优先）",
-                            "description": "启用独立 Reviewer，适合严格验收或质量调试",
-                        },
                     ],
                 },
             ]
@@ -1706,10 +1921,41 @@ class ManagerOrchestrator:
             result["next_action"] = "report_approve"
 
         elif gate == "worker_result":
-            result["acceptance_report"] = decision.get("acceptance_report")
-            result["next_task"] = decision.get("task_packet", {}).get("agent_id")
-            result["accepted_artifacts"] = state.get("accepted_artifacts", [])
-            result["next_action"] = "report_approve"
+            if self._is_analysis_thesis_gate(state):
+                options = self._analysis_thesis_options_from_state(state)
+                selection = self._analysis_thesis_selection(state)
+                result["present_to_user"] = self._format_analysis_thesis_confirmation(
+                    options,
+                    selection=selection,
+                    error=str(state.get("analysis_feedback_error") or ""),
+                )
+                result["acceptance_report"] = decision.get("acceptance_report")
+                result["next_task"] = decision.get("task_packet", {}).get("agent_id")
+                result["accepted_artifacts"] = state.get("accepted_artifacts", [])
+                result["analysis_thesis_options"] = options
+                result["analysis_thesis_selection"] = selection
+                if selection:
+                    result["next_action"] = "report_approve"
+                else:
+                    result["next_action"] = "human_feedback"
+                    result["questions"] = self._analysis_thesis_questions(options)
+            elif self._is_storyline_confirmation_gate(state):
+                artifact = self._storyline_artifact_from_state(state)
+                result["present_to_user"] = self._format_storyline_confirmation(
+                    artifact,
+                    error=str(state.get("storyline_feedback_error") or ""),
+                )
+                result["acceptance_report"] = decision.get("acceptance_report")
+                result["next_task"] = decision.get("task_packet", {}).get("agent_id")
+                result["accepted_artifacts"] = state.get("accepted_artifacts", [])
+                result["storyline"] = artifact
+                result["questions"] = self._storyline_confirmation_questions()
+                result["next_action"] = "report_approve_or_feedback"
+            else:
+                result["acceptance_report"] = decision.get("acceptance_report")
+                result["next_task"] = decision.get("task_packet", {}).get("agent_id")
+                result["accepted_artifacts"] = state.get("accepted_artifacts", [])
+                result["next_action"] = "report_approve"
 
         elif gate == "delivery_options":
             result["accepted_artifacts"] = state.get("accepted_artifacts", [])
@@ -1759,6 +2005,945 @@ class ManagerOrchestrator:
             result["next_action"] = "human_feedback"
 
         return result
+
+    def _is_analysis_thesis_gate(self, state: dict[str, Any]) -> bool:
+        current = state.get("current_task") or {}
+        if current.get("agent_id") != "analysis":
+            return False
+        if state.get("human_gate") != "worker_result":
+            return False
+        return bool(self._analysis_thesis_options_from_state(state))
+
+    def _analysis_thesis_selection(self, state: dict[str, Any]) -> dict[str, Any] | None:
+        project_state = state.get("project_state")
+        if not isinstance(project_state, dict):
+            return None
+        selection = project_state.get("analysis_thesis_selection")
+        return selection if isinstance(selection, dict) else None
+
+    def _analysis_thesis_options_from_state(
+        self, state: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        worker_result = state.get("worker_result") or {}
+        artifact = worker_result.get("artifact")
+        if not isinstance(artifact, dict):
+            task = state.get("current_task") or {}
+            artifact_path = task.get("artifact_path")
+            if artifact_path:
+                artifact = read_json(Path(str(artifact_path)), default={})
+        return self._analysis_thesis_options(artifact if isinstance(artifact, dict) else {})
+
+    @staticmethod
+    def _analysis_thesis_options(artifact: dict[str, Any]) -> list[dict[str, Any]]:
+        raw_options = artifact.get("thesis_options")
+        if not isinstance(raw_options, list) or not raw_options:
+            raw_options = artifact.get("viewpoint_candidates")
+        if not isinstance(raw_options, list):
+            return []
+
+        findings = {
+            str(item.get("id") or item.get("finding_id")): item
+            for item in artifact.get("findings") or []
+            if isinstance(item, dict) and (item.get("id") or item.get("finding_id"))
+        }
+        options: list[dict[str, Any]] = []
+        for index, raw in enumerate(raw_options[:3], 1):
+            if not isinstance(raw, dict):
+                continue
+            option_id = str(
+                raw.get("option_id")
+                or raw.get("thesis_id")
+                or raw.get("viewpoint_id")
+                or f"TG-{index:02d}"
+            ).strip()
+            main_thesis = str(
+                raw.get("main_thesis")
+                or raw.get("statement")
+                or raw.get("claim")
+                or ""
+            ).strip()
+            if not main_thesis:
+                continue
+            sub_theses = raw.get("sub_theses")
+            normalized_subs: list[dict[str, Any]] = []
+            if isinstance(sub_theses, list):
+                for sub_index, sub in enumerate(sub_theses[:4], 1):
+                    if isinstance(sub, dict):
+                        claim = str(
+                            sub.get("claim")
+                            or sub.get("statement")
+                            or sub.get("thesis")
+                            or ""
+                        ).strip()
+                        refs = sub.get("finding_refs") or sub.get("findings") or []
+                        confidence = sub.get("confidence")
+                    else:
+                        claim = str(sub).strip()
+                        refs = []
+                        confidence = None
+                    if claim:
+                        normalized_subs.append(
+                            {
+                                "id": f"{option_id}-S{sub_index}",
+                                "claim": claim,
+                                "finding_refs": [
+                                    str(ref) for ref in refs if str(ref).strip()
+                                ]
+                                if isinstance(refs, list)
+                                else [],
+                                "confidence": confidence or "",
+                                "why_it_matters": (
+                                    str(sub.get("why_it_matters") or "")
+                                    if isinstance(sub, dict)
+                                    else ""
+                                ),
+                            }
+                        )
+            if not normalized_subs:
+                refs = raw.get("finding_refs") or []
+                if isinstance(refs, list):
+                    for sub_index, ref in enumerate(refs[:4], 1):
+                        finding = findings.get(str(ref), {})
+                        claim = str(
+                            finding.get("claim")
+                            or finding.get("statement")
+                            or ref
+                        ).strip()
+                        if claim:
+                            normalized_subs.append(
+                                {
+                                    "id": f"{option_id}-S{sub_index}",
+                                    "claim": claim,
+                                    "finding_refs": [str(ref)],
+                                    "confidence": str(finding.get("confidence") or ""),
+                                    "why_it_matters": str(finding.get("so_what") or ""),
+                                }
+                            )
+            options.append(
+                {
+                    "option_id": option_id,
+                    "main_thesis": main_thesis,
+                    "sub_theses": normalized_subs[:4],
+                    "finding_refs": [
+                        str(ref)
+                        for ref in raw.get("finding_refs", [])
+                        if str(ref).strip()
+                    ]
+                    if isinstance(raw.get("finding_refs"), list)
+                    else [],
+                    "evidence_strength": str(
+                        raw.get("evidence_strength") or raw.get("strength") or ""
+                    ),
+                    "best_for": str(raw.get("best_for") or ""),
+                    "tradeoffs": [
+                        str(item)
+                        for item in raw.get("tradeoffs", [])
+                        if str(item).strip()
+                    ]
+                    if isinstance(raw.get("tradeoffs"), list)
+                    else [],
+                }
+            )
+        return options
+
+    @staticmethod
+    def _format_analysis_thesis_confirmation(
+        options: list[dict[str, Any]],
+        *,
+        selection: dict[str, Any] | None = None,
+        error: str = "",
+    ) -> str:
+        lines = [
+            "## Analysis 论点组确认",
+            "",
+            "Analysis 已基于当前证据整理出可进入 Storyline 的主论点方案。请选择最适合本次汇报的一组；如果都不合适，请说明原因后让同一个 Analysis agent 重写；如果你希望自己修改，请直接写出修改方向或新版本，Analysis 会重新整理成结构化表达。",
+        ]
+        if error:
+            lines.extend(["", f"需要补充：{error}"])
+        if selection:
+            lines.extend(
+                [
+                    "",
+                    f"已记录选择：**{selection.get('option_id', '')}**",
+                    f"选择说明：{selection.get('human_feedback', '无')}",
+                    "",
+                    "如无进一步修改，确认后进入 Storyline。",
+                ]
+            )
+        for option in options:
+            lines.extend(["", f"### {option['option_id']}｜{option['main_thesis']}"])
+            if option.get("best_for"):
+                lines.append(f"- 适合场景：{option['best_for']}")
+            if option.get("evidence_strength"):
+                lines.append(f"- 证据强度：{option['evidence_strength']}")
+            subs = option.get("sub_theses") or []
+            if subs:
+                lines.append("- 分论点：")
+                for index, sub in enumerate(subs, 1):
+                    refs = sub.get("finding_refs") or []
+                    suffix = f"（引用：{', '.join(refs)}）" if refs else ""
+                    confidence = (
+                        f"；可信度：{sub.get('confidence')}"
+                        if sub.get("confidence")
+                        else ""
+                    )
+                    lines.append(
+                        f"  {index}. {sub.get('claim', '')}{suffix}{confidence}"
+                    )
+            tradeoffs = option.get("tradeoffs") or []
+            if tradeoffs:
+                lines.append(f"- 主要取舍/边界：{'；'.join(tradeoffs)}")
+        lines.extend(
+            [
+                "",
+                "---",
+                "",
+                "请选择一个论点组；或选择“都不好，重新写”并说明为什么；或选择“我自己修改”并写出你的修改意见。",
+            ]
+        )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _analysis_thesis_questions(
+        options: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        choice_options = []
+        for option in options:
+            label = f"{option['option_id']}｜{option['main_thesis'][:34]}"
+            description_parts = []
+            if option.get("best_for"):
+                description_parts.append(str(option["best_for"]))
+            if option.get("evidence_strength"):
+                description_parts.append(f"证据强度：{option['evidence_strength']}")
+            choice_options.append(
+                {
+                    "label": label,
+                    "value": option["option_id"],
+                    "description": "；".join(description_parts)
+                    or "选择该主论点组进入 Storyline",
+                }
+            )
+        choice_options.extend(
+            [
+                {
+                    "label": "都不好，重新写",
+                    "value": "rewrite",
+                    "description": "需要说明原因；会复用当前 Analysis agent 上下文重写",
+                },
+                {
+                    "label": "我自己修改",
+                    "value": "custom",
+                    "description": "可直接写非结构化修改意见；Analysis 会整理为结构化论点组",
+                },
+            ]
+        )
+        return [
+            {
+                "header": "论点组选择",
+                "question": "请选择你认为最适合本次汇报的主论点组；如果都不合适，也可以选择重写或自己修改。",
+                "multiSelect": False,
+                "options": choice_options,
+            },
+            {
+                "header": "选择说明",
+                "question": "如选择“都不好”或“我自己修改”，请说明原因或直接写出你的修改意见；如选择已有方案，可补充为什么选择。",
+                "inputType": "text",
+                "multiSelect": False,
+                "options": [],
+            },
+        ]
+
+    def _record_analysis_thesis_feedback(
+        self,
+        state: dict[str, Any],
+        feedback: str,
+    ) -> dict[str, Any]:
+        options = self._analysis_thesis_options_from_state(state)
+        intent = self._classify_analysis_thesis_feedback(feedback, options)
+        if intent["kind"] == "select":
+            option = intent["option"]
+            selection = {
+                "option_id": option["option_id"],
+                "main_thesis": option["main_thesis"],
+                "sub_theses": option.get("sub_theses", []),
+                "finding_refs": option.get("finding_refs", []),
+                "human_feedback": feedback,
+                "selected_at": now_iso(),
+            }
+            state.setdefault("project_state", {})[
+                "analysis_thesis_selection"
+            ] = selection
+            decision = state.get("pending_decision")
+            if isinstance(decision, dict):
+                packet = decision.get("task_packet")
+                if isinstance(packet, dict):
+                    packet["selected_analysis_thesis"] = selection
+            state.pop("analysis_feedback_error", None)
+            state["current_actor"] = "human"
+            state["human_gate"] = "worker_result"
+            state["status"] = "awaiting_intermediate_review"
+            self._save_state(state)
+            self._append_decision(
+                "analysis_thesis_selected",
+                "Human selected an Analysis thesis option",
+                {
+                    "option_id": option["option_id"],
+                    "feedback": feedback,
+                },
+            )
+            return self._human_gate_result(state)
+
+        if intent["kind"] in ("rewrite", "custom"):
+            if not self._has_meaningful_analysis_feedback_detail(
+                feedback, intent["kind"]
+            ):
+                state["analysis_feedback_error"] = (
+                    "选择“都不好，重新写”或“我自己修改”时，需要说明原因或提供修改内容，"
+                    "否则 Analysis 只能随机重写。"
+                )
+                state["current_actor"] = "human"
+                state["human_gate"] = "worker_result"
+                state["status"] = "awaiting_intermediate_review"
+                self._save_state(state)
+                self._append_decision(
+                    "analysis_thesis_feedback_needs_detail",
+                    "Human asked to revise Analysis thesis options without actionable detail",
+                    {"feedback": feedback, "intent": intent["kind"]},
+                )
+                return self._human_gate_result(state)
+            return self._revise_current_analysis_task_from_human_feedback(
+                state,
+                feedback=feedback,
+                mode=intent["kind"],
+            )
+
+        state["analysis_feedback_error"] = (
+            "没有识别到你的选择。请明确选择某个方案编号（如 TG-01），"
+            "或选择“都不好，重新写”/“我自己修改”。"
+        )
+        state["current_actor"] = "human"
+        state["human_gate"] = "worker_result"
+        state["status"] = "awaiting_intermediate_review"
+        self._save_state(state)
+        self._append_decision(
+            "analysis_thesis_feedback_unrecognized",
+            "Human feedback did not identify an Analysis thesis action",
+            {"feedback": feedback},
+        )
+        return self._human_gate_result(state)
+
+    @classmethod
+    def _classify_analysis_thesis_feedback(
+        cls,
+        feedback: str,
+        options: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        text = str(feedback or "")
+        normalized = cls._normalize_choice_token(text)
+        rewrite_tokens = (
+            "rewrite",
+            "都不好",
+            "全部不好",
+            "都不合适",
+            "不合适",
+            "不满意",
+            "重新写",
+            "重写",
+            "重来",
+        )
+        custom_tokens = (
+            "custom",
+            "自己修改",
+            "我自己改",
+            "我来改",
+            "自定义",
+            "我的修改",
+            "按以下",
+            "改成",
+            "修改为",
+        )
+        option = cls._selected_analysis_option(text, options)
+        if option:
+            return {"kind": "select", "option": option}
+        if any(cls._normalize_choice_token(token) in normalized for token in rewrite_tokens):
+            return {"kind": "rewrite"}
+        if any(cls._normalize_choice_token(token) in normalized for token in custom_tokens):
+            return {"kind": "custom"}
+        if cls._looks_like_custom_analysis_feedback(text):
+            return {"kind": "custom"}
+        return {"kind": "unknown"}
+
+    @classmethod
+    def _selected_analysis_option(
+        cls,
+        feedback: str,
+        options: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        normalized = cls._normalize_choice_token(feedback)
+        for option in options:
+            option_id = str(option.get("option_id") or "")
+            if cls._normalize_choice_token(option_id) in normalized:
+                return option
+        index = cls._selected_option_index(feedback)
+        if index is not None and 0 <= index < len(options):
+            return options[index]
+        return None
+
+    @staticmethod
+    def _normalize_choice_token(value: str) -> str:
+        return re.sub(r"[\s_\-:：|｜#\"'`，,。；;、（）()\[\]]+", "", value).lower()
+
+    @staticmethod
+    def _selected_option_index(feedback: str) -> int | None:
+        text = str(feedback or "")
+        patterns = (
+            r"(?:方案|选择|选|第)\s*([ABCabc123一二三])\s*(?:个|组|套|项|方案)?",
+            r"\b([ABCabc])\b\s*(?:方案|组|项)",
+        )
+        mapping = {
+            "a": 0,
+            "1": 0,
+            "一": 0,
+            "b": 1,
+            "2": 1,
+            "二": 1,
+            "c": 2,
+            "3": 2,
+            "三": 2,
+        }
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                return mapping.get(match.group(1).lower())
+        return None
+
+    @staticmethod
+    def _looks_like_custom_analysis_feedback(feedback: str) -> bool:
+        text = str(feedback or "").strip()
+        if len(text) < 18:
+            return False
+        return any(
+            token in text
+            for token in (
+                "主论点",
+                "分论点",
+                "应该",
+                "更应该",
+                "改为",
+                "我觉得",
+                "建议",
+            )
+        )
+
+    @staticmethod
+    def _has_meaningful_analysis_feedback_detail(feedback: str, mode: str) -> bool:
+        detail = str(feedback or "")
+        for token in (
+            "rewrite",
+            "custom",
+            "都不好",
+            "全部不好",
+            "都不合适",
+            "不合适",
+            "不满意",
+            "重新写",
+            "重写",
+            "重来",
+            "自己修改",
+            "我自己改",
+            "我来改",
+            "自定义",
+            "我的修改",
+            "原因",
+            "理由",
+            "因为",
+        ):
+            detail = detail.replace(token, "")
+        detail = re.sub(r"[\s:：|｜#\"'`，,。；;、（）()\[\]]+", "", detail)
+        meaningful_chars = re.findall(r"[\w\u4e00-\u9fff]", detail)
+        threshold = 6 if mode == "custom" else 4
+        return len(meaningful_chars) >= threshold
+
+    def _revise_current_analysis_task_from_human_feedback(
+        self,
+        state: dict[str, Any],
+        *,
+        feedback: str,
+        mode: str,
+    ) -> dict[str, Any]:
+        task = state.get("current_task")
+        if not isinstance(task, dict) or task.get("agent_id") != "analysis":
+            raise StepError("当前人审反馈不属于 Analysis task，不能复用 Analysis 上下文返工")
+        task_dir = Path(str(task.get("task_dir") or ""))
+        run_state_path = task_dir / "run_state.json"
+        if not run_state_path.exists():
+            raise StepError(f"Analysis run_state 不存在，无法复用当前 task: {run_state_path}")
+        run_state = read_json(run_state_path, default={})
+        round_index = int(run_state.get("round_index") or 0)
+        run_state["current_step"] = "review_completed"
+        run_state["status"] = "running"
+        run_state["max_revision_rounds"] = max(
+            int(run_state.get("max_revision_rounds") or 0),
+            round_index + 2,
+        )
+        mode_label = "用户认为现有论点组都不合适" if mode == "rewrite" else "用户提供了自定义修改意见"
+        run_state["p0_open"] = [
+            {
+                "id": f"P0-human-analysis-thesis-{now_iso().replace(':', '').replace('+', 'Z')}",
+                "severity": "P0",
+                "dimension": "人审偏好",
+                "message": f"{mode_label}，需要复用当前 Analysis 上下文重新整理主论点组。",
+                "evidence": feedback,
+                "suggestion": (
+                    "不要新起 Analysis task。基于当前 findings、证据边界和用户反馈，"
+                    "重新输出 2-3 组 thesis_options；每组包含主论点和 2-4 个分论点。"
+                ),
+            }
+        ]
+        run_state["p1_open"] = []
+        run_state.setdefault("human_feedback_requests", []).append(
+            {
+                "at": now_iso(),
+                "gate": "analysis_thesis",
+                "mode": mode,
+                "feedback": feedback,
+            }
+        )
+        run_state.setdefault("history", []).append(
+            {
+                "at": now_iso(),
+                "step": "human_analysis_thesis_feedback",
+                "message": f"{mode_label}: {feedback}",
+            }
+        )
+        run_state["updated_at"] = now_iso()
+        handoff_dir = task_dir / "handoff"
+        stale_revise_output = handoff_dir / "output_revise.json"
+        if stale_revise_output.exists():
+            stale_revise_output.unlink()
+        write_json(run_state_path, run_state)
+
+        task["status"] = "revision_required"
+        task["manager_acceptance"] = None
+        task["accepted_at"] = None
+        self._replace_task(state, task)
+        self._set_plan_task_status(str(task.get("task_id") or ""), "revision_required")
+        state["execution_plan"] = read_json(self.plan_path, default={})
+        state["accepted_artifacts"] = [
+            item
+            for item in state.get("accepted_artifacts", [])
+            if item.get("task_id") != task.get("task_id")
+            and item.get("task_dir") != task.get("task_dir")
+        ]
+        project_state = state.setdefault("project_state", {})
+        if isinstance(project_state, dict):
+            project_state.pop("analysis_thesis_selection", None)
+            project_state["analysis_thesis_revision_request"] = {
+                "mode": mode,
+                "feedback": feedback,
+                "requested_at": now_iso(),
+            }
+        state.pop("analysis_feedback_error", None)
+        state["previous_pending_decision"] = state.get("pending_decision")
+        state["pending_decision"] = None
+        state["human_gate"] = None
+        state["current_actor"] = "worker"
+        state["manager_step"] = "idle"
+        state["status"] = "running"
+        state["worker_result"] = None
+        state["last_event"] = "analysis_thesis_feedback_revision"
+        self._save_state(state)
+        self._append_decision(
+            "analysis_thesis_revision",
+            "Human feedback returned to the same Analysis task for revision",
+            {"task_id": task.get("task_id"), "mode": mode, "feedback": feedback},
+        )
+        return self.prepare()
+
+    def _is_storyline_confirmation_gate(self, state: dict[str, Any]) -> bool:
+        current = state.get("current_task") or {}
+        if current.get("agent_id") != "storyline":
+            return False
+        if state.get("human_gate") != "worker_result":
+            return False
+        artifact = self._storyline_artifact_from_state(state)
+        return bool(artifact.get("core_answer") or artifact.get("sections"))
+
+    def _storyline_artifact_from_state(self, state: dict[str, Any]) -> dict[str, Any]:
+        worker_result = state.get("worker_result") or {}
+        artifact = worker_result.get("artifact")
+        if isinstance(artifact, dict):
+            return artifact
+        task = state.get("current_task") or {}
+        artifact_path = task.get("artifact_path")
+        if artifact_path:
+            loaded = read_json(Path(str(artifact_path)), default={})
+            return loaded if isinstance(loaded, dict) else {}
+        return {}
+
+    @staticmethod
+    def _format_storyline_confirmation(
+        artifact: dict[str, Any],
+        *,
+        error: str = "",
+    ) -> str:
+        lines = [
+            "## Storyline 确认",
+            "",
+            "Storyline 已基于确认后的 Analysis 方向整理出一版故事线。请确认这条主线是否可以进入 Report；如果不满意，请说明原因后让同一个 Storyline agent 重写；如果你希望自己修改，请直接写出修改方向或新版本。",
+        ]
+        if error:
+            lines.extend(["", f"需要补充：{error}"])
+
+        core_answer = str(artifact.get("core_answer") or "").strip()
+        if core_answer:
+            lines.extend(["", "### 核心答案", core_answer])
+
+        executive_summary = artifact.get("executive_summary")
+        if isinstance(executive_summary, dict):
+            summary_lines = []
+            for key in ("context", "core_answer"):
+                value = executive_summary.get(key)
+                if isinstance(value, str) and value.strip() and value.strip() != core_answer:
+                    summary_lines.append(value.strip())
+            implications = executive_summary.get("implications")
+            if isinstance(implications, list):
+                for item in implications[:2]:
+                    if isinstance(item, dict) and item.get("statement"):
+                        summary_lines.append(str(item["statement"]))
+            if summary_lines:
+                lines.extend(["", "### 摘要要点"])
+                lines.extend(f"- {item}" for item in summary_lines[:4])
+        elif isinstance(executive_summary, str) and executive_summary.strip():
+            lines.extend(["", "### 摘要要点", executive_summary.strip()])
+
+        sections = artifact.get("sections") or []
+        if isinstance(sections, list) and sections:
+            lines.extend(["", "### 故事线"])
+            for index, section in enumerate(sections, 1):
+                if not isinstance(section, dict):
+                    continue
+                heading = str(section.get("heading") or f"Section {index}").strip()
+                brief = str(section.get("brief") or "").strip()
+                refs = [
+                    str(ref)
+                    for ref in section.get("finding_refs", [])
+                    if str(ref).strip()
+                ] if isinstance(section.get("finding_refs"), list) else []
+                lines.append(f"{index}. **{heading}**")
+                if brief:
+                    lines.append(f"   - 论证任务：{brief}")
+                if refs:
+                    lines.append(f"   - 支撑 finding：{', '.join(refs)}")
+
+        appendix_refs = artifact.get("appendix_finding_refs") or []
+        open_items = artifact.get("open_issues") or artifact.get("open_questions") or []
+        boundary_lines = []
+        if isinstance(open_items, list):
+            boundary_lines.extend(str(item) for item in open_items[:4] if str(item).strip())
+        if isinstance(appendix_refs, list) and appendix_refs:
+            boundary_lines.append("降层/附录 finding：" + ", ".join(str(item) for item in appendix_refs[:8]))
+        if boundary_lines:
+            lines.extend(["", "### 关键边界 / 不进入主线的内容"])
+            lines.extend(f"- {item}" for item in boundary_lines)
+
+        lines.extend(
+            [
+                "",
+                "---",
+                "",
+                "请选择：可以进入 Report；或选择“不好，重新写”并说明为什么；或选择“我自己修改”并写出你的修改意见。",
+            ]
+        )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _storyline_confirmation_questions() -> list[dict[str, Any]]:
+        return [
+            {
+                "header": "Storyline确认",
+                "question": "这版 Storyline 是否可以进入 Report？",
+                "multiSelect": False,
+                "options": [
+                    {
+                        "label": "可以，进入Report",
+                        "value": "approve",
+                        "description": "确认当前故事线，进入报告正文写作",
+                    },
+                    {
+                        "label": "不好，重新写",
+                        "value": "rewrite",
+                        "description": "需要说明原因；会复用当前 Storyline agent 上下文重写",
+                    },
+                    {
+                        "label": "我自己修改",
+                        "value": "custom",
+                        "description": "可直接写非结构化修改意见；Storyline 会整理为结构化故事线",
+                    },
+                ],
+            },
+            {
+                "header": "修改说明",
+                "question": "如选择“不好”或“我自己修改”，请说明原因或直接写出你的修改意见；如确认可以，可留空。",
+                "inputType": "text",
+                "multiSelect": False,
+                "options": [],
+            },
+        ]
+
+    def _record_storyline_confirmation_feedback(
+        self,
+        state: dict[str, Any],
+        feedback: str,
+    ) -> dict[str, Any]:
+        intent = self._classify_storyline_confirmation_feedback(feedback)
+        if intent == "approve":
+            state.setdefault("project_state", {})["storyline_confirmation"] = {
+                "status": "approved",
+                "human_feedback": feedback,
+                "confirmed_at": now_iso(),
+            }
+            state.pop("storyline_feedback_error", None)
+            self._save_state(state)
+            self._append_decision(
+                "storyline_confirmed",
+                "Human confirmed Storyline and approved dispatch to Report",
+                {"feedback": feedback},
+            )
+            return self.approve()
+
+        if intent in ("rewrite", "custom"):
+            if not self._has_meaningful_storyline_feedback_detail(feedback, intent):
+                state["storyline_feedback_error"] = (
+                    "选择“不好，重新写”或“我自己修改”时，需要说明原因或提供修改内容，"
+                    "否则 Storyline 只能随机重写。"
+                )
+                state["current_actor"] = "human"
+                state["human_gate"] = "worker_result"
+                state["status"] = "awaiting_intermediate_review"
+                self._save_state(state)
+                self._append_decision(
+                    "storyline_feedback_needs_detail",
+                    "Human asked to revise Storyline without actionable detail",
+                    {"feedback": feedback, "intent": intent},
+                )
+                return self._human_gate_result(state)
+            return self._revise_current_storyline_task_from_human_feedback(
+                state,
+                feedback=feedback,
+                mode=intent,
+            )
+
+        state["storyline_feedback_error"] = (
+            "没有识别到你的选择。请明确确认可以进入 Report，"
+            "或选择“不好，重新写”/“我自己修改”。"
+        )
+        state["current_actor"] = "human"
+        state["human_gate"] = "worker_result"
+        state["status"] = "awaiting_intermediate_review"
+        self._save_state(state)
+        self._append_decision(
+            "storyline_feedback_unrecognized",
+            "Human feedback did not identify a Storyline action",
+            {"feedback": feedback},
+        )
+        return self._human_gate_result(state)
+
+    @classmethod
+    def _classify_storyline_confirmation_feedback(cls, feedback: str) -> str:
+        text = str(feedback or "")
+        normalized = cls._normalize_choice_token(text)
+        rewrite_tokens = (
+            "rewrite",
+            "不好",
+            "不行",
+            "不合适",
+            "不满意",
+            "重新写",
+            "重写",
+            "重来",
+            "主线不对",
+            "故事线不对",
+        )
+        custom_tokens = (
+            "custom",
+            "自己修改",
+            "我自己改",
+            "我来改",
+            "自定义",
+            "我的修改",
+            "按以下",
+            "改成",
+            "修改为",
+        )
+        approve_tokens = (
+            "approve",
+            "可以",
+            "确认",
+            "通过",
+            "没问题",
+            "继续",
+            "进入report",
+            "进入报告",
+            "ok",
+        )
+        if any(cls._normalize_choice_token(token) in normalized for token in rewrite_tokens):
+            return "rewrite"
+        if any(cls._normalize_choice_token(token) in normalized for token in custom_tokens):
+            return "custom"
+        if cls._looks_like_custom_storyline_feedback(text):
+            return "custom"
+        if any(cls._normalize_choice_token(token) in normalized for token in approve_tokens):
+            return "approve"
+        return "unknown"
+
+    @staticmethod
+    def _looks_like_custom_storyline_feedback(feedback: str) -> bool:
+        text = str(feedback or "").strip()
+        if len(text) < 18:
+            return False
+        return any(
+            token in text
+            for token in (
+                "故事线",
+                "核心答案",
+                "主线",
+                "章节",
+                "标题",
+                "先讲",
+                "再讲",
+                "改为",
+                "我觉得",
+                "建议",
+            )
+        )
+
+    @staticmethod
+    def _has_meaningful_storyline_feedback_detail(feedback: str, mode: str) -> bool:
+        detail = str(feedback or "")
+        for token in (
+            "rewrite",
+            "custom",
+            "不好",
+            "不行",
+            "不合适",
+            "不满意",
+            "重新写",
+            "重写",
+            "重来",
+            "主线不对",
+            "故事线不对",
+            "自己修改",
+            "我自己改",
+            "我来改",
+            "自定义",
+            "我的修改",
+            "原因",
+            "理由",
+            "因为",
+        ):
+            detail = detail.replace(token, "")
+        detail = re.sub(r"[\s:：|｜#\"'`，,。；;、（）()\[\]]+", "", detail)
+        meaningful_chars = re.findall(r"[\w\u4e00-\u9fff]", detail)
+        threshold = 6 if mode == "custom" else 4
+        return len(meaningful_chars) >= threshold
+
+    def _revise_current_storyline_task_from_human_feedback(
+        self,
+        state: dict[str, Any],
+        *,
+        feedback: str,
+        mode: str,
+    ) -> dict[str, Any]:
+        task = state.get("current_task")
+        if not isinstance(task, dict) or task.get("agent_id") != "storyline":
+            raise StepError("当前人审反馈不属于 Storyline task，不能复用 Storyline 上下文返工")
+        task_dir = Path(str(task.get("task_dir") or ""))
+        run_state_path = task_dir / "run_state.json"
+        if not run_state_path.exists():
+            raise StepError(f"Storyline run_state 不存在，无法复用当前 task: {run_state_path}")
+        run_state = read_json(run_state_path, default={})
+        round_index = int(run_state.get("round_index") or 0)
+        run_state["current_step"] = "review_completed"
+        run_state["status"] = "running"
+        run_state["max_revision_rounds"] = max(
+            int(run_state.get("max_revision_rounds") or 0),
+            round_index + 2,
+        )
+        mode_label = "用户认为当前 Storyline 不成立" if mode == "rewrite" else "用户提供了自定义 Storyline 修改意见"
+        run_state["p0_open"] = [
+            {
+                "id": f"P0-human-storyline-{now_iso().replace(':', '').replace('+', 'Z')}",
+                "severity": "P0",
+                "dimension": "人审偏好",
+                "message": f"{mode_label}，需要复用当前 Storyline 上下文重新整理一版故事线。",
+                "evidence": feedback,
+                "suggestion": (
+                    "不要新起 Storyline task。基于已确认的 Analysis 论点组、Analysis findings、"
+                    "当前 Storyline 和用户反馈，重新输出一版 storyline.v3；只保留一条主线，"
+                    "更新 core_answer、sections、appendix_finding_refs/open_issues。"
+                ),
+            }
+        ]
+        run_state["p1_open"] = []
+        run_state.setdefault("human_feedback_requests", []).append(
+            {
+                "at": now_iso(),
+                "gate": "storyline_confirmation",
+                "mode": mode,
+                "feedback": feedback,
+            }
+        )
+        run_state.setdefault("history", []).append(
+            {
+                "at": now_iso(),
+                "step": "human_storyline_feedback",
+                "message": f"{mode_label}: {feedback}",
+            }
+        )
+        run_state["updated_at"] = now_iso()
+        handoff_dir = task_dir / "handoff"
+        stale_revise_output = handoff_dir / "output_revise.json"
+        if stale_revise_output.exists():
+            stale_revise_output.unlink()
+        write_json(run_state_path, run_state)
+
+        task["status"] = "revision_required"
+        task["manager_acceptance"] = None
+        task["accepted_at"] = None
+        self._replace_task(state, task)
+        self._set_plan_task_status(str(task.get("task_id") or ""), "revision_required")
+        state["execution_plan"] = read_json(self.plan_path, default={})
+        state["accepted_artifacts"] = [
+            item
+            for item in state.get("accepted_artifacts", [])
+            if item.get("task_id") != task.get("task_id")
+            and item.get("task_dir") != task.get("task_dir")
+        ]
+        project_state = state.setdefault("project_state", {})
+        if isinstance(project_state, dict):
+            project_state.pop("storyline_confirmation", None)
+            project_state["storyline_revision_request"] = {
+                "mode": mode,
+                "feedback": feedback,
+                "requested_at": now_iso(),
+            }
+        state.pop("storyline_feedback_error", None)
+        state["previous_pending_decision"] = state.get("pending_decision")
+        state["pending_decision"] = None
+        state["human_gate"] = None
+        state["current_actor"] = "worker"
+        state["manager_step"] = "idle"
+        state["status"] = "running"
+        state["worker_result"] = None
+        state["last_event"] = "storyline_confirmation_feedback_revision"
+        self._save_state(state)
+        self._append_decision(
+            "storyline_confirmation_revision",
+            "Human feedback returned to the same Storyline task for revision",
+            {"task_id": task.get("task_id"), "mode": mode, "feedback": feedback},
+        )
+        return self.prepare()
 
     def _replace_task(self, state: dict[str, Any], current: dict[str, Any]) -> None:
         tasks = state.get("tasks", [])
@@ -1838,6 +3023,7 @@ def _should_pause(run_mode: Any, agent_id: str) -> bool:
     - ``"full_auto"`` → never pause
     - ``"step_by_step"`` → pause after every worker
     - ``list[str]`` → pause only if ``agent_id`` is in the list
+    - ``None`` → default checkpoint pause after Analysis and Storyline
     """
     if run_mode == "full_auto":
         return False
@@ -1845,4 +3031,4 @@ def _should_pause(run_mode: Any, agent_id: str) -> bool:
         return True
     if isinstance(run_mode, list):
         return agent_id in run_mode
-    return False
+    return agent_id in DEFAULT_CHECKPOINT_PAUSE_AGENTS

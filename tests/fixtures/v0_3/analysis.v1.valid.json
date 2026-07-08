@@ -88,6 +88,50 @@
       "decision_relevance": "用于定义实验机制和访谈补样，而非估算总体效果。"
     }
   ],
+  "thesis_options": [
+    {
+      "option_id": "TG-01",
+      "main_thesis": "首周留存的优先验证方向应从增加提醒转向让用户形成可复用成果。",
+      "sub_theses": [
+        {
+          "claim": "完成可复用成果保存的新用户在冻结样本中表现出更高的第 7 日回访。",
+          "finding_refs": ["F-01"],
+          "confidence": "medium",
+          "why_it_matters": "它把留存讨论从单纯触达转向价值确认，但仍需控制自选择。"
+        },
+        {
+          "claim": "访谈提示留存用户能说清上次成果的继续使用场景，流失用户更像把产品视为一次性问答。",
+          "finding_refs": ["F-02"],
+          "confidence": "low",
+          "why_it_matters": "它提供了机制线索，可用于设计后续实验和补样访谈。"
+        }
+      ],
+      "best_for": "希望引导总办讨论首个验证实验优先级，而不是直接加大提醒触达。",
+      "evidence_strength": "medium",
+      "tradeoffs": ["不能据此宣称成果保存导致留存提升", "需要后续实验排除自选择"]
+    },
+    {
+      "option_id": "TG-02",
+      "main_thesis": "当前材料更适合把成果复用定义为待验证机制，而不是直接转化为确定策略。",
+      "sub_theses": [
+        {
+          "claim": "冻结样本显示成果保存与回访共同出现，但缺少随机或控制初始意愿后的验证。",
+          "finding_refs": ["F-01"],
+          "confidence": "medium",
+          "why_it_matters": "它支持优先级判断，但不足以直接给出因果结论。"
+        },
+        {
+          "claim": "访谈中的复用叙述能解释可能机制，但样本有限且存在招募偏差。",
+          "finding_refs": ["F-02"],
+          "confidence": "low",
+          "why_it_matters": "它适合作为实验假设来源，不适合估算总体效果。"
+        }
+      ],
+      "best_for": "希望报告语气更审慎，重点推动验证设计和证据补强。",
+      "evidence_strength": "medium-low",
+      "tradeoffs": ["行动指向较弱", "更适合分析类报告而非方案汇报"]
+    }
+  ],
   "viewpoint_candidates": [
     {
       "viewpoint_id": "VP-01",
