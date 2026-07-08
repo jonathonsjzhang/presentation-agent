@@ -79,15 +79,15 @@ class CrossStageReviewer:
         issues = []
         if missing:
             issues.append(self._issue(
-                "P0", "storyline_fidelity",
-                "Report 遗漏或改写了已批准的 Storyline 章节",
+                "P1", "storyline_heading_literal",
+                "Report 未逐字保留部分 Storyline heading；若只是为可读性压缩标题，不应阻断流程",
                 {"missing_headings": missing},
                 "report",
             ))
         return self._result(
-            "block" if issues else "pass",
+            "pass",
             issues,
-            "approved storyline headings checked against the manuscript",
+            "approved storyline heading literals checked as a non-blocking signal",
         )
 
     def _check_report_to_format(

@@ -64,6 +64,13 @@ def compile_skill_package(
             # 与 rules 注入相互独立：canonical_format 只替换 rules（契约字段），
             # 不影响 SKILL.md 准则的注入，从而实现 B1 共存。
             skill_body = str(package.get("instructions", "")).strip()
+            if canonical_format and kind == "format":
+                # v0.3 Format receives report.v1 and only submits visuals[].
+                # Older carrier capability bodies still describe page/material_unit
+                # planning, renderer contracts, and style token implementation.
+                # Keep the selected capability for target awareness, but do not
+                # inject those legacy instructions into the worker prompt.
+                skill_body = ""
             if skill_body or lines:
                 section = [f"## Active capability: {atomic_spec.id}"]
                 if skill_body:
@@ -79,6 +86,12 @@ def compile_skill_package(
             applicable_rubrics = [
                 rubric for rubric in package["rubrics"] if _applies(rubric, spec.id)
             ]
+            if canonical_format and kind == "format":
+                applicable_rubrics = [
+                    _rubric_from_rule(rule, atomic_spec.id)
+                    for rule in matching_rules
+                    if "review" in rule.get("phase", [])
+                ]
             if not applicable_rubrics:
                 applicable_rubrics = [
                     _rubric_from_rule(rule, atomic_spec.id)
@@ -147,11 +160,6 @@ def _has_profile_context(input_data: dict[str, Any]) -> bool:
 
 
 def _canonical_format_rule(delivery_target: str) -> dict[str, Any]:
-    unit_types = {
-        "document": "document_section",
-        "ppt": "slide",
-        "html": "html_module",
-    }
     renderers = {
         "document": "docx_renderer",
         "ppt": "ppt_renderer",
@@ -161,15 +169,13 @@ def _canonical_format_rule(delivery_target: str) -> dict[str, Any]:
         "id": f"FMT-V03-{delivery_target.upper()}",
         "applies_to": ["format"],
         "phase": ["generation", "review"],
-        "level": "P0",
+        "level": "P1",
         "property": "delivery_target_contract",
         "instruction": (
-            f"只转译为 delivery_target={delivery_target}；"
-            f"目标载体使用 {unit_types[delivery_target]} 结构和 "
-            f"{renderers[delivery_target]}。"
-            "Worker 只选择有证据的 visuals，不调用 renderer；"
-            "runtime 负责默认版式、分页与渲染状态，"
-            "report_markdown 始终是内容真相源。"
+            f"本轮目标载体是 delivery_target={delivery_target}；"
+            "Format worker 只选择有证据的 visuals[]，不写页面计划、不调用 renderer、"
+            "不改 report_markdown。"
+            f"默认版式和 {renderers[delivery_target]} 渲染由 runtime 负责。"
         ),
         "context_requirements": [
             "report_markdown",

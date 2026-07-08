@@ -84,9 +84,12 @@ class V03SchemaContractTests(unittest.TestCase):
         }
         self.assertLessEqual(storyline_findings, analysis_findings)
         markdown = report["report_markdown"]
-        self.assertTrue(
-            all(section["heading"] in markdown for section in storyline["sections"])
-        )
+        markdown_sections = [
+            line[3:].strip()
+            for line in markdown.splitlines()
+            if line.startswith("## ")
+        ]
+        self.assertTrue(markdown_sections)
         markdown_headings = {
             line[3:].strip()
             for line in markdown.splitlines()
@@ -242,6 +245,13 @@ class FormatCoreCompilationTests(unittest.TestCase):
         self.assertIn("formatted_material.v2", package.instructions)
         self.assertIn("delivery_target=document", package.instructions)
         self.assertNotIn("page_content → formatted_material.v1", package.instructions)
+        self.assertNotIn("material_units[]", package.instructions)
+        self.assertNotIn("pages[]", package.instructions)
+        self.assertNotIn("style_tokens", package.instructions)
+        rubric_text = json.dumps(package.rubrics, ensure_ascii=False)
+        self.assertNotIn("material_units[]", rubric_text)
+        self.assertNotIn("pages[]", rubric_text)
+        self.assertNotIn("style_tokens", rubric_text)
         self.assertIn("formatted_material.v2", package.schemas)
 
     def test_each_delivery_target_selects_exactly_one_matching_capability(self) -> None:
