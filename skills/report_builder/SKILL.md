@@ -20,7 +20,8 @@ description: >-
 - repo 和 workspace 分离：更新 repo 不覆盖用户 workspace
 - 只通过高层 CLI 调度：`doctor`、`init-workspace`、`report start/next/submit/approve/status`
 - 宿主不替 Manager 决定阶段顺序，不绕过 harness 自己写最终材料
-- `actor=human` 时把 `present_to_user` 展示给用户，并等待用户决定
+- `actor=human` 时把 `present_to_user` 展示给用户；brief gate 尤其要把 brief 摘要先发出来，再等待确认
+- 默认不启用 sub-agent；只有用户明确要求并行、隔离执行或严格审查时，才选择对应 adapter / independent review
 - 有 `spawn.detail` 时按 detail 派真实 sub-agent；不要为了省事在主对话代写 worker/reviewer 输出
 - 写入 `output_path` 时只写一个合法 JSON 对象，不加 Markdown 前后文
 - 不在命令中放 token、API key，也不执行会删除、reset 或覆盖 workspace 的命令
@@ -109,14 +110,14 @@ python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces
 ~/PresentationAgent/workspaces/default/artifacts/briefs/<slug>.json
 ```
 
-选择当前宿主的 spawn adapter：
+默认不启用 sub-agent，使用 `inline`。只有用户明确提出要并行、隔离执行、使用 WorkBuddy/Codex/Claude 子任务，或正在调试 sub-agent 调度时，才选择对应 adapter：
 
 | 当前宿主 | `--spawn-adapter` |
 |---|---|
-| WorkBuddy | `workbuddy` |
-| Codex | `codex` |
-| Claude Code | `claude` |
-| 不支持 sub-agent | `inline` |
+| 默认 / 常规运行 | `inline` |
+| 明确使用 WorkBuddy sub-agent | `workbuddy` |
+| 明确使用 Codex sub-agent | `codex` |
+| 明确使用 Claude Code sub-agent | `claude` |
 
 启动：
 
@@ -127,10 +128,10 @@ python -m presentation_agent.cli \
   report start \
   --brief-file "<brief_file>" \
   --contract-profile "v0_3" \
-  --spawn-adapter "<workbuddy|codex|claude|inline>"
+  --spawn-adapter "inline"
 ```
 
-第一轮通常会进入 brief human gate。展示 CLI 返回的 `present_to_user`，等用户确认后再 approve。
+第一轮通常会进入 brief human gate。先把 CLI 返回的 `instruction.present_to_user` 原样展示给用户，它里面应包含 brief 摘要、挂载素材和待确认选项；不要只说“请确认 brief”。用户确认后再 approve。若 `present_to_user` 缺少 brief 摘要，先执行 `report status --run "<run_id>"` 检查状态，仍缺失时把 `raw_brief.json` 的主要内容整理给用户看，再请用户确认。
 
 ## 3. 推进 report loop
 
@@ -146,12 +147,13 @@ python -m presentation_agent.cli \
 
 ### actor=human
 
-展示 `present_to_user`，等待用户决定。
+展示 `present_to_user`，等待用户决定。brief gate 时要先展示 brief 摘要，再问是否继续；不要把确认问题和 brief 内容拆开。
 
 - 用户确认继续：`report approve`
 - 用户要求修改或补充信息：`report feedback --text '<用户原话>'`
 - brief gate 需要运行模式时：
-  - 常规跑通优先：`--review-mode schema_only`
+  - 默认：`--run-mode full_auto --review-mode schema_only`
+  - 用户明确要逐步看结果：`--run-mode step_by_step`
   - 用户明确要严格质量审查、调试质量问题或最终验收：`--review-mode independent`
 
 示例：

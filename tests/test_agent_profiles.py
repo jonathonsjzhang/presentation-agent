@@ -52,6 +52,11 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertEqual(approve.run_mode, "full_auto")
         self.assertEqual(approve.review_mode, "schema_only")
         self.assertEqual(approve.delivery_option, "format:ppt")
+        default_approve = build_parser().parse_args(
+            ["report", "approve", "--run", "run-id"]
+        )
+        self.assertEqual(default_approve.run_mode, "full_auto")
+        self.assertEqual(default_approve.review_mode, "schema_only")
         custom = build_parser().parse_args(
             [
                 "report",
@@ -140,13 +145,10 @@ class AgentProfileLoaderTests(unittest.TestCase):
             )
             self.assertEqual(
                 [option["label"] for option in review_question["options"]],
-                ["启用（推荐）", "不启用（快速）"],
+                ["不启用（默认）", "启用（质量优先）"],
             )
 
-            manager.approve(
-                run_mode="full_auto",
-                review_mode="schema_only",
-            )
+            manager.approve()
             approved_state = manager.status()["state"]
             self.assertEqual(approved_state["run_mode"], "full_auto")
             self.assertEqual(approved_state["review_mode"], "schema_only")

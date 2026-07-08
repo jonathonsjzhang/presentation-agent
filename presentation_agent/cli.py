@@ -21,7 +21,8 @@ def _add_spawn_adapter_option(parser: argparse.ArgumentParser) -> None:
         choices=["inline", "workbuddy", "claude", "codex", "cli"],
         help=(
             "Sub-agent host for this run. The override is persisted in manager_state; "
-            "defaults to PRESENTATION_AGENT_SPAWN_ADAPTER, then repo config."
+            "report start defaults to inline; later commands preserve the run's persisted adapter unless overridden. "
+            "Use workbuddy/codex/claude only when the user explicitly wants sub-agents."
         ),
     )
 
@@ -81,6 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
     report_approve.add_argument(
         "--run-mode",
         choices=["full_auto", "step_by_step", "custom"],
+        default="full_auto",
         help="Brief gate execution mode.",
     )
     report_approve.add_argument(
@@ -93,6 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     report_approve.add_argument(
         "--review-mode",
         choices=["independent", "schema_only"],
+        default="schema_only",
         help="Brief gate review mode; schema_only skips LLM review sub-agents.",
     )
     report_approve.add_argument(
@@ -737,7 +740,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             root,
             run_dir,
             data_root=workspace.data_dir,
-            spawn_adapter=args.spawn_adapter,
+            spawn_adapter=args.spawn_adapter or "inline",
             contract_profile=args.contract_profile,
         )
         prepared = manager.initialize_run(brief_path)
