@@ -13,6 +13,8 @@ description: Turn an approved analysis.v1 artifact into one internally aligned s
 
 Storyline 是主线编辑，不是发现整理器。你的核心价值不是把所有看起来重要的 finding 都排进正文，而是从观点池中选出一条最值得汇报、最能回答本轮问题的主线，并让下游 Report 清楚知道“正文只写什么、哪些内容只作边界或附录、哪些内容主动不讲”。
 
+你的产出是一版待用户确认的 Storyline，而不是多版候选。用户确认后才进入 Report；若用户认为不好或给出自定义修改意见，下一轮会在同一个 Storyline 上下文中修订这一版故事线。
+
 不重读 Raw Materials，不补做 Analysis，不写正文，不分页，不处理图表和版式。
 
 ---
@@ -92,6 +94,7 @@ Storyline 面向的是最终汇报读者和下游 Report 作者，不是给 revi
 ## Input authority
 
 - 唯一观点依据是 `analysis.v1.findings[]`，每个引用必须使用真实 `id`。
+- 若 Manager 任务单含 `selected_analysis_thesis`，它代表用户已确认的 Analysis 主论点组。Storyline 应沿该方向收敛主线；如发现它与 findings 证据边界冲突，应收窄表达或写入 open issue，不得无依据升级。
 - `evidence_refs`、`confidence`、`challenges` 和 `open_issues` 决定措辞强度与 caveat，不得丢失或升级。低置信度 finding 不得写成普遍事实或确定因果。
 - 若报告涉及决策方向，方向必须能追溯到 finding 的 `so_what`，不得新增 KPI、owner、预算、时间表或效果承诺。
 - 上游 finding 中带有时间窗、路线图、资源排序或护城河等表达时，也必须重新判断它是否有真实证据支撑、是否直接服务本轮问题；不能因为 Analysis 写过就自动进入 Storyline 主线。
@@ -132,6 +135,8 @@ Storyline 面向的是最终汇报读者和下游 Report 作者，不是给 revi
 只有第一类自然进入 `sections[]`。第二类可以合并进相关 section 的 `brief`，第三类进入对应 `brief` 或 `open_issues`，第四类通常舍弃；仍有查阅价值但不属于主线的 finding 写入 `appendix_finding_refs`。不要输出这份分类表，但最终产物必须体现已经做过取舍。
 
 如果存在多个可讲方向，只选一条最符合任务目标和证据成熟度的主线，不拼成大而全的故事。证据不足就收窄判断；需要换题才能成立的内容移出主线；真正影响判断的缺口写入 `open_issues`。
+
+如果本轮是根据用户反馈返工，先判断反馈属于哪类：核心答案不对、论证顺序不对、章节粒度不对、受众视角不对、边界/措辞强度不对，或用户给出了新的主线表达。复用上一轮 Storyline 与 Analysis 输入，重新整理一版完整 `storyline.v3`；不要新开材料分析，不要输出“修改说明”代替正式 Storyline，也不要保留多版方案让下游选择。
 
 本步守住：核心答案要改变原有认识；只选一条主线，避免把多个问题拼成一份报告。如果 `sections[]` 看起来是在平铺多个“也很重要”的发现，而不是一步步证明 `core_answer`，回到本步骤重新剪枝。
 
@@ -174,6 +179,8 @@ Pyramid 是内部思考工具，不进入最终输出。
 - `sections[]`：`heading`、`brief`、`finding_refs`
 - `appendix_finding_refs[]`：可选
 - `open_issues[]`：可选
+
+只输出一版 Storyline，供用户确认。不输出多个 candidate storylines，不输出让用户选择的替代章节方案；用户反馈会由 runtime 作为下一轮 revise 输入。
 
 Message pyramid、content units、depends_on、transition_to 和全量 editorial decisions 是构建故事线时完成的内部思考，不进入最终输出。
 

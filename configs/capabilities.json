@@ -75,9 +75,11 @@
       "外部分享": "external"
     },
     "report_type": {
+      "分析类": "deep_dive",
       "深度分析": "deep_dive",
       "专题深度分析": "deep_dive",
       "专题汇报": "deep_dive",
+      "梳理类": "quick_sync",
       "业务进展": "business_progress",
       "业务进展汇报": "business_progress",
       "进展汇报": "business_progress",

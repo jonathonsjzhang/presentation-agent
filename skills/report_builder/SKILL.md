@@ -90,16 +90,19 @@ python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces
 
 ## 2. 发起汇报
 
-用户提出汇报需求时，只做输入归集，不在宿主层替 Manager 完成任务定位。除非连主题都无法判断，否则先启动 Manager，让 Manager 在 brief gate 里补问。
+用户提出汇报需求时，只做输入归集，不在宿主层替 Manager 完成任务定位。只要有可启动的需求线索，就先启动 Manager，让 Manager 在 brief gate 里补问研究目的、研究方向和高可信论据。
 
-最小 brief 只需要能表达用户想做什么：
+最小 brief 只需要能表达用户想做什么；其余字段可留空，由 brief gate 汇总默认值并让用户确认：
 
 | 字段 | 建议 | 说明 |
 |---|---|---|
-| `topic` | 尽量填写 | 汇报主题；如果完全不知道才追问 |
-| `audience` | 可空 | 用户没说时留空或写自然语言猜测，不要反复追问 |
-| `decision_goal` | 可空 | 希望支撑的决策；不清楚交给 Manager 澄清 |
-| `report_type` | 可空 | 默认 `deep_dive` |
+| `topic` | 可空 | 报告主题；可由 Manager 根据输入信息和论据总结 |
+| `research_purpose` / `decision_goal` | 可空 | 研究目的；brief gate 会主动问“项目的研究目的是什么” |
+| `research_direction` / `expected_action` / `hypothesis` | 可空 | 论点 hypo 或希望引导的讨论/行动方向；brief gate 会主动问 |
+| `audience` | 可空 | 默认总办（`exec_office`） |
+| `project_type` | 可空 | 默认“分析类”；可填“分析类/梳理类” |
+| `delivery_targets` / `output_format` | 可空 | 默认文档；如用户要 PPT，则 brief 预设篇幅为 10 页 PPT |
+| `report_length` | 可空 | 默认 3 页；PPT 默认 10 页 PPT |
 | `materials` | 可空 | 文件路径、素材、已知结论或证据 |
 | `constraints` | 可空 | 页数、保密、口径、格式限制 |
 | `user_intent` | 可空 | 用一句自然语言记录用户真实意图 |
@@ -131,7 +134,7 @@ python -m presentation_agent.cli \
   --spawn-adapter "inline"
 ```
 
-第一轮通常会进入 brief human gate。先把 CLI 返回的 `instruction.present_to_user` 原样展示给用户，它里面应包含 brief 摘要、挂载素材和待确认选项；不要只说“请确认 brief”。用户确认后再 approve。若 `present_to_user` 缺少 brief 摘要，先执行 `report status --run "<run_id>"` 检查状态，仍缺失时把 `raw_brief.json` 的主要内容整理给用户看，再请用户确认。
+第一轮通常会进入 brief human gate。先把 CLI 返回的 `instruction.present_to_user` 原样展示给用户，它里面应按顺序包含研究目的、研究方向、论据列表、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”；不要只说“请确认 brief”。如果返回的 `instruction.questions` 存在，宿主应按 WorkBuddy/AskUserQuestion 风格发起结构化提问：两个文本题分别收集研究目的和研究方向，一个多选题让用户勾选高可信论据。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。用户回答、修改或补充后用 `report feedback --text '<用户原话或结构化答案摘要>'` 回传；用户确认继续后再 approve。若 `present_to_user` 缺少 brief 摘要，先执行 `report status --run "<run_id>"` 检查状态，仍缺失时把 `raw_brief.json` 的主要内容整理给用户看，再请用户确认。
 
 ## 3. 推进 report loop
 
@@ -147,23 +150,33 @@ python -m presentation_agent.cli \
 
 ### actor=human
 
-展示 `present_to_user`，等待用户决定。brief gate 时要先展示 brief 摘要，再问是否继续；不要把确认问题和 brief 内容拆开。
+展示 `present_to_user`，等待用户决定。brief gate 时要先展示 brief 摘要；若 `questions` 存在，优先用结构化提问收集研究目的、研究方向和高可信论据，再问是否继续。不要询问 worker 选择或 review sub_agent 选择，不要把确认问题和 brief 内容拆开。
 
 - 用户确认继续：`report approve`
-- 用户要求修改或补充信息：`report feedback --text '<用户原话>'`
-- brief gate 需要运行模式时：
-  - 默认：`--run-mode full_auto --review-mode schema_only`
-  - 用户明确要逐步看结果：`--run-mode step_by_step`
-  - 用户明确要严格质量审查、调试质量问题或最终验收：`--review-mode independent`
+- 用户回答研究目的/研究方向、勾选高可信论据，或要求修改补充信息：`report feedback --text '<用户原话或结构化答案摘要>'`
+- brief gate 默认 approve 不传 `--run-mode`，runtime 会在 analysis、storyline 后暂停确认；用户明确要求逐步看结果时才传 `--run-mode step_by_step`
+- brief 阶段不要主动询问 review sub_agent；只有用户明确要求严格质量审查、调试质量问题或最终验收时，才使用 `--review-mode independent`
+
+Analysis 论点组确认 gate：
+
+- 如果 `present_to_user` 是“Analysis 论点组确认”且 `questions` 包含“论点组选择”，先把 2-3 组主论点/分论点完整展示给用户，并用结构化提问让用户选择。
+- 用户选择某个方案编号（如 `TG-01`）：先执行 `report feedback --text '<选择 TG-01 + 用户说明>'`，CLI 会记录到 `selected_analysis_thesis`；随后在用户明确表示可以后再执行 `report approve` 进入 Storyline。
+- 用户选择“都不好，重新写”：必须让用户说明原因，再执行 `report feedback --text '<都不好 + 原因>'`。不要直接 approve；runtime 会复用当前 Analysis task 进入 revise，修订后会再次回到同一个确认 gate。
+- 用户选择“我自己修改”：把用户的非结构化修改意见原样放进 `report feedback --text`。不要替用户整理成最终 JSON；当前 Analysis agent 会根据反馈重新整理结构化论点组，并再次请求确认。
+
+Storyline 确认 gate：
+
+- 如果 `present_to_user` 是“Storyline 确认”，只展示这一版核心答案、章节故事线和关键边界，不要要求用户在多版故事线中选择。
+- 用户确认可以：执行 `report approve --run "<run_id>"`，进入 Report。
+- 用户选择“不好，重新写”：必须让用户说明原因，再执行 `report feedback --text '<不好 + 原因>'`。不要直接 approve；runtime 会复用当前 Storyline task 进入 revise，修订后会再次回到 Storyline 确认 gate。
+- 用户选择“我自己修改”：把用户的非结构化修改意见原样放进 `report feedback --text`。不要替用户改 `storyline.v3` JSON；当前 Storyline agent 会根据反馈重新整理一版结构化故事线，并再次请求确认。
 
 示例：
 
 ```bash
 python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
-  report approve --run "<run_id>" \
-  --run-mode "full_auto" \
-  --review-mode "schema_only"
+  report approve --run "<run_id>"
 ```
 
 Delivery options gate：

@@ -13,6 +13,7 @@ from presentation_agent.manager import (
     ManagerAgentRuntime,
     ManagerOrchestrator,
     WorkerExecutor,
+    _should_pause,
 )
 from presentation_agent.context import ContextAssembler
 from presentation_agent.cli import build_parser, _worker_spawn_response
@@ -27,6 +28,11 @@ FIXTURES = ROOT / "tests" / "fixtures" / "v0_3"
 
 def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def write_json_file(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 class AgentProfileLoaderTests(unittest.TestCase):
@@ -55,7 +61,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
         default_approve = build_parser().parse_args(
             ["report", "approve", "--run", "run-id"]
         )
-        self.assertEqual(default_approve.run_mode, "full_auto")
+        self.assertIsNone(default_approve.run_mode)
         self.assertEqual(default_approve.review_mode, "schema_only")
         custom = build_parser().parse_args(
             [
@@ -95,6 +101,13 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertIs(exposed["instruction"], instruction)
             self.assertTrue(exposed["spawn_required"])
 
+    def test_default_run_mode_pauses_after_analysis_and_storyline(self) -> None:
+        self.assertTrue(_should_pause(None, "analysis"))
+        self.assertTrue(_should_pause(None, "storyline"))
+        self.assertFalse(_should_pause(None, "report"))
+        self.assertFalse(_should_pause(None, "format"))
+        self.assertFalse(_should_pause(None, "qa_preparation"))
+
     def test_v03_manager_starts_five_stage_document_first_chain(self) -> None:
         brief = normalize_brief(
             {
@@ -115,10 +128,6 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 ROOT, run_dir, contract_profile="v0_3"
             )
             prepared = manager.initialize_run(brief_path)
-            self.assertEqual(
-                prepared["selected_workers"],
-                ["analysis", "storyline", "report", "format", "qa_preparation"],
-            )
             confirmation = prepared["present_to_user"]
             for hidden_worker in (
                 "evidence_harvester",
@@ -127,32 +136,82 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 "speaker_script",
             ):
                 self.assertNotIn(hidden_worker, confirmation)
-            self.assertIn("`report` 报告产出", confirmation)
-            self.assertIn("`format` 可视化", confirmation)
-            self.assertIn("`qa_preparation` QA 梳理", confirmation)
+            self.assertIn(
+                "analysis（分析） → storyline（故事线） → report（报告产出） → format（可视化排版）",
+                confirmation,
+            )
+            self.assertIn("是否发起review sub_agent", confirmation)
+            self.assertIn("否（更高效）", confirmation)
+            self.assertNotIn("`qa_preparation` QA 梳理", confirmation)
+            expected_order = [
+                "**报告主题**",
+                "**听众**",
+                "**项目类型**",
+                "**交付形式**",
+                "**报告篇幅**",
+                "**agent执行流程**",
+                "**是否发起review sub_agent**",
+            ]
+            positions = [confirmation.index(item) for item in expected_order]
+            self.assertEqual(positions, sorted(positions))
+            self.assertIn("研究目的", confirmation)
+            self.assertIn("研究方向 / 论点 hypo", confirmation)
+            question_headers = [item["header"] for item in prepared["questions"]]
+            self.assertIn("研究目的", question_headers)
+            self.assertIn("研究方向", question_headers)
+            self.assertIn("高可信论据", question_headers)
+            self.assertNotIn("Review模式", question_headers)
+            self.assertNotIn("运行模式", question_headers)
             self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
             self.assertEqual(
                 manager.status()["state"]["contract_profile"], "v0_3"
             )
-            self.assertEqual(
-                set(prepared["review_mode_options"]),
-                {"independent", "schema_only"},
-            )
-            review_question = next(
-                question
-                for question in prepared["questions"]
-                if question["header"] == "Review模式"
-            )
-            self.assertEqual(
-                [option["label"] for option in review_question["options"]],
-                ["不启用（默认）", "启用（质量优先）"],
-            )
+            self.assertNotIn("review_mode_options", prepared)
 
             manager.approve()
             approved_state = manager.status()["state"]
-            self.assertEqual(approved_state["run_mode"], "full_auto")
+            self.assertEqual(approved_state["run_mode"], ["analysis", "storyline"])
             self.assertEqual(approved_state["review_mode"], "schema_only")
             self.assertFalse(approved_state["review_subagents_enabled"])
+
+    def test_brief_gate_exposes_evidence_confidence_selection(self) -> None:
+        brief = normalize_brief(
+            {
+                "topic": "AI 产品",
+                "research_purpose": "判断成果保存是否值得优先验证",
+                "research_direction": "优先讨论复用路径而不是单纯提醒",
+                "materials": [
+                    {
+                        "material_id": "m1",
+                        "claim": "保存成果用户的回访率更高",
+                        "evidence": ["保存成果组 D7 回访率 34%，单轮问答组 18%"],
+                    }
+                ],
+            },
+            ROOT,
+            "v0_3",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            brief_path = run_dir / "raw_brief.json"
+            brief_path.write_text(
+                json.dumps(brief, ensure_ascii=False), encoding="utf-8"
+            )
+            prepared = ManagerOrchestrator(
+                ROOT, run_dir, contract_profile="v0_3"
+            ).initialize_run(brief_path)
+
+        evidence_question = next(
+            question
+            for question in prepared["questions"]
+            if question["header"] == "高可信论据"
+        )
+        self.assertTrue(evidence_question["multiSelect"])
+        self.assertEqual(
+            evidence_question["options"][0]["label"],
+            "保存成果用户的回访率更高",
+        )
+        self.assertIn("保存成果组 D7 回访率", prepared["present_to_user"])
 
     def test_v03_manager_uses_profile_specific_skill_without_legacy_workers(
         self,
@@ -338,6 +397,465 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 "format:ppt",
                 updated["human_feedback"][-1]["text"],
             )
+
+    def _analysis_gate_manager(
+        self,
+        run_dir: Path,
+        *,
+        with_task_files: bool = False,
+    ) -> ManagerOrchestrator:
+        manager = ManagerOrchestrator(
+            ROOT,
+            run_dir,
+            contract_profile="v0_3",
+        )
+        artifact = read_json(FIXTURES / "analysis.v1.valid.json")
+        task_dir = run_dir / "tasks" / "analysis-001_analysis"
+        artifact_path = task_dir / "artifact.json"
+        if with_task_files:
+            input_path = task_dir / "input.json"
+            write_json_file(
+                input_path,
+                {
+                    "schema": "worker_context.v1",
+                    "contract_profile": "v0_3",
+                    "report_charter": {},
+                    "manager_task": {
+                        "agent_id": "analysis",
+                        "objective": "形成可确认的论点组选项",
+                        "input_artifacts": [],
+                    },
+                    "raw_brief": {},
+                    "raw_materials": [
+                        {
+                            "material_type": "notes",
+                            "notes": "测试材料",
+                        }
+                    ],
+                    "input_readiness": {"status": "ready"},
+                },
+            )
+            write_json_file(task_dir / "draft_round_0.json", artifact)
+            write_json_file(artifact_path, artifact)
+            write_json_file(
+                task_dir / "run_state.json",
+                {
+                    "run_id": "analysis-001-run",
+                    "task_id": "analysis-001",
+                    "agent_id": "analysis",
+                    "agent_name": "Analysis",
+                    "stage": 1,
+                    "status": "pending_human_review",
+                    "current_step": "done",
+                    "round_index": 0,
+                    "max_revision_rounds": 2,
+                    "input_path": str(input_path),
+                    "manager_task": {
+                        "agent_id": "analysis",
+                        "objective": "形成可确认的论点组选项",
+                        "input_artifacts": [],
+                    },
+                    "resolved_input_artifacts": [],
+                    "context_mode": "projected",
+                    "context_manifest_path": "",
+                    "output_dir": str(task_dir),
+                    "p0_open": [],
+                    "p1_open": [],
+                    "produced_artifacts": [str(task_dir / "draft_round_0.json")],
+                    "history": [],
+                    "contract_profile": "v0_3",
+                    "review_subagents_enabled": False,
+                },
+            )
+        task = {
+            "task_id": "analysis-001",
+            "agent_id": "analysis",
+            "agent_name": "Analysis",
+            "task_dir": str(task_dir),
+            "artifact_path": str(artifact_path),
+            "status": "accepted",
+        }
+        state = {
+            "version": "manager_state.v2",
+            "run_id": "analysis-gate-test",
+            "contract_profile": "v0_3",
+            "status": "awaiting_intermediate_review",
+            "current_actor": "human",
+            "manager_phase": "acceptance",
+            "manager_step": "decision_committed",
+            "last_event": "worker_completed",
+            "spawn_adapter": "inline",
+            "human_gate": "worker_result",
+            "current_task": task,
+            "tasks": [task],
+            "accepted_artifacts": [
+                {
+                    "task_id": "analysis-001",
+                    "agent_id": "analysis",
+                    "artifact_path": str(artifact_path),
+                    "task_dir": str(task_dir),
+                }
+            ],
+            "project_state": {},
+            "run_mode": ["analysis", "storyline"],
+            "review_mode": "schema_only",
+            "review_subagents_enabled": False,
+            "worker_result": {
+                "task_id": "analysis-001",
+                "agent_id": "analysis",
+                "artifact_path": str(artifact_path),
+                "artifact": artifact,
+            },
+            "pending_decision": {
+                "action": "dispatch",
+                "acceptance_report": {
+                    "task_id": "analysis-001",
+                    "verdict": "accept",
+                    "reason": "analysis accepted",
+                },
+                "task_packet": {
+                    "task_id": "storyline-001",
+                    "agent_id": "storyline",
+                    "objective": "形成故事线",
+                    "input_artifacts": [str(artifact_path)],
+                },
+            },
+        }
+        manager._save_state(state)
+        return manager
+
+    def test_analysis_worker_result_exposes_thesis_selection_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = self._analysis_gate_manager(Path(temp_dir))
+
+            gate = manager.prepare()
+
+            self.assertEqual(gate["next_action"], "human_feedback")
+            self.assertIn("Analysis 论点组确认", gate["present_to_user"])
+            self.assertIn("TG-01", gate["present_to_user"])
+            self.assertIn("论点组", gate["questions"][0]["header"])
+            values = [option["value"] for option in gate["questions"][0]["options"]]
+            self.assertIn("TG-01", values)
+            self.assertIn("rewrite", values)
+            self.assertIn("custom", values)
+
+    def test_analysis_thesis_selection_is_stored_for_storyline(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = self._analysis_gate_manager(Path(temp_dir))
+
+            result = manager.record_human_feedback(
+                "选择 TG-02，理由：更适合审慎推进验证。"
+            )
+
+            self.assertEqual(result["next_action"], "report_approve")
+            updated = manager.status()["state"]
+            selection = updated["project_state"]["analysis_thesis_selection"]
+            self.assertEqual(selection["option_id"], "TG-02")
+            packet = updated["pending_decision"]["task_packet"]
+            self.assertEqual(
+                packet["selected_analysis_thesis"]["option_id"],
+                "TG-02",
+            )
+
+    def test_analysis_rewrite_feedback_reuses_current_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = self._analysis_gate_manager(
+                Path(temp_dir),
+                with_task_files=True,
+            )
+
+            result = manager.record_human_feedback(
+                "都不好，原因：这些方案都太像事实摘要，没有形成对总办有用的取舍判断。"
+            )
+
+            self.assertEqual(result["actor"], "worker")
+            self.assertEqual(result["step"], "revise")
+            updated = manager.status()["state"]
+            self.assertEqual(len(updated["tasks"]), 1)
+            self.assertEqual(
+                updated["current_task"]["task_dir"],
+                str(Path(temp_dir) / "tasks" / "analysis-001_analysis"),
+            )
+            self.assertEqual(updated["accepted_artifacts"], [])
+            run_state = read_json(
+                Path(updated["current_task"]["task_dir"]) / "run_state.json"
+            )
+            self.assertEqual(run_state["current_step"], "awaiting_revise_output")
+            self.assertEqual(run_state["round_index"], 1)
+            instruction = Path(result["instruction_path"]).read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("这些方案都太像事实摘要", instruction)
+
+    def test_analysis_custom_feedback_reuses_current_task_for_structuring(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = self._analysis_gate_manager(
+                Path(temp_dir),
+                with_task_files=True,
+            )
+
+            result = manager.record_human_feedback(
+                "我自己修改：主论点改成首周留存关键不是提醒触达，而是用户是否形成可再次使用的成果；分论点保留样本自选择边界。"
+            )
+
+            self.assertEqual(result["actor"], "worker")
+            self.assertEqual(result["step"], "revise")
+            updated = manager.status()["state"]
+            self.assertEqual(len(updated["tasks"]), 1)
+            run_state = read_json(
+                Path(updated["current_task"]["task_dir"]) / "run_state.json"
+            )
+            self.assertEqual(run_state["current_step"], "awaiting_revise_output")
+            self.assertIn(
+                "用户提供了自定义修改意见",
+                run_state["p0_open"][0]["message"],
+            )
+
+    def test_analysis_rewrite_feedback_requires_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = self._analysis_gate_manager(Path(temp_dir))
+
+            result = manager.record_human_feedback("都不好")
+
+            self.assertEqual(result["actor"], "human")
+            self.assertEqual(result["next_action"], "human_feedback")
+            self.assertIn("需要说明原因", result["present_to_user"])
+            updated = manager.status()["state"]
+            self.assertEqual(updated["current_actor"], "human")
+            self.assertIn("analysis_feedback_error", updated)
+
+    def _storyline_gate_manager(
+        self,
+        run_dir: Path,
+        *,
+        with_task_files: bool = False,
+    ) -> ManagerOrchestrator:
+        manager = ManagerOrchestrator(
+            ROOT,
+            run_dir,
+            contract_profile="v0_3",
+        )
+        artifact = read_json(FIXTURES / "storyline.v3.valid.json")
+        analysis = read_json(FIXTURES / "analysis.v1.valid.json")
+        task_dir = run_dir / "tasks" / "storyline-001_storyline"
+        artifact_path = task_dir / "artifact.json"
+        if with_task_files:
+            input_path = task_dir / "input.json"
+            write_json_file(
+                input_path,
+                {
+                    "schema": "worker_context.v1",
+                    "contract_profile": "v0_3",
+                    "report_charter": read_json(
+                        FIXTURES / "report_charter.v2.valid.json"
+                    ),
+                    "manager_task": {
+                        "agent_id": "storyline",
+                        "objective": "形成单版故事线",
+                        "input_artifacts": [
+                            str(run_dir / "tasks" / "analysis-001_analysis" / "artifact.json")
+                        ],
+                    },
+                    "raw_brief": {},
+                    "analysis": analysis,
+                    "input_readiness": {"status": "ready"},
+                },
+            )
+            write_json_file(task_dir / "draft_round_0.json", artifact)
+            write_json_file(artifact_path, artifact)
+            write_json_file(
+                task_dir / "run_state.json",
+                {
+                    "run_id": "storyline-001-run",
+                    "task_id": "storyline-001",
+                    "agent_id": "storyline",
+                    "agent_name": "Storyline",
+                    "stage": 2,
+                    "status": "pending_human_review",
+                    "current_step": "done",
+                    "round_index": 0,
+                    "max_revision_rounds": 2,
+                    "input_path": str(input_path),
+                    "manager_task": {
+                        "agent_id": "storyline",
+                        "objective": "形成单版故事线",
+                        "input_artifacts": [],
+                    },
+                    "resolved_input_artifacts": [],
+                    "context_mode": "projected",
+                    "context_manifest_path": "",
+                    "output_dir": str(task_dir),
+                    "p0_open": [],
+                    "p1_open": [],
+                    "produced_artifacts": [str(task_dir / "draft_round_0.json")],
+                    "history": [],
+                    "contract_profile": "v0_3",
+                    "review_subagents_enabled": False,
+                },
+            )
+        task = {
+            "task_id": "storyline-001",
+            "agent_id": "storyline",
+            "agent_name": "Storyline",
+            "task_dir": str(task_dir),
+            "artifact_path": str(artifact_path),
+            "status": "accepted",
+        }
+        state = {
+            "version": "manager_state.v2",
+            "run_id": "storyline-gate-test",
+            "contract_profile": "v0_3",
+            "status": "awaiting_intermediate_review",
+            "current_actor": "human",
+            "manager_phase": "acceptance",
+            "manager_step": "decision_committed",
+            "last_event": "worker_completed",
+            "spawn_adapter": "inline",
+            "human_gate": "worker_result",
+            "current_task": task,
+            "tasks": [task],
+            "accepted_artifacts": [
+                {
+                    "task_id": "storyline-001",
+                    "agent_id": "storyline",
+                    "artifact_path": str(artifact_path),
+                    "task_dir": str(task_dir),
+                }
+            ],
+            "project_state": {
+                "analysis_thesis_selection": {
+                    "option_id": "TG-01",
+                    "main_thesis": "优先验证成果形成与复用闭环",
+                }
+            },
+            "run_mode": ["analysis", "storyline"],
+            "review_mode": "schema_only",
+            "review_subagents_enabled": False,
+            "report_charter": read_json(FIXTURES / "report_charter.v2.valid.json"),
+            "worker_result": {
+                "task_id": "storyline-001",
+                "agent_id": "storyline",
+                "artifact_path": str(artifact_path),
+                "artifact": artifact,
+            },
+            "pending_decision": {
+                "action": "dispatch",
+                "acceptance_report": {
+                    "task_id": "storyline-001",
+                    "verdict": "accept",
+                    "reason": "storyline accepted",
+                },
+                "task_packet": {
+                    "task_id": "report-001",
+                    "agent_id": "report",
+                    "objective": "写作完整报告",
+                    "input_artifacts": [str(artifact_path)],
+                },
+            },
+        }
+        manager._save_state(state)
+        return manager
+
+    def test_storyline_worker_result_exposes_single_storyline_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = self._storyline_gate_manager(Path(temp_dir))
+
+            gate = manager.prepare()
+
+            self.assertEqual(gate["next_action"], "report_approve_or_feedback")
+            self.assertIn("Storyline 确认", gate["present_to_user"])
+            self.assertIn("核心答案", gate["present_to_user"])
+            self.assertIn("故事线", gate["present_to_user"])
+            values = [option["value"] for option in gate["questions"][0]["options"]]
+            self.assertEqual(values, ["approve", "rewrite", "custom"])
+
+    def test_storyline_approval_dispatches_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = self._storyline_gate_manager(
+                Path(temp_dir),
+                with_task_files=True,
+            )
+
+            result = manager.approve()
+
+            self.assertEqual(result["actor"], "worker")
+            updated = manager.status()["state"]
+            self.assertEqual(updated["current_task"]["agent_id"], "report")
+            self.assertEqual(
+                updated["project_state"]["storyline_confirmation"]["status"],
+                "approved",
+            )
+
+    def test_storyline_rewrite_feedback_reuses_current_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = self._storyline_gate_manager(
+                Path(temp_dir),
+                with_task_files=True,
+            )
+
+            result = manager.record_human_feedback(
+                "不好，原因：现在像两个发现拼接，没有形成总办能顺着接受的认知推进。"
+            )
+
+            self.assertEqual(result["actor"], "worker")
+            self.assertEqual(result["step"], "revise")
+            updated = manager.status()["state"]
+            self.assertEqual(len(updated["tasks"]), 1)
+            self.assertEqual(
+                updated["current_task"]["task_dir"],
+                str(Path(temp_dir) / "tasks" / "storyline-001_storyline"),
+            )
+            self.assertEqual(updated["accepted_artifacts"], [])
+            run_state = read_json(
+                Path(updated["current_task"]["task_dir"]) / "run_state.json"
+            )
+            self.assertEqual(run_state["current_step"], "awaiting_revise_output")
+            self.assertEqual(run_state["round_index"], 1)
+            instruction = Path(result["instruction_path"]).read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("两个发现拼接", instruction)
+
+    def test_storyline_custom_feedback_reuses_current_task_for_structuring(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = self._storyline_gate_manager(
+                Path(temp_dir),
+                with_task_files=True,
+            )
+
+            result = manager.record_human_feedback(
+                "我自己修改：核心答案改成不是立刻加提醒，而是先证明可复用成果能形成再次打开理由；章节先讲证据边界，再讲机制。"
+            )
+
+            self.assertEqual(result["actor"], "worker")
+            self.assertEqual(result["step"], "revise")
+            updated = manager.status()["state"]
+            self.assertEqual(len(updated["tasks"]), 1)
+            run_state = read_json(
+                Path(updated["current_task"]["task_dir"]) / "run_state.json"
+            )
+            self.assertEqual(run_state["current_step"], "awaiting_revise_output")
+            self.assertIn(
+                "用户提供了自定义 Storyline 修改意见",
+                run_state["p0_open"][0]["message"],
+            )
+
+    def test_storyline_rewrite_feedback_requires_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = self._storyline_gate_manager(Path(temp_dir))
+
+            result = manager.record_human_feedback("不好")
+
+            self.assertEqual(result["actor"], "human")
+            self.assertEqual(result["next_action"], "report_approve_or_feedback")
+            self.assertIn("需要说明原因", result["present_to_user"])
+            updated = manager.status()["state"]
+            self.assertEqual(updated["current_actor"], "human")
+            self.assertIn("storyline_feedback_error", updated)
 
     def test_v03_defers_requested_ppt_until_after_document(self) -> None:
         brief = normalize_brief(
@@ -586,9 +1104,9 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 self.assertEqual(prepared["gate"], "brief")
                 self.assertEqual(prepared["missing_fields"], [])
                 self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
-                self.assertEqual(
-                    prepared["selected_workers"],
-                    ["analysis", "storyline", "report", "format", "qa_preparation"],
+                self.assertIn(
+                    "analysis（分析） → storyline（故事线） → report（报告产出） → format（可视化排版）",
+                    prepared["present_to_user"],
                 )
 
     def test_default_profile_activates_document_first_v03(self) -> None:
@@ -621,11 +1139,11 @@ class AgentProfileLoaderTests(unittest.TestCase):
 
         self.assertEqual(manager.contract_profile, "v0_3")
         self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
-        self.assertEqual(
-            prepared["selected_workers"],
-            ["analysis", "storyline", "report", "format", "qa_preparation"],
+        self.assertIn(
+            "analysis（分析） → storyline（故事线） → report（报告产出） → format（可视化排版）",
+            prepared["present_to_user"],
         )
-        self.assertNotIn("evidence_harvester", prepared["selected_workers"])
+        self.assertNotIn("evidence_harvester", prepared["present_to_user"])
 
     def test_explicit_v03_loads_executable_five_stage_specs(self) -> None:
         profile = load_agent_profile(ROOT, "v0_3")
