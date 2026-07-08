@@ -640,8 +640,8 @@ class ManagerOrchestrator:
             "accepted_artifacts": [],
             "project_state": {},
             "run_mode": None,  # set during brief confirmation: "full_auto" | "step_by_step"
-            "review_mode": "independent",
-            "review_subagents_enabled": True,
+            "review_mode": "schema_only",
+            "review_subagents_enabled": False,
             "created_at": now_iso(),
             "updated_at": now_iso(),
         }
@@ -899,15 +899,15 @@ class ManagerOrchestrator:
             if isinstance(raw_run_mode, list):
                 state["run_mode"] = raw_run_mode  # custom pause points
                 state["custom_pause_agents"] = raw_run_mode
-            elif raw_run_mode == "full_auto":
-                state["run_mode"] = "full_auto"
+            elif raw_run_mode == "step_by_step":
+                state["run_mode"] = "step_by_step"
             else:
-                state["run_mode"] = "step_by_step"  # default
+                state["run_mode"] = "full_auto"  # default
             selected_review_mode = (
                 review_mode
                 or decision.get("review_mode")
                 or brief_data.get("review_mode")
-                or "independent"
+                or "schema_only"
             )
             if selected_review_mode not in ("independent", "schema_only"):
                 raise StepError(f"未知 review_mode: {selected_review_mode}")
@@ -1615,7 +1615,7 @@ class ManagerOrchestrator:
         lines.append("")
         lines.append("---")
         lines.append("")
-        lines.append("请通过下方选项确认 Brief，并选择运行模式和 Review 模式。")
+        lines.append("请通过下方选项确认 Brief。默认运行模式为 full_auto，默认不启用独立 Review sub-agent；如需逐步确认或严格审查，可在确认时说明。")
 
         return "\n".join(lines)
 
@@ -1623,14 +1623,20 @@ class ManagerOrchestrator:
         decision = state.get("pending_decision") or {}
         gate = state.get("human_gate")
 
-        present_to_user = decision.get("user_message") or {
+        if gate == "brief" and not decision.get("user_message"):
+            present_to_user = self._format_brief_confirmation(
+                decision.get("brief", {}) if isinstance(decision.get("brief"), dict) else {},
+                decision.get("selected_workers", []) or [],
+            )
+        else:
+            present_to_user = decision.get("user_message") or {
             "brief": "请确认以下 brief 信息是否完整、准确。可补充 topic、audience、output_format，并选择 run_mode（full_auto 一次性跑完 / step_by_step 每步确认）。",
             "plan": "请确认 Manager 的任务定义和执行计划。",
             "worker_result": "当前步骤已完成，请查看中间产物。如需继续，确认后进入下一步。",
             "final": "所有任务已完成，请确认最终交付物。",
             "delivery_options": "文档已完成。请选择是否转译 PPT/HTML 或生成 QA list/逐字稿；直接批准表示结束。",
             "decision": "请确认 Manager 的决策。",
-        }.get(gate, "请确认。")
+            }.get(gate, "请确认。")
 
         result: dict[str, Any] = {
             "actor": "human",
@@ -1648,13 +1654,13 @@ class ManagerOrchestrator:
             result["available_workers"] = decision.get("available_workers", [])
             result["selected_workers"] = decision.get("selected_workers", [])
             result["run_mode_options"] = {
-                "full_auto": "全程自动，不中断",
+                "full_auto": "默认：全程自动，不中断",
                 "step_by_step": "每个 Worker 完成后暂停确认",
                 "custom": "指定暂停的 Worker 列表，如 [\"analysis\", \"format\"]",
             }
             result["review_mode_options"] = {
-                "independent": "独立 Review sub-agent（质量优先）",
-                "schema_only": "仅 Schema/P0 门禁（速度优先）",
+                "schema_only": "默认：不启用独立 Reviewer，仅保留确定性检查",
+                "independent": "启用独立 Review sub-agent（质量优先）",
             }
             result["next_action"] = "human_feedback"
             # Structured questions for host AskUserQuestion
@@ -1684,12 +1690,12 @@ class ManagerOrchestrator:
                     "multiSelect": False,
                     "options": [
                         {
-                            "label": "启用（推荐）",
-                            "description": "启用独立 Reviewer，质量更稳但耗时更长",
+                            "label": "不启用（默认）",
+                            "description": "仅保留确定性检查，常规运行更稳更快",
                         },
                         {
-                            "label": "不启用（快速）",
-                            "description": "跳过 LLM Reviewer，仅保留确定性 Schema/P0 门禁",
+                            "label": "启用（质量优先）",
+                            "description": "启用独立 Reviewer，适合严格验收或质量调试",
                         },
                     ],
                 },
