@@ -10,7 +10,7 @@
     },
     {
       "id": "REPORT-MANUSCRIPT-001",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "完整报告",
       "criterion": "report_markdown 是有开头、推进和收束、可独立通读的完整报告，不是提纲或 blocks 拼接。",
       "check": "脱离上游 artifact 从头到尾通读。",
@@ -18,7 +18,7 @@
     },
     {
       "id": "REPORT-STRUCTURE-001",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "写作框架",
       "criterion": "全文由统一分析框架和核心答案统领；标题链形成递进论证，每节只完成一个主要判断。",
       "check": "只读标题链，检查能否用因此、但问题是、所以连接。",
@@ -26,7 +26,7 @@
     },
     {
       "id": "REPORT-REASONING-001",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "推导分析",
       "criterion": "每节完成判断—证据—解释—含义闭环；因果表述有对照或识别依据。",
       "check": "检查数字后是否有解释、节间是否累进、因果判断能否回答和谁比。",
@@ -34,11 +34,11 @@
     },
     {
       "id": "REPORT-EVIDENCE-001",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "论据充分",
-      "criterion": "关键判断有代表性原始证据，来源、口径、单位和时间窗清楚；异常与替代解释得到处理。",
-      "check": "逐项核对 Storyline/Analysis 与正文证据。",
-      "fix": "修正来源和强度，补充必要边界或删除无支撑判断。"
+      "criterion": "关键判断应有代表性原始证据，来源、口径、单位和时间窗尽量清楚；只处理会改变主判断的异常与替代解释。",
+      "check": "检查核心判断是否缺少证据，或正文是否把普通方法限制反复展开。",
+      "fix": "补充最关键证据，收窄无支撑判断，把普通边界集中处理。"
     },
     {
       "id": "REPORT-DENSITY-001",
@@ -60,8 +60,8 @@
       "id": "REPORT-TRACE-001",
       "severity": "P0",
       "dimension": "上游保真",
-      "criterion": "报告遵循 Storyline 的核心答案和章节顺序，不新增无支持事实、KPI、owner、预算或路线图。",
-      "check": "对照 Storyline 与 Analysis 检查结论方向和边界。",
+      "criterion": "报告不得新增无支持事实、KPI、owner、预算、路线图，或把上游低置信判断升级为确定结论。",
+      "check": "对照 Storyline 与 Analysis 检查是否存在实质越界；不要因标题改写或表达压缩判 P0。",
       "fix": "删除越界内容，恢复证据允许的表述。"
     }
   ]

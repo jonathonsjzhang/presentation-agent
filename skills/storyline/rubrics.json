@@ -2,15 +2,15 @@
   "rubrics": [
     {
       "id": "STORYLINE-APEX-001",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "核心主张",
-      "criterion": "core_answer 直接回答决策问题，可复述、有对立面且可被挑战。",
+      "criterion": "core_answer 应直接回答决策问题，可复述，并体现材料带来的新认识。",
       "check": "判断它是否只是 findings 摘要或无信息量共识。",
       "fix": "收窄范围并淬炼真正有张力的答案。"
     },
     {
       "id": "STORYLINE-PYRAMID-001",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "金字塔",
       "criterion": "sections 概括下层、使用统一分类维度，并按一种逻辑排序。",
       "check": "执行层级测试、同类测试和连接词测试。",
@@ -18,7 +18,7 @@
     },
     {
       "id": "STORYLINE-PROGRESSION-001",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "论证累进",
       "criterion": "前文结论成为后文输入，框架前置，每节只完成一个主要判断。",
       "check": "删除第 N 节后若 N+1 仍完全成立，说明前一节没有推进作用。",
@@ -28,9 +28,9 @@
       "id": "STORYLINE-EVIDENCE-001",
       "severity": "P0",
       "dimension": "证据边界",
-      "criterion": "所有 finding_refs 真实，低置信度、challenges 和 open issues 没有被静默升级。",
-      "check": "对照 Analysis 检查引用和措辞强度。",
-      "fix": "收窄主张，把重要边界写入 brief/open_issues。"
+      "criterion": "所有 finding_refs 真实；低置信度 finding 不得被写成确定事实或强因果。",
+      "check": "对照 Analysis 检查引用是否存在、判断强度是否明显升级。",
+      "fix": "修正 finding_refs，或把超出证据的主张收窄为假设/边界。"
     },
     {
       "id": "STORYLINE-FOCUS-001",

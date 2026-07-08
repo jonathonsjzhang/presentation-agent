@@ -70,7 +70,7 @@ class WP8CrossReviewTests(unittest.TestCase):
         self.assertEqual(result["status"], "block")
         self.assertEqual(result["issues"][0]["dimension"], "unsupported_viewpoint")
 
-    def test_report_blocks_missing_approved_heading(self) -> None:
+    def test_report_heading_rewrite_is_non_blocking_signal(self) -> None:
         artifact = copy.deepcopy(self.report)
         artifact["report_markdown"] = artifact["report_markdown"].replace(
             self.storyline["sections"][0]["heading"], "被改写的标题"
@@ -78,8 +78,9 @@ class WP8CrossReviewTests(unittest.TestCase):
         result = self.reviewer._check_storyline_to_report(
             self.storyline, artifact
         )
-        self.assertEqual(result["status"], "block")
-        self.assertEqual(result["issues"][0]["dimension"], "storyline_fidelity")
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["issues"][0]["severity"], "P1")
+        self.assertEqual(result["issues"][0]["dimension"], "storyline_heading_literal")
 
     def test_format_blocks_visual_for_unknown_section(self) -> None:
         artifact = copy.deepcopy(self.formatted)

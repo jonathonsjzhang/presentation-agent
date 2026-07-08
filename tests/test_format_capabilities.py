@@ -50,9 +50,9 @@ class FormatCapabilityTests(unittest.TestCase):
     def test_format_prompt_contains_only_selected_carrier_harness(self) -> None:
         spec = _specs()["format"]
         expectations = {
-            "ppt": ("slide 结构和 ppt_renderer", ["document_section 结构和 docx_renderer", "html_module 结构和 html_renderer"]),
-            "document": ("document_section 结构和 docx_renderer", ["slide 结构和 ppt_renderer", "html_module 结构和 html_renderer"]),
-            "html": ("html_module 结构和 html_renderer", ["slide 结构和 ppt_renderer", "document_section 结构和 docx_renderer"]),
+            "ppt": ("delivery_target=ppt", ["delivery_target=document", "delivery_target=html", "material_units[]", "pages[]", "style_tokens"]),
+            "document": ("delivery_target=document", ["delivery_target=ppt", "delivery_target=html", "material_units[]", "pages[]", "style_tokens"]),
+            "html": ("delivery_target=html", ["delivery_target=ppt", "delivery_target=document", "material_units[]", "pages[]", "style_tokens"]),
         }
         for output_format, (included, excluded) in expectations.items():
             package = compile_skill_package(

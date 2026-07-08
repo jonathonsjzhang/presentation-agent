@@ -446,11 +446,8 @@
       "output_contract": {
         "primary_artifact": "Evidence Catalog",
         "required_handoff_fields": [
-          "source_units",
-          "evidence_items",
-          "source_unit_disposition",
-          "unresolved_units",
-          "coverage_summary"
+          "items",
+          "unresolved"
         ],
         "downstream_use": "analysis 基于完整证据目录形成发现、反证、替代解释与置信度"
       },
@@ -462,8 +459,8 @@
         "多模态读取"
       ],
       "rubrics": [
-        "所有 source unit 必须有 disposition",
-        "所有 evidence item 必须引用真实 source unit",
+        "所有 item 必须有真实 source_ref",
+        "无法读取或无法定位的内容写入 unresolved",
         "不生成 thesis 或 recommendation"
       ],
       "max_revision_rounds": 2,

@@ -10,7 +10,7 @@
     },
     {
       "id": "ANALYSIS-INSIGHT-001",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "观点质量",
       "criterion": "findings 是经过比较和解释的判断，不是材料摘要；so_what 说明其决策含义。",
       "check": "删除 finding 后若只损失原始事实，说明尚未完成分析。",
@@ -26,11 +26,11 @@
     },
     {
       "id": "ANALYSIS-CHALLENGE-001",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "竞争性解释",
-      "criterion": "会实质削弱判断的反证、异常、替代解释和边界被保留在 challenges。",
-      "check": "优先检查自选择、口径变化、第三变量、反向因果、访谈偏差和外部事件。",
-      "fix": "补充真实挑战并相应调整 confidence。"
+      "criterion": "会实质改变核心判断的反证、异常、替代解释和边界应保留在 challenges。",
+      "check": "优先检查自选择、口径变化、第三变量、反向因果、访谈偏差和外部事件；不要要求每条 finding 都配满挑战。",
+      "fix": "只补充会改变判断强度或适用范围的真实挑战，并相应调整 confidence。"
     },
     {
       "id": "ANALYSIS-CONVERGENCE-001",

@@ -3,48 +3,25 @@
   "agent_id": "evidence_harvester",
   "rubrics": [
     {
-      "id": "EVID-COVERAGE-001",
+      "id": "EVID-ITEM-001",
       "severity": "P0",
-      "dimension": "source_coverage",
-      "criterion": "所有 source unit 必须有 captured、excluded 或 unresolved disposition。",
-      "check": "对照 source_units 与 source_unit_disposition 的 key 集合。",
-      "fix": "补齐缺失 disposition；未检查模态标为 unresolved。",
-      "machine_check": {
-        "rules": [
-          {
-            "kind": "set_coverage",
-            "source_path": "source_units",
-            "source_key": "source_unit_id",
-            "target_path": "source_unit_disposition",
-            "label": "source unit disposition"
-          }
-        ]
-      }
+      "dimension": "证据可追溯",
+      "criterion": "每条 evidence item 都必须有真实 source_ref 和忠实 content。",
+      "check": "检查 items[] 是否缺少 id、source_ref 或 content；source_ref 是否明显虚构。",
+      "fix": "补齐真实来源，无法定位的内容放入 unresolved，不要编造来源。"
     },
     {
-      "id": "EVID-REF-001",
-      "severity": "P0",
-      "dimension": "source_trace",
-      "criterion": "每个 evidence item 的 source_unit_refs 必须真实存在。",
-      "check": "逐条核对 source_unit_refs。",
-      "fix": "修正引用或删除虚构 evidence item。",
-      "machine_check": {
-        "each": "evidence_items",
-        "rules": [
-          {
-            "kind": "cross_ref_exists",
-            "path": "source_unit_refs",
-            "target_path": "source_units",
-            "target_key": "source_unit_id",
-            "label": "source unit refs"
-          }
-        ]
-      }
+      "id": "EVID-COVERAGE-001",
+      "severity": "P1",
+      "dimension": "材料覆盖",
+      "criterion": "能读到的关键材料应尽量进入 items；无法读取或无法定位的材料写入 unresolved。",
+      "check": "检查是否只摘取支持性材料，遗漏明显的反证、访谈原话、关键数据或 caveat。",
+      "fix": "补充遗漏的关键证据；无法读取时记录 unresolved。"
     },
     {
       "id": "EVID-ROLE-001",
       "severity": "P0",
-      "dimension": "role_boundary",
+      "dimension": "角色边界",
       "criterion": "Evidence Harvester 不得生成战略结论、行动建议或执行计划。",
       "check": "检查产物是否出现 thesis、recommendation、timeline、KPI、owner、预算或路线图字段/内容。",
       "fix": "删除论证和建议，只保留证据目录。"

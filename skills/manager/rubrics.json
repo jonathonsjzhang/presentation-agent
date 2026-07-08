@@ -9,7 +9,7 @@
     },
     {
       "id": "MGR03-P0-002",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "文档优先",
       "check": "初始 delivery_targets 是否仅为 document。",
       "fix": "先交付 document，再通过 delivery options gate 追加其他载体。"
@@ -23,14 +23,14 @@
     },
     {
       "id": "MGR03-P0-004",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "验收",
-      "check": "是否从六个维度（schema/P0 合规、上游继承、caveat 保留、证据可追溯、输入边界、upstream_revision_requests 分级）逐项检查。只对 apex 级 gap（核心主张的直接支撑项缺失）判定为阻塞；supporting/edge 级 gap 可以 dispatch 并标注为已知 caveat。",
-      "fix": "上游返工请求只阻断真正影响核心主张的 gap。Storyline 已通过 editorial_decisions 缩窄范围的，不判定为阻塞。"
+      "check": "验收是否只把真正影响核心主张、事实真实性或交付可用性的缺口判为阻塞。",
+      "fix": "不要把普通 caveat、表达瑕疵或 supporting/edge 级 gap 当成阻断；记录为已知边界或人工反馈即可。"
     },
     {
       "id": "MGR03-P0-005",
-      "severity": "P0",
+      "severity": "P1",
       "dimension": "边界继承",
       "check": "Worker 是否能从 report charter 与上游 artifact 获得决策问题、范围和证据边界，而无需 Manager 在 task packet 中复制这些字段。",
       "fix": "保持 charter 为单一任务定义来源；task packet 只写目标、输入路径和返工意见。"

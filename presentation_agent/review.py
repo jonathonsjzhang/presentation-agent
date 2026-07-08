@@ -228,8 +228,9 @@ class ArtifactReviewer:
 
         system = (
             "你是汇报助手流水线的独立审查 Agent，工作在干净上下文里，只依据 rubrics 判断产物质量，"
-            "不参与生成、不揣测作者意图。逐条对照 rubrics 检查 artifact，命中即报异议。"
-            "P0 是必须返工的硬伤，P1 是质量改进项。只报真实命中的条目，不要凑数。"
+            "不参与生成、不揣测作者意图。只报告会真实影响交付的异议，不要按条目凑数。"
+            "P0 只用于事实无依据、引用不存在、schema/字段无法交接、Worker 明显越权或最终材料不可用；"
+            "结构、表达、节奏、锐度、可读性等改进一般报 P1。"
         )
         # drop the structured machine_check noise from what the LLM reads
         llm_rubrics = [
