@@ -99,6 +99,7 @@
             "runtime_adapter": "generic_llm_skill_runtime",
             "review_policy": "schema_validation + machine_check + llm_p1",
             "connectors": [
+              "doc_reader",
               "docx_reader",
               "xlsx_reader",
               "csv_reader"
@@ -433,6 +434,7 @@
         "accepted_material_formats": [
           "json",
           "text",
+          "doc",
           "docx",
           "pdf",
           "xlsx",
@@ -490,6 +492,7 @@
         "runtime_adapter": "generic_llm_skill_runtime",
         "review_policy": "schema_validation + machine_check + llm_p1",
         "connectors": [
+          "doc_reader",
           "docx_reader",
           "pdf_reader",
           "xlsx_reader",

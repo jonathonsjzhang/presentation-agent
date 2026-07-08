@@ -10,6 +10,8 @@ from presentation_agent.analysis import (
     EvidenceAction,
     decide_evidence,
 )
+from presentation_agent.connectors.registry import list_connectors
+from presentation_agent.connectors.table_profiler import profile_xlsx_sheets
 from presentation_agent.io import read_json, write_json
 from presentation_agent.spawn import SpawnRequest
 from presentation_agent.step import StepRunner
@@ -260,6 +262,176 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         )
         self.assertIn("UNIQUE_RAW_MATERIAL_42", instruction)
         self.assertIn("SU-1", instruction)
+
+    def test_evidence_subtask_resolves_nested_relative_material_path(self) -> None:
+        source_dir = self.tmp / "brief-source"
+        source_dir.mkdir()
+        (source_dir / "usage.csv").write_text(
+            "claim,evidence\n频次提升,DS 从 5 次提升到 8 次\n单次提升,DS 从 1.7 分钟提升到 2.0 分钟\n",
+            encoding="utf-8",
+        )
+        raw_brief_path = source_dir / "brief.json"
+        raw_brief_path.write_text("{}", encoding="utf-8")
+
+        runner, task_dir = self._runner(
+            {
+                "raw_materials": [
+                    {
+                        "material_id": "usage",
+                        "path": "usage.csv",
+                        "description": "DS 使用频次和单次时长摘要",
+                    }
+                ],
+                "material_refs": [
+                    {
+                        "source_id": "raw_brief",
+                        "artifact_path": str(raw_brief_path),
+                    }
+                ],
+            }
+        )
+
+        first = runner.prepare()
+
+        evidence_input = read_json(Path(first["input_path"]))
+        self.assertTrue(evidence_input["material_resolution"]["complete"])
+        material = evidence_input["raw_materials"][0]
+        self.assertEqual(material["parse_status"], "parsed")
+        self.assertEqual(material["source_type"], "csv")
+        self.assertEqual(material["source_unit_summary"]["total"], 2)
+        self.assertEqual(len(material["source_units"]), 2)
+        self.assertTrue(Path(material["parsed_artifact_path"]).exists())
+        self.assertEqual(evidence_input["evidence_index"][0]["id"], "E1")
+        self.assertEqual(evidence_input["evidence_index"][0]["source_type"], "csv")
+        self.assertTrue(evidence_input["evidence_index"][0]["data_assets"])
+
+    def test_evidence_subtask_profiles_large_csv_without_inlining_all_rows(self) -> None:
+        source_dir = self.tmp / "brief-source"
+        source_dir.mkdir()
+        rows = ["date,DS,豆包"]
+        for day in range(1, 101):
+            rows.append(f"2026-01-{((day - 1) % 30) + 1:02d},{day},{day / 2}")
+        (source_dir / "usage.csv").write_text("\n".join(rows), encoding="utf-8")
+        raw_brief_path = source_dir / "brief.json"
+        raw_brief_path.write_text("{}", encoding="utf-8")
+
+        runner, _ = self._runner(
+            {
+                "raw_materials": [
+                    {
+                        "material_id": "usage",
+                        "path": "usage.csv",
+                        "description": "DS 与豆包历史使用时长",
+                    }
+                ],
+                "material_refs": [
+                    {
+                        "source_id": "raw_brief",
+                        "artifact_path": str(raw_brief_path),
+                    }
+                ],
+            }
+        )
+
+        first = runner.prepare()
+
+        evidence_input = read_json(Path(first["input_path"]))
+        material = evidence_input["raw_materials"][0]
+        self.assertEqual(material["source_unit_summary"]["total"], 100)
+        self.assertEqual(material["source_unit_summary"]["inlined"], 50)
+        self.assertEqual(material["source_units_omitted"], 50)
+        self.assertNotIn("tables", material)
+        self.assertIn("data_profile", material)
+        self.assertTrue(material["data_assets"][0]["chart_ready"])
+
+        sidecar = read_json(Path(material["parsed_artifact_path"]))
+        self.assertEqual(sidecar["tables"][0]["row_count"], 100)
+        self.assertEqual(len(sidecar["source_units"]), 100)
+        record = evidence_input["evidence_index"][0]
+        self.assertEqual(record["id"], "E1")
+        self.assertIn("chart_generation", record["downstream_use"])
+        self.assertTrue(record["key_findings"])
+
+    def test_committed_evidence_catalog_injects_chart_assets_for_analysis(self) -> None:
+        source_dir = self.tmp / "brief-source"
+        source_dir.mkdir()
+        (source_dir / "usage.csv").write_text(
+            "date,DS,豆包\n2026-01-01,8,9\n2026-01-02,12,10\n2026-01-03,16,11\n",
+            encoding="utf-8",
+        )
+        raw_brief_path = source_dir / "brief.json"
+        raw_brief_path.write_text("{}", encoding="utf-8")
+
+        runner, task_dir = self._runner(
+            {
+                "raw_materials": [
+                    {
+                        "material_id": "usage",
+                        "path": "usage.csv",
+                        "description": "DS 与豆包历史使用时长",
+                    }
+                ],
+                "material_refs": [
+                    {
+                        "source_id": "raw_brief",
+                        "artifact_path": str(raw_brief_path),
+                    }
+                ],
+            }
+        )
+
+        first = runner.prepare()
+        write_json(
+            Path(first["output_path"]),
+            {
+                "items": [
+                    {
+                        "id": "E-usage",
+                        "source_ref": "E1",
+                        "content": "DS 使用时长上升",
+                    }
+                ],
+                "unresolved": [],
+            },
+        )
+
+        runner.commit()
+
+        injected = read_json(task_dir / "input.json")
+        self.assertIn("evidence_index", injected)
+        self.assertIn("evidence_assets", injected)
+        asset = injected["evidence_assets"][0]
+        self.assertTrue(asset["chart_ready"])
+        self.assertEqual(asset["chart_data"]["chart_type"], "line")
+        self.assertEqual(asset["chart_data"]["series"][0]["name"], "DS")
+        self.assertEqual(asset["chart_data"]["series"][0]["values"][-1], 16.0)
+
+    def test_doc_connector_is_registered_for_legacy_word_inputs(self) -> None:
+        connectors = list_connectors()
+        doc_connector = next(
+            item for item in connectors if item["name"] == "doc_reader"
+        )
+        self.assertIn(".doc", doc_connector["suffixes"])
+
+    def test_table_profiler_detects_wide_time_series(self) -> None:
+        profile = profile_xlsx_sheets(
+            [
+                {
+                    "name": "usage",
+                    "rows": [
+                        ["App", "2026-01-01", "2026-01-02", "2026-01-03"],
+                        ["DeepSeek", "8", "10", "16"],
+                        ["豆包", "9", "9.5", "10"],
+                    ],
+                }
+            ]
+        )
+
+        candidate = profile["tables"][0]["time_series_candidates"][0]
+        self.assertEqual(candidate["orientation"], "wide")
+        self.assertEqual(candidate["series_label_column"], "App")
+        self.assertIn("DeepSeek", profile["key_findings"][0])
+        self.assertIn("16", profile["key_findings"][0])
 
     def test_evidence_schema_drift_is_advisory_when_catalog_is_consumable(self) -> None:
         runner, task_dir = self._runner(

@@ -736,7 +736,7 @@ function fallbackOverview() {
       input_contract: {
         required_inputs: index === 0 ? ["raw brief", "Worker capabilities"] : ["Manager task packet"],
         optional_inputs: ["补充素材", "历史参考"],
-        accepted_material_formats: ["json", "docx", "xlsx", "csv"],
+        accepted_material_formats: ["json", "doc", "docx", "xlsx", "csv"],
         input_preparation_focus: "围绕当前环节的输入契约整理素材",
       },
       output_contract: {
@@ -755,7 +755,7 @@ function fallbackOverview() {
         skill_package: `skills/${stage[0]}`,
         runtime_adapter: "generic_llm_skill_runtime",
         review_policy: "schema_validation + rubric_p0 + llm_p1",
-        connectors: ["docx", "xlsx", "csv"],
+        connectors: ["doc", "docx", "xlsx", "csv"],
         implementation_status: index === 2 ? "sample_runtime_available" : "skill_package_ready_runtime_pending",
       },
       rubrics: ["按 schema 交接", "清除 P0 后进入人工 review", "反馈沉淀到本环节 memory"],

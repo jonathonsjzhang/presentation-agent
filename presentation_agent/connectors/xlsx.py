@@ -7,6 +7,10 @@ from typing import Any
 from xml.etree import ElementTree as ET
 
 from presentation_agent.connectors.base import ConnectorContext, SuffixConnector
+from presentation_agent.connectors.table_profiler import (
+    data_assets_from_profile,
+    profile_xlsx_sheets,
+)
 
 
 MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -21,12 +25,15 @@ class XlsxConnector(SuffixConnector):
 
     def load(self, path: Path, context: ConnectorContext) -> dict[str, Any]:
         workbook = read_xlsx_workbook(path)
+        data_profile = profile_xlsx_sheets(workbook)
         return {
             "topic": path.stem,
             "source_path": str(path),
             "source_type": "xlsx",
             "target_agent": context.agent_id,
             "parsing_note": "Minimal stdlib XLSX parser; formulas/styles/charts are not evaluated.",
+            "data_profile": data_profile,
+            "data_assets": data_assets_from_profile(data_profile),
             "sheets": workbook,
             "materials": sheets_to_materials(workbook),
         }
@@ -132,10 +139,20 @@ def sheets_to_materials(sheets: list[dict[str, Any]]) -> list[dict[str, Any]]:
         rows = sheet.get("rows", [])
         if not rows:
             continue
-        columns = [str(item) for item in rows[0]]
-        for row_index, row in enumerate(rows[1:], start=2):
+        header_index = next(
+            (
+                index
+                for index, row in enumerate(rows)
+                if any(str(value).strip() for value in row)
+            ),
+            None,
+        )
+        if header_index is None:
+            continue
+        columns = [str(item) for item in rows[header_index]]
+        for row_index, row in enumerate(rows[header_index + 1 :], start=header_index + 2):
             pairs = [
-                f"{columns[i] or f'列{i + 1}'}={value}"
+                f"{(columns[i] if i < len(columns) else '') or f'列{i + 1}'}={value}"
                 for i, value in enumerate(row)
                 if str(value).strip()
             ]

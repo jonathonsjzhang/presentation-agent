@@ -37,6 +37,7 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 ### 四、证据纪律
 
 - **引用真实，定性保留原话。** 每个 finding 追溯至具体的 evidence ref，不得编造。访谈证据保留原话和身份标签，不泛化改写。
+- **使用 Evidence 资产索引。** 若输入含 `evidence_index`/`evidence_assets`，用 E-id 和必要的 `E-id:data_asset_id` 定位证据；这些资产可提示趋势、竞品对比和可视化候选，但 Analysis 仍只产出观点卡，不写图表计划。
 - **区分观察与推断。** 相关性、分群差异、访谈不能单独证明因果——没有识别设计时不写“导致”“驱动”。
 - **反证、异常值、替代解释必须记录。** 趋势异常点必须识别并解释。优先检查自选择、口径变化、第三变量、反向因果、访谈偏差、外部事件六类竞争性解释。
 - **置信度匹配证据。** High = 多源一致、反证已削弱；Medium = 有方法限制或替代解释未排除；Low = 单一来源或弱指标。影响核心判断的 unresolved evidence 不得给 high。

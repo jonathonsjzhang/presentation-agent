@@ -74,16 +74,36 @@ def prepare_evidence_subtask(
 
     from presentation_agent.models import now_iso
     from presentation_agent.step import StepRunner
+    from presentation_agent.agent_profiles import load_agent_profile
+    from presentation_agent.material_resolver import (
+        evidence_index_from_materials,
+        resolve_raw_materials,
+    )
 
     subtask_dir = analysis_dir / "subtasks" / "evidence_harvester"
     subtask_dir.mkdir(parents=True, exist_ok=True)
     input_path = subtask_dir / "input.json"
     if not input_path.exists():
+        profile = load_agent_profile(root, "v0_3")
+        spec = profile.support_specs["evidence_harvester"]
+        resolved_materials, resolution_summary = resolve_raw_materials(
+            raw_materials,
+            spec=spec,
+            base_dirs=_evidence_material_base_dirs(
+                root=root,
+                analysis_dir=analysis_dir,
+                analysis_input=analysis_input,
+            ),
+            artifact_dir=subtask_dir / "resolved_materials",
+        )
+        evidence_index = evidence_index_from_materials(resolved_materials)
         write_json(
             input_path,
             {
                 "schema": "manager_task.v1",
-                "raw_materials": raw_materials,
+                "raw_materials": resolved_materials,
+                "evidence_index": evidence_index,
+                "material_resolution": resolution_summary,
                 "report_charter": analysis_input.get("report_charter", analysis_input),
                 "evidence_scope": analysis_input.get("analysis_objective", ""),
             },
@@ -139,6 +159,28 @@ def prepare_evidence_subtask(
     return prepared
 
 
+def _evidence_material_base_dirs(
+    *,
+    root: Path,
+    analysis_dir: Path,
+    analysis_input: dict[str, Any],
+) -> list[Path]:
+    bases: list[Path] = [analysis_dir, root]
+    for ref in analysis_input.get("material_refs") or []:
+        if not isinstance(ref, dict):
+            continue
+        artifact_path = ref.get("artifact_path")
+        if isinstance(artifact_path, str) and artifact_path.strip():
+            bases.append(Path(artifact_path))
+    for source in (analysis_input.get("inputs") or {}).values():
+        if not isinstance(source, dict):
+            continue
+        artifact_path = source.get("artifact_path")
+        if isinstance(artifact_path, str) and artifact_path.strip():
+            bases.append(Path(artifact_path))
+    return bases
+
+
 def commit_evidence_subtask(
     *,
     root: Path,
@@ -154,6 +196,7 @@ def commit_evidence_subtask(
     """
 
     from presentation_agent.agent_profiles import load_agent_profile
+    from presentation_agent.evidence_assets import build_evidence_assets
     from presentation_agent.capabilities.compiler import compile_skill_package
     from presentation_agent.review import ArtifactReviewer
 
@@ -202,6 +245,12 @@ def commit_evidence_subtask(
     profile = load_agent_profile(root, "v0_3")
     spec = profile.support_specs["evidence_harvester"]
     input_data = read_json(subtask_dir / "input.json", default={})
+    evidence_index = input_data.get("evidence_index") or []
+    if isinstance(evidence_index, list):
+        catalog["evidence_index"] = evidence_index
+        catalog["evidence_assets"] = build_evidence_assets(evidence_index)
+    if isinstance(input_data.get("material_resolution"), dict):
+        catalog["material_resolution"] = input_data["material_resolution"]
     package = compile_skill_package(root, spec, input_data)
     objections = ArtifactReviewer(llm=None)._schema_gate(
         spec, catalog, package.to_dict()

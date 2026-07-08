@@ -77,7 +77,8 @@ formatted material 的语义权威永远属于 `report_markdown`：
 
 - 唯一上游是已批准的 `report.v1`，`report_markdown` 是完整内容真相源。
 - 不重读 Raw Materials，不补做 Analysis，不新增观点、数字或结论方向。
-- visual `source_refs` 只能引用报告正文中明确出现的可读来源或证据标识。
+- 可以使用 runtime 提供的 `evidence_assets`/`evidence_index` 做图表数据来源；这些资产来自 Evidence 阶段的 E-id 和 `parsed_artifact_path`，只用于把报告正文已引用或明确对应的证据视觉化。
+- visual `source_refs` 只能引用报告正文中明确出现的可读来源、证据标识，或 runtime 提供的 E-id / `E-id:data_asset_id`。
 - 上游缺数据时不创建需要数据的视觉，不自行模拟或补造。
 - 载体专属规则只服从本轮 active format capability。
 
@@ -96,6 +97,8 @@ formatted material 的语义权威永远属于 `report_markdown`：
 ### 3. 为关键证据选择表格、统计图或 quote 样式
 
 逐节判断哪些证据值得视觉化：趋势和对比优先 chart，精确多列信息优先 table，分层关系优先 matrix，访谈原话和关键提醒优先 callout / quote 样式。没有必要就不创建。
+
+若输入中存在 `evidence_assets`，优先引用其中与正文证据匹配的 E-id 或 `E-id:data_asset_id`。可以把 visual `data` 留空让 runtime 按 source_refs 自动补齐 chart-ready 数据；不要手工抄写或改写 sidecar 中不存在的数据。
 
 ### 4. 做忠实性和来源检查
 

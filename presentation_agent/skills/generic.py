@@ -208,7 +208,14 @@ class GenericSkill:
             ])
         canonical_inputs = {
             key: input_data[key]
-            for key in ("raw_materials", "evidence_catalog", "delivery_target")
+            for key in (
+                "raw_materials",
+                "evidence_catalog",
+                "evidence_index",
+                "evidence_assets",
+                "material_resolution",
+                "delivery_target",
+            )
             if input_data.get(key) not in (None, "", [], {})
         }
         if canonical_inputs:

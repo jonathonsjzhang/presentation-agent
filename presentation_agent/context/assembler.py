@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from presentation_agent.agent_profiles import load_agent_profile
+from presentation_agent.evidence_assets import evidence_runtime_fields
 from presentation_agent.io import read_json
 
 
@@ -234,6 +235,8 @@ class ContextAssembler:
                 or "document"
             )
             result["delivery_target"] = target
+        evidence_fields = evidence_runtime_fields(raw_brief, *[data for _, data in rows])
+        result.update(evidence_fields)
 
     @staticmethod
     def _source_id(path: Path, data: dict[str, Any], index: int) -> str:
