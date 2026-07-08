@@ -954,7 +954,7 @@ function renderInlineStages() {
   const host = $("inlineStages");
   const stages = (inline.pipeline && inline.pipeline.stages) || [];
   if (!stages.length) {
-    host.innerHTML = '<p class="muted">初始化后显示 7 个环节进度。</p>';
+    host.innerHTML = '<p class="muted">初始化后显示 5 个 worker 进度。</p>';
     return;
   }
   const current = inline.pipeline.current_stage || 1;

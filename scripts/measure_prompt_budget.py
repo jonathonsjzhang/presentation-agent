@@ -25,12 +25,11 @@ CASES = [
     {"name": "external_quick_sync_html", "audience": "external", "report_type": "quick_sync", "output_format": "html"},
 ]
 AGENTS = [
-    "argument_synthesis",
-    "storyline_design",
-    "page_filling",
+    "analysis",
+    "storyline",
+    "report",
     "format",
     "qa_preparation",
-    "speaker_script",
 ]
 
 
@@ -76,8 +75,10 @@ def main() -> None:
 
 
 def _spec(root: Path, agent_id: str) -> AgentSpec:
-    agents = read_json(root / "configs" / "agents.json")["agents"]
-    return AgentSpec.from_dict(next(item for item in agents if item["id"] == agent_id))
+    config = read_json(root / "configs" / "agents.json")
+    profile_id = str(config.get("active_contract_profile") or "v0_3")
+    workers = config["contract_profiles"][profile_id]["workers"]
+    return AgentSpec.from_dict(next(item for item in workers if item["id"] == agent_id))
 
 
 def _baseline(root: Path, ref: str, agent_id: str) -> dict[str, int]:

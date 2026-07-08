@@ -2,7 +2,7 @@
   "id": "format.document",
   "kind": "format",
   "select_when": {"output_format": "document"},
-  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation", "speaker_script"],
+  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation"],
   "owns": ["unit_type", "information_architecture"],
   "incompatible_with": [],
   "prompt_budget_tokens": 220

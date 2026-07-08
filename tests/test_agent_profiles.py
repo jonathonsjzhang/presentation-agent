@@ -95,7 +95,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertIs(exposed["instruction"], instruction)
             self.assertTrue(exposed["spawn_required"])
 
-    def test_v03_manager_starts_four_stage_document_first_gate(self) -> None:
+    def test_v03_manager_starts_five_stage_document_first_chain(self) -> None:
         brief = normalize_brief(
             {
                 "topic": "测试主题",
@@ -117,19 +117,19 @@ class AgentProfileLoaderTests(unittest.TestCase):
             prepared = manager.initialize_run(brief_path)
             self.assertEqual(
                 prepared["selected_workers"],
-                ["analysis", "storyline", "report", "format"],
+                ["analysis", "storyline", "report", "format", "qa_preparation"],
             )
             confirmation = prepared["present_to_user"]
             for hidden_worker in (
                 "evidence_harvester",
                 "argument_synthesis",
                 "page_filling",
-                "qa_preparation",
                 "speaker_script",
             ):
                 self.assertNotIn(hidden_worker, confirmation)
             self.assertIn("`report` 报告产出", confirmation)
             self.assertIn("`format` 可视化", confirmation)
+            self.assertIn("`qa_preparation` QA 梳理", confirmation)
             self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
             self.assertEqual(
                 manager.status()["state"]["contract_profile"], "v0_3"
@@ -165,7 +165,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             )
             instructions = manager.agent.package.instructions
             self.assertIn(
-                "analysis → storyline → report → format",
+                "analysis → storyline → report → format(document) → qa_preparation",
                 instructions,
             )
             for legacy_worker in (
@@ -173,6 +173,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 "storyline_design",
                 "page_filling",
                 "evidence_harvester 任务",
+                "speaker_script",
             ):
                 self.assertNotIn(legacy_worker, instructions)
 
@@ -187,7 +188,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 "status": "planned",
             }
             for index, agent_id in enumerate(
-                ("analysis", "storyline", "report", "format"),
+                ("analysis", "storyline", "report", "format", "qa_preparation"),
                 start=1,
             )
         ]
@@ -235,6 +236,23 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 "dispatch",
                 state,
                 {"agent_id": "storyline"},
+            ),
+            [],
+        )
+        format_state = {
+            "current_task": {"agent_id": "format"},
+            "last_event": "worker_completed",
+        }
+        self.assertTrue(
+            ManagerAgentRuntime._v03_acceptance_route_errors(
+                "complete", format_state, None
+            )
+        )
+        self.assertEqual(
+            ManagerAgentRuntime._v03_acceptance_route_errors(
+                "dispatch",
+                format_state,
+                {"agent_id": "qa_preparation"},
             ),
             [],
         )
@@ -307,19 +325,17 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 [
                     "format:ppt",
                     "format:html",
-                    "qa_preparation",
-                    "speaker_script",
                     "skip",
                 ],
             )
 
-            result = manager.approve(delivery_option="qa_preparation")
+            result = manager.approve(delivery_option="format:ppt")
 
             self.assertEqual(result["actor"], "manager")
             updated = manager.status()["state"]
             self.assertEqual(updated["last_event"], "human_feedback")
             self.assertIn(
-                "qa_preparation",
+                "format:ppt",
                 updated["human_feedback"][-1]["text"],
             )
 
@@ -572,7 +588,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
                 self.assertEqual(
                     prepared["selected_workers"],
-                    ["analysis", "storyline", "report", "format"],
+                    ["analysis", "storyline", "report", "format", "qa_preparation"],
                 )
 
     def test_default_profile_activates_document_first_v03(self) -> None:
@@ -584,14 +600,14 @@ class AgentProfileLoaderTests(unittest.TestCase):
         )
         self.assertEqual(
             [spec.id for spec in profile.ordered_specs],
-            ["analysis", "storyline", "report", "format"],
+            ["analysis", "storyline", "report", "format", "qa_preparation"],
         )
         self.assertNotIn("evidence_harvester", profile.specs)
         self.assertIn("evidence_harvester", profile.support_specs)
         self.assertIn("qa_preparation", profile.specs)
-        self.assertIn("speaker_script", profile.specs)
+        self.assertNotIn("speaker_script", profile.specs)
 
-    def test_default_manager_entry_uses_four_public_stages(self) -> None:
+    def test_default_manager_entry_uses_five_public_stages(self) -> None:
         source = FIXTURES / "golden_cases" / "mixed_deep_dive" / "input.json"
         with tempfile.TemporaryDirectory() as temp_dir:
             run_dir = Path(temp_dir)
@@ -607,15 +623,15 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
         self.assertEqual(
             prepared["selected_workers"],
-            ["analysis", "storyline", "report", "format"],
+            ["analysis", "storyline", "report", "format", "qa_preparation"],
         )
         self.assertNotIn("evidence_harvester", prepared["selected_workers"])
 
-    def test_explicit_v03_loads_executable_four_stage_specs(self) -> None:
+    def test_explicit_v03_loads_executable_five_stage_specs(self) -> None:
         profile = load_agent_profile(ROOT, "v0_3")
         self.assertEqual(
             [spec.id for spec in profile.ordered_specs],
-            ["analysis", "storyline", "report", "format"],
+            ["analysis", "storyline", "report", "format", "qa_preparation"],
         )
         for spec in profile.ordered_specs:
             with self.subTest(agent=spec.id):
@@ -629,7 +645,8 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertEqual(profile.specs["analysis"].next_agent_id, "storyline")
         self.assertEqual(profile.specs["storyline"].next_agent_id, "report")
         self.assertEqual(profile.specs["report"].next_agent_id, "format")
-        self.assertIsNone(profile.specs["format"].next_agent_id)
+        self.assertEqual(profile.specs["format"].next_agent_id, "qa_preparation")
+        self.assertIsNone(profile.specs["qa_preparation"].next_agent_id)
         self.assertEqual(
             profile.specs["qa_preparation"].input_schema,
             "formatted_material.v2",
@@ -640,7 +657,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertEqual(runner.contract_profile, "v0_3")
         self.assertEqual(
             [spec.id for spec in runner.list_agents()],
-            ["analysis", "storyline", "report", "format"],
+            ["analysis", "storyline", "report", "format", "qa_preparation"],
         )
 
 
@@ -666,7 +683,7 @@ class V03StepRuntimeTests(unittest.TestCase):
         self.assertEqual(initialized["agent_id"], "analysis")
         self.assertEqual(
             [row["agent_id"] for row in stepper.pipeline_status()["stages"]],
-            ["analysis", "storyline", "report", "format"],
+            ["analysis", "storyline", "report", "format", "qa_preparation"],
         )
 
         fixtures = {

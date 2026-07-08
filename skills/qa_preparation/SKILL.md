@@ -1,6 +1,6 @@
 ---
 name: qa_preparation
-description: Stress-test a formal report and produce grounded questions, answer strategies, evidence references, risk handling, deferrals, and speaker handoff. Scenario behavior is injected by active capabilities.
+description: Stress-test a formal report and produce grounded questions, answer strategies, evidence references, risk handling, deferrals, and presenter handoff notes. Scenario behavior is injected by active capabilities.
 ---
 
 # Q&A Preparation Core
@@ -17,7 +17,7 @@ description: Stress-test a formal report and produce grounded questions, answer 
 2. 从逻辑、证据、替代解释、执行、风险与边界生成问题。
 3. 为每个问题写 direct answer、supporting evidence、confidence、do-not-overstate 和 safe bridge。
 4. 对需要汇报人输入、补数据或会后回复的问题明确标记。
-5. 在思考中形成 top questions、risk register、backup material 与 speaker handoff；提交时合并到每个 question 的 answer、risk 与 follow_up。
+5. 在思考中形成 top questions、risk register、backup material 与 presenter handoff；提交时合并到每个 question 的 answer、risk 与 follow_up。
 
 ## Invariants
 
@@ -36,7 +36,7 @@ description: Stress-test a formal report and produce grounded questions, answer 
 - `risk`：仅在存在明显误答或过度承诺风险时填写
 - `follow_up`：仅在需补数据、汇报人输入或会后回复时填写
 
-不要把同一判断再次展开成 page questions、risk register、defensive notes、meeting plan 和 speaker handoff 等多份结构。
+不要把同一判断再次展开成 page questions、risk register、defensive notes、meeting plan 和 presenter handoff 等多份结构。
 
 ## Failure conditions
 

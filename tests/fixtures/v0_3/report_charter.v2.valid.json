@@ -30,9 +30,8 @@
   ],
   "extension_policy": {
     "format_expansion": "offer_ppt_html_after_document",
-    "qa_preparation": "optional_after_format",
-    "speaker_script": "optional_after_format",
-    "gate": "after_document_delivery"
+    "qa_preparation": "default_after_format",
+    "gate": "after_default_chain"
   },
   "global_state_seed": {
     "audience_profile": {

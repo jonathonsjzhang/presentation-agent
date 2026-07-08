@@ -5,6 +5,6 @@
     {"id": "QA-CORE-001", "severity": "P0", "dimension": "grounding", "criterion": "回答不得超出正式材料和可追溯证据。", "check": "核对 source refs、confidence 和 caveat。", "fix": "删除无依据内容或改为安全边界。"},
     {"id": "QA-CORE-002", "severity": "P1", "dimension": "stress_test", "criterion": "问题覆盖最可能改变决策的反方、证据和执行风险。", "check": "检查是否只有礼貌型问题。", "fix": "补高影响挑战问题。"},
     {"id": "QA-CORE-003", "severity": "P0", "dimension": "uncertainty", "criterion": "未闭合问题必须标记补数、汇报人输入或延期回答。", "check": "检查未知项是否被硬答。", "fix": "增加状态和 safe bridge。"},
-    {"id": "QA-CORE-004", "severity": "P1", "dimension": "speaker_handoff", "criterion": "高风险问题有可执行的会前与现场处理建议。", "check": "检查 risk register 和 handoff。", "fix": "补充预防、桥接和 backup 计划。"}
+    {"id": "QA-CORE-004", "severity": "P1", "dimension": "presenter_handoff", "criterion": "高风险问题有可执行的会前与现场处理建议。", "check": "检查 risk register 和 handoff。", "fix": "补充预防、桥接和 backup 计划。"}
   ]
 }

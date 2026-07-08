@@ -53,8 +53,7 @@
 ```json
 {
   "format_expansion": "offer_ppt_html_after_document",
-  "qa_preparation": "optional_after_format",
-  "speaker_script": "optional_after_format",
+  "qa_preparation": "default_after_format",
   "gate": "after_document_delivery"
 }
 ```
@@ -67,21 +66,21 @@
 
 | 约束 | 说明 |
 |---|---|
-| `agent_id` | 仅限 `analysis`/`storyline`/`report`/`format`/`qa_preparation`/`speaker_script` |
+| `agent_id` | 仅限 `analysis`/`storyline`/`report`/`format`/`qa_preparation` |
 | `input_artifacts` | **只能放 artifact_catalog 中的路径**（如 `raw_brief.json`），**不能放原始素材路径** |
 | 原始素材 | 放 `context.raw_materials` 中 |
 
 ### agent_id 枚举
 
 ```
-"analysis" | "storyline" | "report" | "format" | "qa_preparation" | "speaker_script"
+"analysis" | "storyline" | "report" | "format" | "qa_preparation"
 ```
 
 ---
 
 ## execution_plan.v1
 
-**核心约束：tasks 必须恰好为 4 个**，按固定顺序：
+**核心约束：tasks 必须恰好为 5 个**，按固定顺序：
 
 | # | agent_id | 说明 |
 |---|---|---|
@@ -89,6 +88,7 @@
 | 2 | `storyline` | |
 | 3 | `report` | |
 | 4 | `format` | |
+| 5 | `qa_preparation` | |
 
 - 不允许加 `evidence_harvester`（它是 analysis 的内部子任务）
 - 每个 task 的 `status` 初始值：第一个 `"planned"`，其余 `"pending"`
@@ -122,7 +122,7 @@
 | `"recommendation_granularity": "strategic_direction_only"` | `"recommendation_granularity": "strategic_direction"` | report_charter.v2 |
 | `"unsupported_specificity_policy": "strict"` | `"unsupported_specificity_policy": "forbid"` | report_charter.v2 |
 | `task_packet.input_artifacts` 放了原始素材路径 | 原始素材放 `task_packet.context.raw_materials` | task_packet.v2 |
-| `execution_plan.tasks` 有 5 个（加了 evidence_harvester） | 恰好 4 个：analysis/storyline/report/format | execution_plan.v1 |
+| `execution_plan.tasks` 有 6 个（加了 evidence_harvester） | 恰好 5 个：analysis/storyline/report/format/qa_preparation | execution_plan.v1 |
 | `acceptance_report.task_id` = 上一环节 | = 当前被验收的 Worker 的 task_id | manager_decision.v1 |
 | `ask_human` 后调 `report approve` | `ask_human` 后应调 `report feedback` | harness |
 

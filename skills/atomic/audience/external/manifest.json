@@ -2,7 +2,7 @@
   "id": "audience.external",
   "kind": "audience",
   "select_when": {"audience": "external"},
-  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation", "speaker_script"],
+  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation"],
   "owns": ["public_lens", "sensitivity", "explainability"],
   "incompatible_with": [],
   "prompt_budget_tokens": 220

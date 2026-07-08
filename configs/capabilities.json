@@ -8,7 +8,8 @@
         "analysis",
         "storyline",
         "report",
-        "format"
+        "format",
+        "qa_preparation"
       ],
       "profile_dimensions": [
         "audience",
@@ -36,14 +37,13 @@
   },
   "runtime": {
     "enabled": true,
-    "pilot_agents": [
-      "analysis",
-      "storyline",
-      "report",
-      "format",
-      "qa_preparation",
-      "speaker_script"
-    ]
+      "pilot_agents": [
+        "analysis",
+        "storyline",
+        "report",
+        "format",
+        "qa_preparation"
+      ]
   },
   "dimensions": {
     "audience": [

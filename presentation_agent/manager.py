@@ -152,11 +152,11 @@ class ManagerAgentRuntime:
             "## v0.3 planning 契约速查",
             "",
             "- report_charter 只定义任务，不重复固定流程、质量检查或运行状态。",
-            "- runtime 固定执行 analysis → storyline → report → format，不输出 execution_plan。",
+            "- runtime 固定执行 analysis → storyline → report → format → qa_preparation，不输出 execution_plan。",
             "- 首个 task_packet 派发 analysis，只写目标、输入引用和必要返工意见。",
             "- evidence_harvester 是 Analysis 的内部子任务。",
             "- 如 material_inventory 中无任何素材 → 使用 ask_human，不要 dispatch。",
-            "- PPT、HTML、QA 和逐字稿只允许在 document 完成后的 delivery options gate 追加。",
+            "- PPT、HTML 只允许在默认五阶段完成后的 delivery options gate 追加。",
             "",
             "### acceptance_report（acceptance 阶段）",
             "- verdict: accept / revise / blocked",
@@ -284,6 +284,7 @@ class ManagerAgentRuntime:
             "analysis": "storyline",
             "storyline": "report",
             "report": "format",
+            "format": "qa_preparation",
         }
         if action == "dispatch" and current_agent in expected_next:
             expected = expected_next[current_agent]
@@ -296,15 +297,6 @@ class ManagerAgentRuntime:
             return [
                 f"$.action: cannot complete v0.3 after {current_agent}; "
                 f"must dispatch {expected_next[current_agent]}"
-            ]
-        if (
-            action == "dispatch"
-            and current_agent == "format"
-            and state.get("last_event") != "human_feedback"
-        ):
-            return [
-                "$.action: initial document Format must complete into the "
-                "delivery options gate before optional dispatch"
             ]
         return []
 
@@ -410,7 +402,6 @@ class WorkerExecutor:
                 "report": "storyline.v3",
                 "format": "report.v1",
                 "qa_preparation": "formatted_material.v2",
-                "speaker_script": "formatted_material.v2",
             }.get(agent_id)
             available_schemas = {
                 str(data.get("schema") or "")
@@ -664,7 +655,11 @@ class ManagerOrchestrator:
                 missing.append("topic（汇报主题）")
             if not brief.get("audience"):
                 missing.append("audience（汇报对象）")
-            available_workers = ["analysis", "storyline", "report", "format"]
+            available_workers = [
+                str(item["agent_id"])
+                for item in self.workers.capabilities()
+                if item.get("agent_id")
+            ]
             selected_workers = brief.get("selected_workers")
             if not selected_workers:
                 selected_workers = available_workers
@@ -975,7 +970,7 @@ class ManagerOrchestrator:
             self._save_state(state)
             self._append_decision(
                 "complete",
-                "Document delivery completed; user skipped optional translations and extensions",
+                "Default worker chain completed; user skipped optional translations",
                 {},
             )
             return {
@@ -984,7 +979,7 @@ class ManagerOrchestrator:
                 "status": "completed",
                 "run_dir": str(self.run_dir),
                 "accepted_artifacts": state.get("accepted_artifacts", []),
-                "present_to_user": "文档交付已完成；本次未继续转译 PPT/HTML，也未生成 QA list 或逐字稿。",
+                "present_to_user": "默认五阶段已完成；本次未继续转译 PPT/HTML。",
             }
         if gate == "decision":
             packet = decision.get("task_packet")
@@ -1232,12 +1227,13 @@ class ManagerOrchestrator:
                         ("storyline", "analysis"),
                         ("report", "storyline"),
                         ("format", "report"),
+                        ("qa_preparation", "format"),
                     ),
                     1,
                 )
             ],
             "human_gates": ["plan", "delivery_options"],
-            "completion_criteria": ["format(document) delivered"],
+            "completion_criteria": ["qa_preparation delivered"],
             "generated_by": "runtime",
         }
         decision["execution_plan"] = plan
@@ -1330,12 +1326,12 @@ class ManagerOrchestrator:
             action == "complete"
             and self.contract_profile == "v0_3"
             and isinstance(task, dict)
-            and task.get("agent_id") == "format"
+            and task.get("agent_id") == "qa_preparation"
         ):
             state["human_gate"] = "delivery_options"
             state["status"] = "awaiting_delivery_option_selection"
             decision["user_message"] = (
-                "文档已完成。是否继续转译为 PPT 或 HTML，或生成 QA list / 逐字稿？"
+                "默认五阶段已完成。是否继续转译为 PPT 或 HTML？"
                 "直接批准表示不追加其他产物并完成本次任务。"
             )
         else:
@@ -1471,12 +1467,16 @@ class ManagerOrchestrator:
         contract_profile: str,
     ) -> dict[str, Any]:
         return {
-            "default": ["analysis", "storyline", "report", "format"],
+            "default": [
+                "analysis",
+                "storyline",
+                "report",
+                "format",
+                "qa_preparation",
+            ],
             "optional_after_document": [
                 "format(ppt)",
                 "format(html)",
-                "qa_preparation",
-                "speaker_script",
             ],
             "internal_subagents": {"analysis": ["evidence_harvester"]},
         }
@@ -1575,7 +1575,6 @@ class ManagerOrchestrator:
         worker_labels = {
             "format": "可视化",
             "qa_preparation": "QA 梳理",
-            "speaker_script": "逐字稿生成",
             "analysis": "分析",
             "storyline": "故事线",
             "report": "报告产出",
@@ -1634,7 +1633,7 @@ class ManagerOrchestrator:
             "plan": "请确认 Manager 的任务定义和执行计划。",
             "worker_result": "当前步骤已完成，请查看中间产物。如需继续，确认后进入下一步。",
             "final": "所有任务已完成，请确认最终交付物。",
-            "delivery_options": "文档已完成。请选择是否转译 PPT/HTML 或生成 QA list/逐字稿；直接批准表示结束。",
+            "delivery_options": "默认五阶段已完成。请选择是否转译 PPT/HTML；直接批准表示结束。",
             "decision": "请确认 Manager 的决策。",
             }.get(gate, "请确认。")
 
@@ -1723,8 +1722,6 @@ class ManagerOrchestrator:
             result["delivery_options"] = [
                 "format:ppt",
                 "format:html",
-                "qa_preparation",
-                "speaker_script",
                 "skip",
             ]
             result["questions"] = [
@@ -1742,16 +1739,6 @@ class ManagerOrchestrator:
                             "label": "HTML",
                             "description": "基于已批准报告转译 HTML",
                             "value": "format:html",
-                        },
-                        {
-                            "label": "Q&A",
-                            "description": "生成管理层追问与回答策略",
-                            "value": "qa_preparation",
-                        },
-                        {
-                            "label": "逐字稿",
-                            "description": "生成汇报讲稿与时间节奏",
-                            "value": "speaker_script",
                         },
                         {
                             "label": "结束",

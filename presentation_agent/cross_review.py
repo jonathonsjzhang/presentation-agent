@@ -39,7 +39,6 @@ class CrossStageReviewer:
             "report": self._check_storyline_to_report,
             "format": self._check_report_to_format,
             "qa_preparation": self._check_qa,
-            "speaker_script": self._check_speaker_script,
         }
         checker = checks.get(agent_id)
         if not checker:
@@ -138,14 +137,8 @@ class CrossStageReviewer:
             "report": "storyline",
             "format": "report",
             "qa_preparation": "formatted_material",
-            "speaker_script": "qa_pack",
         }.get(agent_id)
         canonical = data.get(alias) if alias else None
-        if (
-            agent_id == "speaker_script"
-            and not isinstance(canonical, dict)
-        ):
-            canonical = data.get("formatted_material")
         return canonical if isinstance(canonical, dict) else None
 
     @staticmethod
@@ -195,18 +188,6 @@ class CrossStageReviewer:
                 "suggested_owner": "qa_preparation",
             }], "qa risk coverage checked")
         return self._result("pass", [], "qa risk coverage checked")
-
-    def _check_speaker_script(self, upstream: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
-        upstream_text = flatten_text(upstream)
-        current_text = flatten_text(artifact)
-        if "target_action" in upstream_text and "action" not in current_text and "行动" not in current_text:
-            return self._result("warn", [{
-                "severity": "P1",
-                "dimension": "action_closure",
-                "message": "逐字稿可能未回到正式材料的目标 action",
-                "suggested_owner": "speaker_script",
-            }], "speaker script action closure checked")
-        return self._result("pass", [], "speaker script alignment checked")
 
     @staticmethod
     def _result(status: str, issues: list[dict[str, Any]], note: str) -> dict[str, Any]:
