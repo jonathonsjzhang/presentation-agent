@@ -76,6 +76,7 @@ formatted material 的语义权威永远属于 `report_markdown`：
 ## Input authority
 
 - 唯一上游是已批准的 `report.v1`，`report_markdown` 是完整内容真相源。
+- 如果 `report_markdown` 末尾包含“听众可能追问的问题”，该清单是正式报告内容的一部分，必须随正文一起保留和排版；不要把它当成外部 Q&A 包删除或改写。
 - 不重读 Raw Materials，不补做 Analysis，不新增观点、数字或结论方向。
 - 可以使用 runtime 提供的 `evidence_assets`/`evidence_index` 做图表数据来源；这些资产来自 Evidence 阶段的 E-id 和 `parsed_artifact_path`，只用于把报告正文已引用或明确对应的证据视觉化。
 - visual `source_refs` 只能引用报告正文中明确出现的可读来源、证据标识，或 runtime 提供的 E-id / `E-id:data_asset_id`。

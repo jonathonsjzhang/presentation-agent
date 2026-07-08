@@ -736,7 +736,10 @@ class StepRunner:
         )
 
     def _uses_report_markdown_materializer(self) -> bool:
-        return self.contract_profile == "v0_3" and self.spec.id == "report"
+        return self.contract_profile == "v0_3" and self.spec.id in {
+            "report",
+            "qa_preparation",
+        }
 
     def _uses_v03_format_renderer(self) -> bool:
         return self.contract_profile == "v0_3" and self.spec.id == "format"
@@ -817,7 +820,8 @@ class StepRunner:
     def _render_deliverable(self, artifact: dict[str, Any]):
         """Materialize v0.3 report manuscripts or render format deliverables.
 
-        - report materializes the canonical `report_markdown` as `report.md`.
+        - report and qa_preparation materialize the canonical
+          `report_markdown` as `report.md`.
         - format renders `formatted_material.v2` into the selected carrier.
 
         Returns a RenderResult, or None when this agent has no deliverable to

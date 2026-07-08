@@ -23,7 +23,7 @@
         <section class="framework-hero panel">
           <span class="section-kicker">System Framework</span>
           <h2>汇报助手是一套面向战略汇报生产的 Manager + 5 Worker Loop Harness。</h2>
-          <p>它把材料从任务定义、分析、故事线、正式写作、格式化到 Q&A 拆成可控环节；每个环节由 skill 定义行为，由 review 拦截风险，由 state/memory 持续学习。</p>
+          <p>它把材料从任务定义、分析、故事线、正式写作、追问清单到格式化拆成可控环节；每个环节由 skill 定义行为，由 review 拦截风险，由 state/memory 持续学习。</p>
           <div class="framework-stat-strip" aria-label="系统核心构成">
             <div><strong>1+5</strong><span>Manager + Worker</span></div>
             <div><strong>5</strong><span>步单 Agent loop</span></div>
@@ -53,8 +53,8 @@
                 <span>Analysis</span>
                 <span>Storyline</span>
                 <span>Report</span>
-                <span>Format</span>
                 <span>Q&A</span>
+                <span>Format</span>
               </div>
             </div>
 
@@ -99,8 +99,8 @@
             <div><b>01</b><strong>Analysis</strong><span>把原始材料转成可追溯发现、解释、反证和 so what。</span><em>产物：analysis.v1</em></div>
             <div><b>02</b><strong>Storyline</strong><span>选择核心答案并组织递进章节，不重做分析。</span><em>产物：storyline.v3</em></div>
             <div><b>03</b><strong>Report</strong><span>写成完整、连续、可独立阅读的 Markdown 报告。</span><em>产物：report.v1</em></div>
-            <div><b>04</b><strong>Format</strong><span>按目标载体选择视觉并由 runtime 渲染为正式材料。</span><em>产物：formatted_material.v2</em></div>
-            <div><b>05</b><strong>Q&A 梳理</strong><span>预判追问、风险点、回答策略和需要汇报人补充的信息。</span><em>产物：qa_pack.v1</em></div>
+            <div><b>04</b><strong>Q&A 梳理</strong><span>在报告末尾追加听众可能提出的深度问题，不写答案。</span><em>产物：report.v1</em></div>
+            <div><b>05</b><strong>Format</strong><span>按目标载体选择视觉并由 runtime 渲染为正式材料。</span><em>产物：formatted_material.v2</em></div>
           </div>
           <p>核心定义集中在 <code>configs/agents.json</code>：每个 Agent 声明输入输出 schema、上下游交接、memory 维度、rubrics 摘要、global state 读写范围、review policy 与可选能力。</p>
         </section>

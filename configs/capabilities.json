@@ -8,8 +8,8 @@
         "analysis",
         "storyline",
         "report",
-        "format",
-        "qa_preparation"
+        "qa_preparation",
+        "format"
       ],
       "profile_dimensions": [
         "audience",
@@ -41,8 +41,8 @@
         "analysis",
         "storyline",
         "report",
-        "format",
-        "qa_preparation"
+        "qa_preparation",
+        "format"
       ]
   },
   "dimensions": {

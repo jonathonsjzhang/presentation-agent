@@ -51,13 +51,11 @@
           "output_schema": "formatted_material.v2"
         },
         "qa_preparation": {
-          "upstream_schema": "formatted_material.v2",
+          "upstream_schema": "report.v1",
           "required_fields": [
-            "delivery_target",
-            "visuals",
-            "render_result"
+            "report_markdown"
           ],
-          "output_schema": "qa_pack.v1"
+          "output_schema": "report.v1"
         }
       }
     }

@@ -26,18 +26,18 @@
       "schema": "report.v1",
       "schema_path": "skills/report/schemas/report.v1.json",
       "fixture_path": "tests/fixtures/v0_3/report.v1.valid.json",
+      "consumer": "qa_preparation"
+    },
+    {
+      "schema": "report.v1",
+      "schema_path": "skills/qa_preparation/schemas/report.v1.json",
+      "fixture_path": "tests/fixtures/v0_3/report_with_questions.v1.valid.json",
       "consumer": "format"
     },
     {
       "schema": "formatted_material.v2",
       "schema_path": "skills/format/schemas/formatted_material.v2.json",
       "fixture_path": "tests/fixtures/v0_3/formatted_material.v2.valid.json",
-      "consumer": "qa_preparation"
-    },
-    {
-      "schema": "qa_pack.v1",
-      "schema_path": "skills/qa_preparation/schemas/qa_pack.v1.json",
-      "fixture_path": "tests/fixtures/v0_3/qa_pack.v1.valid.json",
       "consumer": "manager"
     }
   ],
@@ -53,11 +53,11 @@
       "upstream_fixture": "tests/fixtures/v0_3/storyline.v3.valid.json"
     },
     "format": {
-      "upstream_fixture": "tests/fixtures/v0_3/report.v1.valid.json",
+      "upstream_fixture": "tests/fixtures/v0_3/report_with_questions.v1.valid.json",
       "delivery_target": "document"
     },
     "qa_preparation": {
-      "upstream_fixture": "tests/fixtures/v0_3/formatted_material.v2.valid.json"
+      "upstream_fixture": "tests/fixtures/v0_3/report.v1.valid.json"
     }
   }
 }

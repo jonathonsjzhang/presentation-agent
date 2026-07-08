@@ -1,10 +1,32 @@
 {
-  "version": "v2",
-  "agent_id": "qa_preparation",
   "rubrics": [
-    {"id": "QA-CORE-001", "severity": "P0", "dimension": "grounding", "criterion": "回答不得超出正式材料和可追溯证据。", "check": "核对 source refs、confidence 和 caveat。", "fix": "删除无依据内容或改为安全边界。"},
-    {"id": "QA-CORE-002", "severity": "P1", "dimension": "stress_test", "criterion": "问题覆盖最可能改变决策的反方、证据和执行风险。", "check": "检查是否只有礼貌型问题。", "fix": "补高影响挑战问题。"},
-    {"id": "QA-CORE-003", "severity": "P0", "dimension": "uncertainty", "criterion": "未闭合问题必须标记补数、汇报人输入或延期回答。", "check": "检查未知项是否被硬答。", "fix": "增加状态和 safe bridge。"},
-    {"id": "QA-CORE-004", "severity": "P1", "dimension": "presenter_handoff", "criterion": "高风险问题有可执行的会前与现场处理建议。", "check": "检查 risk register 和 handoff。", "fix": "补充预防、桥接和 backup 计划。"}
+    {
+      "id": "QA-QUESTION-001",
+      "dimension": "question_depth",
+      "criterion": "问题应指向核心判断、证据链、替代解释、战略取舍或执行边界，不能只是解释名词、复述数据或逐章补目录。",
+      "check": "通读问题清单，确认每个问题都足以引发一次有价值的会场讨论。",
+      "fix": "删除浅层释义问题，补充会影响结论可信度或行动判断的深度追问。"
+    },
+    {
+      "id": "QA-QUESTION-002",
+      "dimension": "append_only",
+      "criterion": "原报告正文必须保持不变，Q&A 只在末尾追加问题清单。",
+      "check": "比较上游 report_markdown 与当前 report_markdown，确认原文没有被重写、删减或调序。",
+      "fix": "恢复原报告正文，只保留末尾新增的追问部分。"
+    },
+    {
+      "id": "QA-QUESTION-003",
+      "dimension": "no_answers",
+      "criterion": "本阶段只生成问题，不写答案、回答策略、风险等级、补数计划或汇报人话术。",
+      "check": "检查问题清单后是否混入回答、建议话术、follow-up 或内部准备说明。",
+      "fix": "删除答案和准备说明，把内容收敛为完整问句。"
+    },
+    {
+      "id": "QA-QUESTION-004",
+      "dimension": "audience_fit",
+      "criterion": "问题应贴合 report_charter 中的听众、研究目的和预期行动。",
+      "check": "判断问题是否像该听众会真正提出的问题，而不是泛泛的 reviewer 检查项。",
+      "fix": "按听众关心的决策、业务、证据或边界角度重写问题。"
+    }
   ]
 }

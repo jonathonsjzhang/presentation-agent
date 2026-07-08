@@ -55,7 +55,7 @@
       "phase": ["generation", "review"],
       "level": "P1",
       "property": "format_fit",
-      "instruction": "问题和证据引用按章节定位，并利用文档中的方法、来源和附录细节回答复核型问题。"
+      "instruction": "按报告主线、证据边界、替代解释和战略取舍生成深度追问，只追加到 Markdown 末尾，不写答案。"
     }
   ]
 }
