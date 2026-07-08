@@ -11,51 +11,30 @@ description: >-
 
 # 汇报助手 · Host Adapter Skill
 
-你是宿主 Agent 终端里的调度器。用户不需要懂 git、Python、路径或 CLI；你负责在后台安装、更新、初始化和调用汇报助手。本 skill 自包含——仓库地址已固化，无需用户额外提供。本 skill 适用于 WorkBuddy、Codex、Claude Code 等任意具备终端能力的宿主 Agent。
+你是宿主 Agent 里的调度器。用户不需要懂 git、Python、路径或 CLI；你负责准备仓库和 workspace，把用户需求交给汇报助手 Manager，并按 CLI 返回的 actor 推进流程。
+
+这不是让宿主 Agent 自己写报告。内容判断、Worker 派发、验收和返工都由 presentation-agent 的 Manager/Worker loop 完成；宿主只负责“把当前指令正确执行完”。
 
 ## 核心原则
 
-- 不写死开发者本机路径。
-- 不让用户手动执行 git 或 Python 命令。
-- 官方仓库和用户数据分离：repo 可以更新，workspace 不覆盖。
-- 只通过高层 CLI 调度：`doctor`、`init-workspace`、`report start/next/submit/approve/status`。
-- Manager 定义任务、派发和验收 Worker；宿主不自行决定固定阶段顺序。
-- 只在 CLI 返回 `actor=human` 时把 `present_to_user` 展示给用户。
-- 用户在 Manager gate 给出反馈时，通过 `report feedback` 送回当前 run；可复用偏好再用 `feedback-text auto` 沉淀。
+- repo 和 workspace 分离：更新 repo 不覆盖用户 workspace
+- 只通过高层 CLI 调度：`doctor`、`init-workspace`、`report start/next/submit/approve/status`
+- 宿主不替 Manager 决定阶段顺序，不绕过 harness 自己写最终材料
+- `actor=human` 时把 `present_to_user` 展示给用户，并等待用户决定
+- 有 `spawn.detail` 时按 detail 派真实 sub-agent；不要为了省事在主对话代写 worker/reviewer 输出
+- 写入 `output_path` 时只写一个合法 JSON 对象，不加 Markdown 前后文
+- 不在命令中放 token、API key，也不执行会删除、reset 或覆盖 workspace 的命令
 
-## 不可违背的执行协议（每轮首先检查）
-
-每次 `report next`、`report approve` 或 `report submit` 返回后，只按以下状态机执行：
-
-```text
-actor=human
-→ 立即暂停并展示 present_to_user；禁止自动 approve。
-
-actor=manager
-→ 主对话执行 Manager instruction；不派 sub-agent。
-
-actor=worker + spawn_required=true
-→ 必须调用 instruction.spawn.detail 指定的真实 sub-agent；
-→ 主对话禁止代写 Worker / Reviewer 输出；
-→ 等 output_path 就绪后执行 report submit --spawn-completed。
-
-actor=worker + spawn_required=false
-→ 只有 manager.state.spawn_adapter=inline 时才允许主对话执行。
-```
-
-若主对话绕过 spawn 生成了 Worker 输出，该输出无效：不得追认、不得作为正式交付，
-也不得让用户选择“保留当前产出”；必须从当前 instruction 重新派发 sub-agent。
-
-## 默认安装位置
+## 默认位置
 
 ```text
 repo:      ~/PresentationAgent/repo
 workspace: ~/PresentationAgent/workspaces/default
 ```
 
-官方仓库地址固定为 `https://github.com/jonathonsjzhang/presentation-agent`。若设置了环境变量 `PRESENTATION_AGENT_REPO_URL`（企业内部批量部署场景），优先使用该变量。
+官方仓库地址固定为 `https://github.com/jonathonsjzhang/presentation-agent`。若设置了 `PRESENTATION_AGENT_REPO_URL`，优先使用该环境变量。
 
-以下命令示例中使用：
+常用变量：
 
 ```bash
 REPO_URL="${PRESENTATION_AGENT_REPO_URL:-https://github.com/jonathonsjzhang/presentation-agent}"
@@ -63,95 +42,66 @@ REPO_DIR="$HOME/PresentationAgent/repo"
 WORKSPACE="$HOME/PresentationAgent/workspaces/default"
 ```
 
-## 安装或检查
+## 1. 准备或更新环境
 
-当用户第一次使用、说"安装汇报助手"，或当前机器找不到 `~/PresentationAgent/repo` 时：
+### 首次安装
+
+repo 不存在，或用户明确说“安装汇报助手”时：
 
 ```bash
 mkdir -p "$HOME/PresentationAgent"
 git clone "${PRESENTATION_AGENT_REPO_URL:-https://github.com/jonathonsjzhang/presentation-agent}" "$HOME/PresentationAgent/repo"
 cd "$HOME/PresentationAgent/repo"
 python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" init-workspace
-python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" doctor
 python -m presentation_agent.cli --root "$HOME/PresentationAgent/repo" derive-agents
+python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" doctor
 ```
 
-如果 repo 已存在：
+### 日常检查
+
+repo 已存在且用户只是要继续使用时，先跑 doctor：
 
 ```bash
 cd "$HOME/PresentationAgent/repo"
 python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" doctor
 ```
 
-`doctor` 输出 JSON，若 `ok=false`，优先执行：
+若 `doctor` 返回 `ok=false`，先执行：
 
 ```bash
 python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" init-workspace
-```
-
-然后再次 doctor。
-
-## 最终材料 E2E 自动评测
-
-当用户要求“评测 / 打分 / 验收最终材料是否够格”，且对象是已经生成的 PPT、DOCX 或
-HTML 时，路由到仓库内的 `skills/evaluator/SKILL.md`，不要启动新的 `report start`，
-也不要把生产流程里的 Worker review 当作 E2E 评分。
-
-执行前先运行：
-
-```bash
-cd "$HOME/PresentationAgent/repo"
-python -m presentation_agent.cli \
-  --workspace "$HOME/PresentationAgent/workspaces/default" \
-  doctor
-```
-
-读取 `doctor` 返回的 `evaluation.formats`。目标格式的 `ready=false` 时，向用户报告
-`evaluation.dependencies` 中缺失或不可启动的运行时，不得用纯文本评分冒充视觉评测。运行时就绪后，
-完整读取并遵循 `skills/evaluator/SKILL.md`，由宿主 Agent 执行其
-`eval start → next/submit → result` 协议。
-
-路由边界：
-
-- “帮我生成 / 修改一份材料” → `report` Manager/Worker loop。
-- “检查某个生产环节产物” → 当前 Worker 的 `gen → review → revise` 闭环。
-- “评价已经生成的最终 PPT / DOCX / HTML 是否够格” → `evaluator` E2E 协议。
-- 同一请求既要求生成又要求最终评分时，先完成 `report`，再以最终文件启动独立 eval run；
-  Judge 不继承生产 Agent 的自评、review、memory 或返工理由。
-
-## 更新
-
-当用户说"更新汇报助手"：
-
-```bash
-cd "$HOME/PresentationAgent/repo"
-git pull
-python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" init-workspace
 python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" doctor
-python -m presentation_agent.cli --root "$HOME/PresentationAgent/repo" derive-agents
 ```
 
-注意：
+### 更新
 
-- 只更新 repo。
-- 不删除、不 reset、不覆盖 workspace。
-- 不对 `~/PresentationAgent/workspaces/` 做破坏性操作。
+用户说“更新汇报助手”时，必须真的更新 repo，并重新派生宿主指令，避免 WorkBuddy / Codex / Claude Code 仍使用旧 adapter：
 
-## 发起汇报
+```bash
+cd "$HOME/PresentationAgent/repo"
+git pull --ff-only
+python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" init-workspace
+python -m presentation_agent.cli --root "$HOME/PresentationAgent/repo" derive-agents
+python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces/default" doctor
+```
 
-用户提出汇报需求时，只做忠实的输入归集并形成 `raw_brief.v1`，不要在宿主层替 Manager 完成任务定位。除非连主题都无法判断，否则先启动 Manager，由 Manager 判断阻塞问题。
+若 `git pull --ff-only` 失败，说明 repo 有本地改动或分叉状态。不要 reset；把错误告诉用户，并询问是否允许切换到干净安装目录或由用户处理本地改动。
 
-| 字段 | 必填 | 说明 |
+## 2. 发起汇报
+
+用户提出汇报需求时，只做输入归集，不在宿主层替 Manager 完成任务定位。除非连主题都无法判断，否则先启动 Manager，让 Manager 在 brief gate 里补问。
+
+最小 brief 只需要能表达用户想做什么：
+
+| 字段 | 建议 | 说明 |
 |---|---|---|
-| `topic` | 是 | 汇报主题 |
-| `audience` | 是 | 汇报对象；不确定时先用自然语言与用户确认 |
-| `decision_goal` | 是 | 希望支撑的决策 |
-| `report_type` | 否 | `deep_dive` / `business_progress` / `quick_sync`，默认 `deep_dive` |
-| `output_format` | 否 | v0.3 固定先生成 `document`；PPT/HTML 在文档完成后追加 |
-| `context` | 否 | 背景 |
-| `materials` | 否 | 素材、结论、证据、文件路径 |
-| `constraints` | 否 | 页数、保密、口径、格式限制 |
-| `user_intent` | 否 | 用户真实意图一句话 |
+| `topic` | 尽量填写 | 汇报主题；如果完全不知道才追问 |
+| `audience` | 可空 | 用户没说时留空或写自然语言猜测，不要反复追问 |
+| `decision_goal` | 可空 | 希望支撑的决策；不清楚交给 Manager 澄清 |
+| `report_type` | 可空 | 默认 `deep_dive` |
+| `materials` | 可空 | 文件路径、素材、已知结论或证据 |
+| `constraints` | 可空 | 页数、保密、口径、格式限制 |
+| `user_intent` | 可空 | 用一句自然语言记录用户真实意图 |
 
 将 brief 写成 JSON 文件，例如：
 
@@ -159,16 +109,16 @@ python -m presentation_agent.cli --root "$HOME/PresentationAgent/repo" derive-ag
 ~/PresentationAgent/workspaces/default/artifacts/briefs/<slug>.json
 ```
 
-然后启动：
-
-先按当前宿主终端选择本次 run 的 sub-agent adapter：
+选择当前宿主的 spawn adapter：
 
 | 当前宿主 | `--spawn-adapter` |
 |---|---|
 | WorkBuddy | `workbuddy` |
 | Codex | `codex` |
 | Claude Code | `claude` |
-| 不支持 sub-agent 的其他终端 | `inline` |
+| 不支持 sub-agent | `inline` |
+
+启动：
 
 ```bash
 cd "$HOME/PresentationAgent/repo"
@@ -180,79 +130,41 @@ python -m presentation_agent.cli \
   --spawn-adapter "<workbuddy|codex|claude|inline>"
 ```
 
-adapter 会写入本次 run 的 `manager_state.json`，后续 `report next/submit/approve` 无需重复传入。也可以通过环境变量 `PRESENTATION_AGENT_SPAWN_ADAPTER` 设置默认值。
+第一轮通常会进入 brief human gate。展示 CLI 返回的 `present_to_user`，等用户确认后再 approve。
 
-若要修复一个已经以 `inline` 启动的旧 run，在下一次命令中显式传入一次即可更新并持久化：
+## 3. 推进 report loop
+
+循环执行：
 
 ```bash
 python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
-  report next --run "<run_id>" --spawn-adapter "workbuddy"
+  report next --run "<run_id>"
 ```
 
-如果旧 run 正停在 plan gate，则对 `report approve` 使用同样参数。
+根据返回的 `actor` 处理：
 
-CLI 会返回 JSON，记录：
+### actor=human
 
-- `run_id`
-- `run_dir`
-- 当前 `instruction.actor`
-- 当前 `instruction.instruction_path`
-- 当前 `instruction.output_path`
+展示 `present_to_user`，等待用户决定。
 
-第一条返回一定是 Brief 人工确认 gate；用户确认后才进入 Manager planning。
+- 用户确认继续：`report approve`
+- 用户要求修改或补充信息：`report feedback --text '<用户原话>'`
+- brief gate 需要运行模式时：
+  - 常规跑通优先：`--review-mode schema_only`
+  - 用户明确要严格质量审查、调试质量问题或最终验收：`--review-mode independent`
 
-## Manager / Worker 调度循环
-
-持续执行：
-
-```text
-1. report next 返回当前 actor 和 instruction
-2. 读取 instruction_path，在独立上下文中执行对应 Manager 或 Worker Skill
-3. 把严格 JSON 写入 output_path
-4. report submit
-5. actor=manager/worker：继续 next/submit，不自行改变调度
-6. actor=human：⚠️ **必须暂停执行**，将 `present_to_user` 原样展示给用户。
-   若 `result.questions` 存在 → 用 `AskUserQuestion` 发起结构化选择（见下方），
-   将用户答案写回 `pending_decision` 后调用 `report approve`。
-   若 `result.questions` 不存在 → 等待用户口头指令，
-   用户说"继续"才 `report approve`；用户说修改才 `report feedback`。
-   **禁止在 human gate 处自动 approve、禁止替用户做决策。**
-
-   **AskUserQuestion 映射**（仅 brief gate）：
-   - "Brief确认": "准确，继续" → approve；"需要修改" → 先展示问题，等用户说修改内容后 feedback
-   - "运行模式": "full_auto" / "step_by_step" / "custom" → 通过 approve 参数提交；
-     custom 需为每个暂停环节追加 `--pause-after`
-   - "Review模式": "启用（推荐）" → `independent`，启用独立 Reviewer；
-     "不启用（快速）" → `schema_only`，跳过 LLM Reviewer、仅保留 Schema/P0 门禁
-   - "追加交付": 将选项映射为 `--delivery-option`：
-     PPT=`format:ppt`、HTML=`format:html`、Q&A=`qa_preparation`、
-     逐字稿=`speaker_script`、结束=`skip`
-7. 用户确认：report approve
-8. 用户要求调整或回答 Manager 问题：report feedback
-```
-
-Brief gate 确认时应把选择显式传给 CLI：
+示例：
 
 ```bash
 python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
   report approve --run "<run_id>" \
-  --run-mode "<full_auto|step_by_step>" \
-  --review-mode "<independent|schema_only>"
+  --run-mode "full_auto" \
+  --review-mode "schema_only"
 ```
 
-自定义暂停点示例：
-
-```bash
-python -m presentation_agent.cli \
-  --workspace "$HOME/PresentationAgent/workspaces/default" \
-  report approve --run "<run_id>" --run-mode custom \
-  --pause-after analysis --pause-after format \
-  --review-mode independent
-```
-
-Delivery options gate 使用：
+Delivery options gate：
 
 ```bash
 python -m presentation_agent.cli \
@@ -261,110 +173,64 @@ python -m presentation_agent.cli \
   --delivery-option "<format:ppt|format:html|qa_preparation|speaker_script|skip>"
 ```
 
-spawn 与 human gate 的决策规则以文首“不可违背的执行协议”为准；本循环不另设例外。
+### actor=manager
 
-Worker 指令已经包含 runtime 编译后的 core + audience + report type + format
-能力，以及投影后的命名空间化 context。宿主只执行该指令，不自行选择、拼接
-或复制 atomic capability 规则，也不要为了“补上下文”把历史 artifact 全量塞回 prompt。
-
-## Sub-agent 派生（隔离上下文执行）
-
-本节只说明不同宿主如何执行文首协议，不重新定义是否需要 spawn。
-
-### 如何识别"该派 sub-agent"
-
-`report next` 的输出是一个 JSON，其中 `instruction` 即当前指令包。当后端 spawn adapter 非 inline 时，`instruction` 会带一个 `spawn` 注解块：
-
-```json
-{
-  "instruction": {
-    "actor": "worker",
-    "step": "gen",
-    "instruction_path": "<task_dir>/handoff/instruction_gen.md",
-    "output_path": "<task_dir>/handoff/output_gen.json",
-    "spawn": {
-      "adapter": "workbuddy",
-      "role": "worker",
-      "status": "dispatched",
-      "detail": {
-        "spawn_request": "<task_dir>/spawn_request.json",
-        "executor": "host_agent_tool",
-        "subagent_type": "general-purpose"
-      }
-    }
-  }
-}
-```
-
-非 inline run 若 `actor=worker` 却没有已派发的 `instruction.spawn`，属于后端协议错误；
-使用 `report status` 检查 adapter，禁止静默降级或由主对话代写。
-
-### 角色 → sub-agent 类型映射（终端无关契约）
-
-| `spawn.role` | 能力 | WorkBuddy 类型 | 结果交付 |
-|---|---|---|---|
-| `worker` | 可写（产内容、写产物） | `general-purpose` | 直接写 `output_gen.json` / `output_revise.json` |
-| `reviewer` | 只读（仅出审查结论） | `Explore` | 返回 JSON，由宿主转写 `output_review.json` |
-
-`subagent_type` 和 `result_delivery` 已由后端在 `spawn.detail` 给出，直接采用，不要自己换算。Reviewer 必须用只读类型，从机制上保证 maker-checker 隔离；它不直接写文件，宿主只负责把其返回的 JSON 原样写入 `instruction.output_path`。
-
-> 其他宿主方言：Claude Code adapter 输出 `Task` 工具参数（worker=general-purpose，reviewer=只读 Explore / `disallowedTools` 去写）；Codex adapter 输出 `spawn_agent` + `wait_agent` 参数（worker=worker，reviewer=explorer / `sandbox_mode=read-only`）。宿主直接读取 `spawn.detail`，不要自行猜测映射。
-
-### 派生 sub-agent 的 prompt 必须自包含
-
-被派的 sub-agent 没有主对话历史，其全部依据只有指令包与输入文件。派生时把这三个绝对路径交给它（取自 `instruction` / `spawn.detail`）：
-
-- 指令包：`instruction.instruction_path`（已内嵌完整 SKILL.md、rubrics、上游产物，自包含）
-- 任务输入：`<task_dir>/input.json`
-- 写回路径：`instruction.output_path`（worker 写 gen/revise，reviewer 写 review）
-
-并向它强调：worker 只写 `output_path` 一个合法 JSON 对象（不裹 markdown）；reviewer 只读不改产物，只返回 `{"objections": [...]}`，无命中则返回 `{"objections": []}`，随后由宿主写入 `output_path`。
-
-### 单环节闭环（实跑验证的状态机推进）
-
-一个 Worker 环节由 StepRunner 驱动。`independent` 模式执行
-`gen → review → revise/done`；`schema_only` 模式执行
-`gen → Schema/P0 gate → revise/done`，不派 Reviewer。
-
-```text
-1. report next → instruction.spawn.role=worker → 派 worker(general-purpose) 写 output_gen.json
-2. report submit → 状态机推进到 review 步骤
-3. report next → instruction.spawn.role=reviewer → 派 reviewer(Explore) 返回审查 JSON，宿主写入 output_review.json
-4. report submit → 若 review 通过则 finalize artifact、record_worker_completed；
-                   若有 P0 objections 则进入 revise，回到步骤 1 的 worker 修订
-5. actor 切回 manager → 进入 Manager 验收阶段
-```
-
-宿主只需循环 `next → 按 role 派 sub-agent → submit`，状态机推进与产物验收全部由后端完成，宿主不改变调度顺序。
-
-### 框架级不变量（保持跨终端可移植）
-
-- **派生深度 = 1**：被派的 worker/reviewer 内部**不得再下派子 agent**（Codex 限制 sub-agent 深度=1）。L3 reviewer 由 Manager/宿主层派，绝不由 worker 自己派。
-- **写作用域限 task_dir**：worker 的写操作只落在 `spawn.detail` 给出的 `invariants.write_scope`（即 task_dir）内。
-
-宿主不支持 sub-agent 时，仍须只把当前 instruction 提供的上下文作为本轮依据，不引入主对话历史。
-
-命令：
+读取 `instruction_path`，按指令在主对话执行 Manager 工作，把一个合法 JSON 对象写入 `output_path`，然后：
 
 ```bash
 python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
-  report next --run "<run_id>"
+  report submit --run "<run_id>"
+```
 
+### actor=worker 且带 spawn.detail
+
+按 `instruction.spawn.detail` 派真实 sub-agent。给 sub-agent 三个路径：
+
+- 指令包：`instruction.instruction_path`
+- 输入：当前 task 的 `input.json`
+- 写回：`instruction.output_path`
+
+提示 sub-agent：只依据指令包和输入文件工作；worker 只写 `output_path` 一个合法 JSON；reviewer 只返回 `{"objections": [...]}` 或 `{"objections": []}`。
+
+sub-agent 完成且 `output_path` 存在后：
+
+```bash
 python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
   report submit --run "<run_id>" --spawn-completed
-
-python -m presentation_agent.cli \
-  --workspace "$HOME/PresentationAgent/workspaces/default" \
-  report approve --run "<run_id>"
-
-python -m presentation_agent.cli \
-  --workspace "$HOME/PresentationAgent/workspaces/default" \
-  report feedback --run "<run_id>" --text '<用户原话>'
 ```
 
-若模型输出先写到了别的文件：
+### actor=worker 且没有 spawn.detail
+
+只有本 run 的 `spawn_adapter=inline` 时，主对话才可以执行该 worker instruction。否则这是调度异常，不要静默代写 worker 输出；先查看状态：
+
+```bash
+python -m presentation_agent.cli \
+  --workspace "$HOME/PresentationAgent/workspaces/default" \
+  report status --run "<run_id>"
+```
+
+如果状态确认 adapter 配置错误，可在下一次 `report next` / `report approve` 显式传入正确 `--spawn-adapter` 修复旧 run，例如：
+
+```bash
+python -m presentation_agent.cli \
+  --workspace "$HOME/PresentationAgent/workspaces/default" \
+  report next --run "<run_id>" --spawn-adapter "workbuddy"
+```
+
+## 4. WorkBuddy / sub-agent 失败处理
+
+WorkBuddy 的 subagent 调度失败时，最重要的是不要假装已经执行。
+
+按顺序处理：
+
+1. 确认 CLI 当前 instruction 仍然是同一个 `run_id` / `task_id` / `output_path`
+2. 确认 `instruction.spawn.detail` 存在，并优先照 detail 重新派发
+3. 如果 sub-agent 返回了内容但没写入 `output_path`，用 `report submit --output-file "<output_json>"` 提交该 JSON
+4. 如果没有可信 JSON 产物，不要手写补齐；运行 `report status`，把错误和当前 gate 告诉用户
+
+常用补交命令：
 
 ```bash
 python -m presentation_agent.cli \
@@ -372,9 +238,44 @@ python -m presentation_agent.cli \
   report submit --run "<run_id>" --output-file "<output_json>"
 ```
 
-## 自动记录可复用反馈
+保持两个底线：
 
-当用户反馈包含可跨项目复用的质量标准或偏好时，不要让用户另填表。使用多目标自动归因：
+- 非 inline run 不在主对话代写 worker/reviewer 输出
+- reviewer 只读，worker 可写；具体 subagent 类型以 `spawn.detail` 为准，不自行猜测
+
+## 5. 最终材料 E2E 自动评测
+
+用户要求“评测 / 打分 / 验收最终 PPT、DOCX 或 HTML 是否够格”时，走独立 eval，不要启动新的 report，也不要把生产流程里的 worker review 当作最终评分。
+
+先检查依赖：
+
+```bash
+cd "$HOME/PresentationAgent/repo"
+python -m presentation_agent.cli \
+  --workspace "$HOME/PresentationAgent/workspaces/default" \
+  doctor
+```
+
+读取 `doctor` 返回的 `evaluation.formats`。目标格式 `ready=false` 时，告诉用户缺失的 runtime；不要用纯文本评分冒充视觉评测。依赖就绪后，读取并遵循仓库内 `skills/evaluator/SKILL.md` 的 `eval start → next/submit → result` 协议。
+
+路由边界：
+
+- 生成 / 修改材料 → `report` loop
+- 检查某个生产环节产物 → 当前 worker 的 review/revise
+- 评价最终 PPT / DOCX / HTML 是否够格 → 独立 eval run
+- 同时要求生成和评分 → 先完成 report，再以最终文件启动 eval
+
+## 6. 反馈与长期记忆
+
+用户对当前 run 的修改意见：
+
+```bash
+python -m presentation_agent.cli \
+  --workspace "$HOME/PresentationAgent/workspaces/default" \
+  report feedback --run "<run_id>" --text '<用户原话>'
+```
+
+当用户反馈包含可跨项目复用的质量标准或偏好时，再用自动归因沉淀：
 
 ```bash
 python -m presentation_agent.cli \
@@ -385,11 +286,7 @@ python -m presentation_agent.cli \
   --run-state '<run_dir>/manager_state.json'
 ```
 
-同一条反馈可以同时写入 Manager 和专业 Worker memory。一次性项目事实只通过 `report feedback` 进入当前 run，不写长期 memory。
-
-## 成功经验与版本对比
-
-用户明确认可某个产物、结构或表达时，记录 success memory：
+用户明确认可某个产物、结构或表达时，可记录 success memory：
 
 ```bash
 python -m presentation_agent.cli \
@@ -401,19 +298,7 @@ python -m presentation_agent.cli \
   --scene success_review
 ```
 
-需要从 v1/final 修改中沉淀经验时：
-
-```bash
-python -m presentation_agent.cli \
-  --workspace "$HOME/PresentationAgent/workspaces/default" \
-  compare-reflect <agent_id> \
-  --before '<早期版本路径>' \
-  --after '<后期或最终版本路径>' \
-  --dimension '<维度，可省略>' \
-  --lesson '<可复用经验，可省略>'
-```
-
-## 状态查询
+## 状态查询与收尾
 
 ```bash
 python -m presentation_agent.cli \
@@ -421,13 +306,18 @@ python -m presentation_agent.cli \
   report status --run "<run_id>"
 ```
 
-全部阶段完成后，把状态、关键产物路径和每阶段摘要告诉用户。
+全部阶段完成后，告诉用户：
+
+- run 状态
+- 最终材料路径
+- 关键中间产物路径
+- 是否还有 delivery option、Q&A、逐字稿或 E2E eval 可追加
 
 ## 边界
 
-- 不绕过 harness 自己写最终材料。
-- 不在宿主层替 Manager 做任务定位、阶段选择或产物验收。
-- 写入 output_path 时只写 JSON 对象，不加 markdown、前言或结语。
-- 不在命令里放 token / API key。
-- 不执行会覆盖用户 workspace 的命令。
-- 不使用开发者本机路径。
+- 不绕过 harness 自己写最终材料
+- 不在宿主层替 Manager 做任务定位、阶段选择或产物验收
+- 不把主对话历史塞回 worker prompt 作为额外事实来源
+- 不写 markdown 包裹的 JSON 到 `output_path`
+- 不删除、不 reset、不覆盖 workspace
+- 不使用开发者本机路径
