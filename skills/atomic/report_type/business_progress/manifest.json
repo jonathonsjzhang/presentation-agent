@@ -2,7 +2,7 @@
   "id": "report.business_progress",
   "kind": "report_type",
   "select_when": {"report_type": "business_progress"},
-  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation", "speaker_script"],
+  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation"],
   "owns": ["progress_structure", "variance_lens"],
   "incompatible_with": [],
   "prompt_budget_tokens": 260

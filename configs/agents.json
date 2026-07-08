@@ -13,24 +13,12 @@
         "analysis",
         "storyline",
         "report",
-        "format"
+        "format",
+        "qa_preparation"
       ],
       "default_delivery_targets": [
         "document"
       ],
-      "extension_workers": [
-        "qa_preparation",
-        "speaker_script"
-      ],
-      "extension_worker_overrides": {
-        "qa_preparation": {
-          "input_schema": "formatted_material.v2",
-          "description": "核心材料完成后按用户选择，对 formatted_material.v2 做压力测试并生成可追溯 Q&A。"
-        },
-        "speaker_script": {
-          "description": "核心材料完成后按用户选择，基于 formatted_material.v2 与可选 qa_pack.v1 生成讲稿。"
-        }
-      },
       "internal_subagents": [
         "evidence_harvester"
       ],
@@ -245,7 +233,7 @@
           "skill": "format",
           "description": "以 canonical Markdown 为内容权威，选择必要视觉；默认版式、分页和渲染状态由 runtime 管理。",
           "previous_agent_id": "report",
-          "next_agent_id": null,
+          "next_agent_id": "qa_preparation",
           "input_schema": "report.v1",
           "input_contract": {
             "required_inputs": [
@@ -259,7 +247,7 @@
             "required_handoff_fields": [
               "visuals"
             ],
-            "downstream": "extension_gate"
+            "downstream": "qa_preparation"
           },
           "memory_dimensions": [
             "版式",
@@ -303,6 +291,100 @@
             "implementation_status": "profile_runtime_ready"
           },
           "implementation_status": "implemented"
+        },
+        {
+          "id": "qa_preparation",
+          "name": "Q&A 梳理",
+          "stage": 5,
+          "skill": "qa_preparation",
+          "description": "基于正式材料和汇报对象，梳理可能提问、挑战角度、回答策略，以及需要汇报人补充的信息。",
+          "previous_agent_id": "format",
+          "next_agent_id": null,
+          "input_schema": "formatted_material.v2",
+          "output_schema": "qa_pack.v1",
+          "input_contract": {
+            "required_inputs": [
+              "formatted material",
+              "audience_profile"
+            ],
+            "optional_inputs": [
+              "历史 Q&A",
+              "敏感问题列表",
+              "已知管理层关注点",
+              "补充数据"
+            ],
+            "accepted_material_formats": [
+              "json",
+              "pptx",
+              "html",
+              "docx"
+            ],
+            "input_preparation_focus": "逐页识别最可能被追问的证据、口径、假设、资源诉求和决策风险"
+          },
+          "output_contract": {
+            "primary_artifact": "Q&A pack",
+            "required_handoff_fields": [
+              "questions",
+              "answerability",
+              "risk_level",
+              "answer_strategy",
+              "required_presenter_input"
+            ],
+            "downstream_use": "作为最终汇报准备包，帮助汇报人处理高影响追问和未闭合问题"
+          },
+          "memory_dimensions": [
+            "挑战问题",
+            "回答策略",
+            "风险",
+            "数据口径",
+            "受众关注"
+          ],
+          "rubrics": [
+            "必须覆盖关键追问并区分可答、需汇报人补充、需补数据和应延后处理",
+            "必须标记高风险问题和建议前置化解的话术",
+            "不得替汇报人编造无法确认的答案"
+          ],
+          "max_revision_rounds": 2,
+          "loop": {
+            "trigger": "default_main_chain",
+            "workflow_owner": "skill",
+            "reviewer": "clean_context_review_sub_agent",
+            "stop_checker": "schema_and_p0_gate",
+            "human_review_required": true,
+            "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
+          },
+          "state": {
+            "global_reads": [
+              "audience_profile",
+              "presentation_preferences",
+              "target_action"
+            ],
+            "global_writes": [],
+            "agent_memory_scope": "qa_preparation_only",
+            "generation_memory_dimensions": [
+              "挑战问题",
+              "回答策略",
+              "风险",
+              "受众关注"
+            ]
+          },
+          "harness": {
+            "skill_package": "skills/qa_preparation",
+            "runtime_adapter": "generic_llm_skill_runtime",
+            "review_policy": "schema_validation + machine_check + llm_p1",
+            "connectors": [
+              "formatted_material_reader"
+            ],
+            "implementation_status": "profile_runtime_ready"
+          },
+          "implementation_status": "implemented",
+          "optional_features": {
+            "multi_candidate": {
+              "enabled_by_default": true,
+              "max_candidates": 3,
+              "selection_owner": "review_sub_agent_then_human"
+            }
+          }
         }
       ]
     }
@@ -340,11 +422,8 @@
       "analysis",
       "storyline",
       "report",
-      "format"
-    ],
-    "optional_workers": [
-      "qa_preparation",
-      "speaker_script"
+      "format",
+      "qa_preparation"
     ],
     "human_review_required": true,
     "automatic_backtracking": false,
@@ -502,199 +581,6 @@
         "implementation_status": "implemented"
       },
       "optional_features": {}
-    },
-    {
-      "id": "qa_preparation",
-      "name": "Q&A 梳理",
-      "stage": 5,
-      "skill": "qa_preparation",
-      "description": "基于正式材料和汇报对象，梳理可能提问、挑战角度、回答策略，以及需要汇报人补充的信息。",
-      "previous_agent_id": "format",
-      "next_agent_id": "speaker_script",
-      "input_schema": "formatted_material.v2",
-      "output_schema": "qa_pack.v1",
-      "input_contract": {
-        "required_inputs": [
-          "formatted material",
-          "audience_profile"
-        ],
-        "optional_inputs": [
-          "历史 Q&A",
-          "敏感问题列表",
-          "已知管理层关注点",
-          "补充数据"
-        ],
-        "accepted_material_formats": [
-          "json",
-          "pptx",
-          "html",
-          "docx"
-        ],
-        "input_preparation_focus": "逐页识别最可能被追问的证据、口径、假设、资源诉求和决策风险"
-      },
-      "output_contract": {
-        "primary_artifact": "Q&A pack",
-        "required_handoff_fields": [
-          "questions",
-          "answerability",
-          "risk_level",
-          "answer_strategy",
-          "required_presenter_input",
-          "speaker_script_handoff"
-        ],
-        "downstream_use": "speaker_script 吸收高风险点、预埋过渡话术，但不强答需补充的问题"
-      },
-      "memory_dimensions": [
-        "挑战问题",
-        "回答策略",
-        "风险",
-        "数据口径",
-        "受众关注"
-      ],
-      "rubrics": [
-        "必须覆盖关键追问并区分可答、需汇报人补充、需补数据和应延后处理",
-        "必须标记高风险问题和建议前置化解的话术",
-        "不得替汇报人编造无法确认的答案"
-      ],
-      "max_revision_rounds": 2,
-      "loop": {
-        "trigger": "human_or_upstream_artifact",
-        "workflow_owner": "skill",
-        "reviewer": "clean_context_review_sub_agent",
-        "stop_checker": "schema_and_p0_gate",
-        "human_review_required": true,
-        "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
-      },
-      "state": {
-        "global_reads": [
-          "audience_profile",
-          "presentation_preferences",
-          "target_action"
-        ],
-        "global_writes": [],
-        "agent_memory_scope": "qa_preparation_only",
-        "generation_memory_dimensions": [
-          "挑战问题",
-          "回答策略",
-          "风险",
-          "受众关注"
-        ]
-      },
-      "harness": {
-        "skill_package": "skills/qa_preparation",
-        "runtime_adapter": "generic_llm_skill_runtime",
-        "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": [
-          "formatted_material_reader"
-        ],
-        "implementation_status": "implemented"
-      },
-      "optional_features": {
-        "multi_candidate": {
-          "enabled_by_default": true,
-          "max_candidates": 3,
-          "selection_owner": "review_sub_agent_then_human"
-        }
-      }
-    },
-    {
-      "id": "speaker_script",
-      "name": "逐字稿",
-      "stage": 6,
-      "skill": "speaker_script",
-      "description": "基于正式材料和 Q&A 包生成完整汇报逐字稿，逐页/逐模块对应材料，默认控制在 30 分钟以内。",
-      "previous_agent_id": "qa_preparation",
-      "next_agent_id": null,
-      "input_schema": "formatted_material.v2",
-      "output_schema": "speaker_script.v1",
-      "input_contract": {
-        "required_inputs": [
-          "Q&A pack",
-          "formatted material"
-        ],
-        "optional_inputs": [
-          "汇报人语气偏好",
-          "目标时长",
-          "必须强调/回避内容",
-          "现场流程"
-        ],
-        "accepted_material_formats": [
-          "json",
-          "pptx",
-          "html",
-          "docx"
-        ],
-        "input_preparation_focus": "把每页材料转成可说出口的讲稿，并吸收 Q&A 高风险点和未决问题边界"
-      },
-      "output_contract": {
-        "primary_artifact": "speaker script",
-        "required_handoff_fields": [
-          "opening",
-          "time_plan",
-          "page_scripts",
-          "risk_lines",
-          "qa_bridge_lines",
-          "compressed_version",
-          "rehearsal_notes",
-          "closing"
-        ],
-        "downstream_use": "交给汇报人排练、压缩、调整语气和补齐需要本人确认的信息"
-      },
-      "memory_dimensions": [
-        "表达",
-        "节奏",
-        "高层沟通",
-        "风险话术",
-        "时间控制"
-      ],
-      "rubrics": [
-        "必须逐页/逐模块对应正式材料，不能脱离材料自由发挥",
-        "默认完整讲稿控制在 30 分钟以内，除非 brief 明确要求其他时长",
-        "必须吸收 Q&A 高风险点，但不得强答需要汇报人补充的问题"
-      ],
-      "max_revision_rounds": 2,
-      "loop": {
-        "trigger": "human_or_upstream_artifact",
-        "workflow_owner": "skill",
-        "reviewer": "clean_context_review_sub_agent",
-        "stop_checker": "schema_and_p0_gate",
-        "human_review_required": true,
-        "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
-      },
-      "state": {
-        "global_reads": [
-          "audience_profile",
-          "presentation_preferences",
-          "target_action",
-          "page_limit"
-        ],
-        "global_writes": [],
-        "agent_memory_scope": "speaker_script_only",
-        "generation_memory_dimensions": [
-          "表达",
-          "节奏",
-          "高层沟通",
-          "风险话术",
-          "时间控制"
-        ]
-      },
-      "harness": {
-        "skill_package": "skills/speaker_script",
-        "runtime_adapter": "generic_llm_skill_runtime",
-        "review_policy": "schema_validation + machine_check + llm_p1",
-        "connectors": [
-          "formatted_material_reader",
-          "qa_pack_reader"
-        ],
-        "implementation_status": "implemented"
-      },
-      "optional_features": {
-        "multi_candidate": {
-          "enabled_by_default": true,
-          "max_candidates": 3,
-          "selection_owner": "review_sub_agent_then_human"
-        }
-      }
     }
   ]
 }

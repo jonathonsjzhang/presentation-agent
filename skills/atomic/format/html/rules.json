@@ -48,14 +48,6 @@
       "level": "P1",
       "property": "format_fit",
       "instruction": "按模块和证据展开层级定位问题，引用可展开证据而不是假设听众看过全部内容。"
-    },
-    {
-      "id": "FMT-HTML-SS-G01",
-      "applies_to": ["speaker_script"],
-      "phase": ["generation", "review"],
-      "level": "P0",
-      "property": "delivery_granularity",
-      "instruction": "按导航模块讲，并说明哪些内容可展开阅读；不要把网页当幻灯片逐屏朗读。"
     }
   ]
 }

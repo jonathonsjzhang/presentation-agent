@@ -172,7 +172,7 @@ Delivery options gate：
 python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
   report approve --run "<run_id>" \
-  --delivery-option "<format:ppt|format:html|qa_preparation|speaker_script|skip>"
+  --delivery-option "<format:ppt|format:html|skip>"
 ```
 
 ### actor=manager
@@ -313,7 +313,7 @@ python -m presentation_agent.cli \
 - run 状态
 - 最终材料路径
 - 关键中间产物路径
-- 是否还有 delivery option、Q&A、逐字稿或 E2E eval 可追加
+- 是否还有 PPT/HTML delivery option 或 E2E eval 可追加
 
 ## 边界
 

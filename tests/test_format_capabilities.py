@@ -24,7 +24,7 @@ def _specs() -> dict[str, AgentSpec]:
 
 
 class FormatCapabilityTests(unittest.TestCase):
-    def test_all_270_worker_profile_bundles_compile_without_fallback(self) -> None:
+    def test_all_worker_profile_bundles_compile_without_fallback(self) -> None:
         dimensions = read_json(ROOT / "configs" / "capabilities.json")["dimensions"]
         count = 0
         for spec, audience, report_type, output_format in product(
@@ -45,7 +45,7 @@ class FormatCapabilityTests(unittest.TestCase):
             self.assertFalse(package.legacy)
             self.assertIn(f"format.{output_format}", package.selected_capabilities)
             count += 1
-        self.assertEqual(count, 270)
+        self.assertEqual(count, 225)
 
     def test_format_prompt_contains_only_selected_carrier_harness(self) -> None:
         spec = _specs()["format"]

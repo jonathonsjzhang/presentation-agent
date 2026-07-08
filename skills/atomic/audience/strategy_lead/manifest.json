@@ -2,7 +2,7 @@
   "id": "audience.strategy_lead",
   "kind": "audience",
   "select_when": {"audience": "strategy_lead"},
-  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation", "speaker_script"],
+  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation"],
   "owns": ["analysis_lens", "assumption_visibility"],
   "incompatible_with": [],
   "prompt_budget_tokens": 220

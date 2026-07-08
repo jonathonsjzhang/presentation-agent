@@ -88,19 +88,19 @@ class WebLearningTests(unittest.TestCase):
         )
         overview = self.app.learning_overview()
         self.assertIn("global_state", overview)
-        self.assertEqual(len(overview["agents"]), 5)
+        self.assertEqual(len(overview["agents"]), 6)
         self.assertIn("memory_items", overview["totals"])
         self.assertIn("learning_events", overview["totals"])
         self.assertGreaterEqual(overview["event_counts"].get("feedback", 0), 1)
 
-    def test_overview_exposes_four_core_and_eleven_atomic_capability_packages(self) -> None:
+    def test_overview_exposes_five_core_and_eleven_atomic_capability_packages(self) -> None:
         overview = self.app.overview()
         packages = overview["capabilities"]["packages"]
 
-        self.assertEqual(len(packages), 15)
+        self.assertEqual(len(packages), 16)
         self.assertEqual(
             len([item for item in packages if item["kind"] == "core"]),
-            4,
+            5,
         )
         self.assertTrue(all(agent["implemented"] for agent in overview["agents"]))
 

@@ -88,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
     report_approve.add_argument(
         "--pause-after",
         action="append",
-        choices=["analysis", "storyline", "report", "format"],
+        choices=["analysis", "storyline", "report", "format", "qa_preparation"],
         default=[],
         help="Worker pause point for --run-mode custom; repeat as needed.",
     )
@@ -103,11 +103,9 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[
             "format:ppt",
             "format:html",
-            "qa_preparation",
-            "speaker_script",
             "skip",
         ],
-        help="Delivery-options gate selection after document completion.",
+        help="Delivery-options gate selection after the default worker chain.",
     )
     _add_spawn_adapter_option(report_approve)
 
@@ -174,7 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--out", help="Optional output directory.")
     run.add_argument("--provider", help="Override LLM provider (mock/cli/codex/inline).")
 
-    pipe = sub.add_parser("pipeline", help="Run the four-stage v0.3 debug pipeline.")
+    pipe = sub.add_parser("pipeline", help="Run the five-stage v0.3 debug pipeline.")
     pipe.add_argument("--input", required=True, help="Initial raw brief JSON path.")
     pipe.add_argument("--out", help="Optional output directory.")
     pipe.add_argument("--auto", action="store_true", help="Run all stages back to back.")

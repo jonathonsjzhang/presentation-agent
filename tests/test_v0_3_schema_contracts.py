@@ -120,18 +120,25 @@ class V03SchemaContractTests(unittest.TestCase):
         self.assertEqual(profile["activation"], "default_user_entry")
         self.assertEqual(
             profile["canonical_stages"],
-            ["analysis", "storyline", "report", "format"],
+            ["analysis", "storyline", "report", "format", "qa_preparation"],
         )
         self.assertEqual(profile["default_delivery_targets"], ["document"])
         self.assertEqual(profile["internal_subagents"], ["evidence_harvester"])
 
         workers = {worker["id"]: worker for worker in profile["workers"]}
-        self.assertEqual(set(workers), {"analysis", "storyline", "report", "format"})
+        self.assertEqual(
+            set(workers),
+            {"analysis", "storyline", "report", "format", "qa_preparation"},
+        )
         self.assertEqual(workers["analysis"]["input_schema"], "report_charter.v2")
         self.assertEqual(workers["analysis"]["output_schema"], "analysis.v1")
         self.assertEqual(workers["storyline"]["input_schema"], "analysis.v1")
         self.assertEqual(workers["report"]["input_schema"], "storyline.v3")
         self.assertEqual(workers["format"]["input_schema"], "report.v1")
+        self.assertEqual(
+            workers["qa_preparation"]["input_schema"],
+            "formatted_material.v2",
+        )
         frozen_schemas = {contract["schema"] for contract in self.manifest["contracts"]}
         for worker in workers.values():
             self.assertIn(worker["input_schema"], frozen_schemas)
@@ -166,7 +173,6 @@ class V03SchemaContractTests(unittest.TestCase):
                 "report",
                 "format",
                 "qa_preparation",
-                "speaker_script",
             },
         )
         self.assertIn("raw_materials", context_workers["storyline"]["excluded_fields"])
@@ -210,7 +216,10 @@ class V03SchemaContractTests(unittest.TestCase):
 
     def test_fixture_manifest_provides_each_worker_an_independent_input(self) -> None:
         worker_inputs = self.manifest["worker_inputs"]
-        self.assertEqual(set(worker_inputs), {"analysis", "storyline", "report", "format"})
+        self.assertEqual(
+            set(worker_inputs),
+            {"analysis", "storyline", "report", "format", "qa_preparation"},
+        )
         for worker, input_spec in worker_inputs.items():
             with self.subTest(worker=worker):
                 referenced = [

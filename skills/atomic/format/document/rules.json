@@ -56,14 +56,6 @@
       "level": "P1",
       "property": "format_fit",
       "instruction": "问题和证据引用按章节定位，并利用文档中的方法、来源和附录细节回答复核型问题。"
-    },
-    {
-      "id": "FMT-DOC-SS-G01",
-      "applies_to": ["speaker_script"],
-      "phase": ["generation", "review"],
-      "level": "P0",
-      "property": "delivery_granularity",
-      "instruction": "按 Executive Summary 和关键章节讲，不逐段朗读文档；细节提醒听众会后查阅。"
     }
   ]
 }

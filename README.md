@@ -4,7 +4,7 @@
 
 ## 一、系统总框架
 
-- **Manager + 4 核心 Worker**：Manager 直接面向用户，负责任务定义、计划、派发、验收和返工；四个 Worker 模拟人类分析师从“把材料想明白”到“把观点讲清楚并做成交付物”的工作流：Analysis 发现、验证并收敛观点，Storyline 选择主线并组织论证，Report 完成正式写作，Format 完成载体化表达。
+- **Manager + 5 默认 Worker**：Manager 直接面向用户，负责任务定义、计划、派发、验收和返工；五个 Worker 模拟人类分析师从“把材料想明白”到“把观点讲清楚、做成交付物并准备答辩”的工作流：Analysis 发现、验证并收敛观点，Storyline 选择主线并组织论证，Report 完成正式写作，Format 完成载体化表达，Q&A 梳理高影响追问与回答边界。
 - **自演进闭环**：每个 Agent 由可编辑 skill 定义工作方式，由 loop 执行、review 拦截、state/memory 持续学习，并通过 Web Cockpit 可视化管理整个 harness。
 - **覆盖场景**：支持董事会、总办、战略负责人、业务团队、外部等不同汇报对象，覆盖专题深度分析、业务进展汇报与信息快速同步三种汇报性质，可产出文档、PPT 或 HTML 三种材料格式。
 
@@ -22,12 +22,12 @@
 
 #### v0.3（2026-07-02）
 
-- **四阶段文档优先主链**：`analysis → storyline → report → format`。
+- **五阶段默认主链**：`analysis → storyline → report → format → qa_preparation`。
 - **Evidence 内部化**：由 Analysis 按确定性三路径调用，不再占用顶层 execution plan。
 - **完整 Markdown 原稿层**：Report 基于已批准 Storyline 写出 canonical `report.md`；Worker 只提交 `report_markdown`。
 - **三载体格式化**：Format Worker 只选择必要视觉；runtime 在不重写、不删减、不调序原稿的前提下排版为 DOCX、PPT 或 HTML。
 - **单一活动契约**：v0.3 是唯一运行 profile，run state 会校验契约版本，避免错误恢复。
-- **扩展 gate**：QA list 与逐字稿移至核心材料完成之后。
+- **收尾扩展 gate**：逐字稿 worker 已移除；PPT/HTML 作为载体扩展，在默认五阶段完成后按需追加。
 
 #### v0.2（2026-06-30）
 
@@ -63,8 +63,7 @@
 | Worker | Storyline（故事线设计） | 面向汇报目标和受众，从 Analysis 的观点中选择核心主张，取舍信息并组织成一条递进、可说服的论证链；负责把观点讲成故事，但不重新分析材料或撰写完整正文 | `storyline.v3` |
 | Worker | Report（正式写作） | 基于已批准 Storyline，把论证骨架写成一篇完整、有开头、有推进、有收束、可以从头读到尾的 Markdown 报告 | `report.v1`、`report.md` |
 | Worker | Format（载体化表达） | 以 `report.md` 为内容真相源，只改变标题层级、字体、间距、分页、图表、表格和载体实现，不重写或删减报告 | `formatted_material.v2`、DOCX/PPTX/HTML |
-| 可选扩展 | Q&A 梳理 | 核心材料完成后，按需预判追问与回答策略 | Q&A pack |
-| 可选扩展 | 逐字稿 | 核心材料完成后，按需生成汇报话术和时间节奏 | Speaker script |
+| Worker | Q&A 梳理 | 基于正式材料和汇报对象，默认预判追问、挑战角度、回答策略和需要汇报人补充的信息 | `qa_pack.v1` |
 
 每个 Agent 在配置里声明：
 
@@ -76,7 +75,7 @@
 - review policy；
 - harness 状态与可选能力，如 multi-candidate。
 
-v0.3 的核心依赖固定为 `analysis → storyline → report → format`。Manager 可以派发返工，但不能把 Evidence、QA 或逐字稿插入默认主链；QA 与逐字稿只能在 Format 完成后的扩展 gate 中选择。
+v0.3 的默认依赖固定为 `analysis → storyline → report → format → qa_preparation`。Manager 可以派发返工，但不能把 Evidence 插入顶层主链；Evidence 只作为 Analysis 的内部子任务运行。逐字稿 worker 已删除，不再出现在默认链路、扩展 gate 或 task packet 枚举中。
 
 ## 四、双层 Loop
 
@@ -101,7 +100,7 @@ Runtime 是 loop 的运行骨架，主要由以下文件实现：
 
 - `presentation_agent/loop.py`：`LoopRunner`，一次性跑单个 Agent 的完整 maker-checker loop。
 - `presentation_agent/manager.py`：`ManagerAgentRuntime`、`ManagerOrchestrator`、`WorkerExecutor`，组成控制面和动态调度状态机。
-- `presentation_agent/pipeline.py`：四阶段固定顺序的调试入口；用户交付默认走 Manager。
+- `presentation_agent/pipeline.py`：五阶段固定顺序的调试入口；用户交付默认走 Manager。
 - `presentation_agent/step.py`：`StepRunner` / `PipelineStepper`，支持宿主模型自执行的单步模式。
 - `presentation_agent/launch.py`：统一启动入口，负责把自然输入或 brief 标准化后交给 pipeline。
 
@@ -571,7 +570,7 @@ memory / runs / artifacts / 用户配置
 ├── repo/                           # 官方 GitHub 仓库 clone
 │   ├── presentation_agent/         # Python harness
 │   ├── configs/                    # Agent 定义与状态策略
-│   ├── skills/                     # Manager + core workers + optional Evidence Harvester
+│   ├── skills/                     # Manager + core workers + internal Evidence Harvester
 │   ├── templates/                  # 各平台 host adapter 模板
 │   └── docs/                       # 用户指南与设计文档
 └── workspaces/

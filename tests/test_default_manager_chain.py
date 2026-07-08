@@ -13,12 +13,13 @@ from presentation_agent.step import StepRunner
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "v0_3"
-STAGES = ("analysis", "storyline", "report", "format")
+STAGES = ("analysis", "storyline", "report", "format", "qa_preparation")
 ARTIFACTS = {
     "analysis": "analysis.v1.valid.json",
     "storyline": "storyline.v3.valid.json",
     "report": "report.v1.valid.json",
     "format": "formatted_material.v2.valid.json",
+    "qa_preparation": "qa_pack.v1.valid.json",
 }
 
 
@@ -53,7 +54,7 @@ class DefaultManagerChainTests(unittest.TestCase):
             packet["delivery_target"] = "document"
         return packet
 
-    def test_manager_reaches_format_and_document_delivery_gate(self) -> None:
+    def test_manager_reaches_qa_and_delivery_gate(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)
             run_dir = temp / "run"
@@ -143,7 +144,7 @@ class DefaultManagerChainTests(unittest.TestCase):
                 decision = {
                     "schema": "manager_decision.v1",
                     "phase": "acceptance",
-                    "action": "complete" if agent_id == "format" else "dispatch",
+                    "action": "complete" if agent_id == "qa_preparation" else "dispatch",
                     "reason_summary": f"accept {agent_id}",
                     "acceptance_report": {
                         "task_id": f"t{index + 1}",

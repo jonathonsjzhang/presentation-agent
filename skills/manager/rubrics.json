@@ -4,8 +4,8 @@
       "id": "MGR03-P0-001",
       "severity": "P0",
       "dimension": "主链",
-      "check": "初始计划是否严格为 analysis → storyline → report → format。",
-      "fix": "恢复固定四阶段。Evidence Harvester 可作为 analysis 的前置条件运行，但不放入主链任务列表。"
+      "check": "初始计划是否严格为 analysis → storyline → report → format → qa_preparation。",
+      "fix": "恢复固定五阶段。Evidence Harvester 可作为 analysis 的前置条件运行，但不放入主链任务列表。"
     },
     {
       "id": "MGR03-P0-002",
@@ -74,7 +74,7 @@
       "id": "MGR03-P0-007",
       "severity": "P0",
       "dimension": "管线完整",
-      "check": "是否严格按 analysis → storyline → report → format 顺序执行，未跳过任何阶段。最终产物（DOCX/PPT/HTML）是否只由 Format worker 产出，不存在管线外生成的最终材料。",
+      "check": "是否严格按 analysis → storyline → report → format → qa_preparation 顺序执行，未跳过任何阶段。最终产物（DOCX/PPT/HTML）是否只由 Format worker 产出，Q&A 是否只由 QA worker 产出，不存在管线外生成的最终材料。",
       "fix": "拒绝接受非管线产物。遇到阻塞时通过 revise 或 ask_human 解决，不得绕过管线。"
     }
   ]

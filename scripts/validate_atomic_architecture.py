@@ -19,10 +19,12 @@ def main() -> None:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     config = read_json(root / "configs" / "capabilities.json")
     agents_config = read_json(root / "configs" / "agents.json")
-    active = set(agents_config["pipeline"]["stages"])
+    profile_id = str(agents_config.get("active_contract_profile") or "v0_3")
+    profile = agents_config["contract_profiles"][profile_id]
+    active = set(profile["canonical_stages"])
     specs = [
         AgentSpec.from_dict(row)
-        for row in agents_config["agents"]
+        for row in profile["workers"]
         if row["id"] in active
     ]
 
@@ -89,12 +91,20 @@ def main() -> None:
         for key, value in render_results.items()
         if value["status"] != "rendered"
     }
+    expected_bundle_count = (
+        len(specs)
+        * len(config["dimensions"]["audience"])
+        * len(config["dimensions"]["report_type"])
+        * len(config["dimensions"]["output_format"])
+    )
     report = {
         "bundle_count": len(compiled),
-        "expected_bundle_count": 270,
+        "expected_bundle_count": expected_bundle_count,
         "bundle_failures": failures,
         "render_results": render_results,
-        "passed": len(compiled) == 270 and not failures and not render_failures,
+        "passed": len(compiled) == expected_bundle_count
+        and not failures
+        and not render_failures,
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))
     if not report["passed"]:

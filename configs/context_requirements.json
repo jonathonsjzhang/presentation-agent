@@ -58,13 +58,6 @@
             "render_result"
           ],
           "output_schema": "qa_pack.v1"
-        },
-        "speaker_script": {
-          "required_fields": [
-            "delivery_target",
-            "visuals"
-          ],
-          "output_schema": "speaker_script.v1"
         }
       }
     }

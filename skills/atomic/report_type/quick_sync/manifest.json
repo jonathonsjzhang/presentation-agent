@@ -2,7 +2,7 @@
   "id": "report.quick_sync",
   "kind": "report_type",
   "select_when": {"report_type": "quick_sync"},
-  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation", "speaker_script"],
+  "applies_to": ["analysis", "storyline", "report", "format", "qa_preparation"],
   "owns": ["sync_scope", "compression"],
   "incompatible_with": [],
   "prompt_budget_tokens": 220
