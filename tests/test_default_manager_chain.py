@@ -62,7 +62,7 @@ class DefaultManagerChainTests(unittest.TestCase):
             charter = read_json(FIXTURES / "report_charter.v2.valid.json")
             write_json(brief_path, charter)
 
-            plan = {
+            manager_provided_plan = {
                 "plan_id": "default-chain",
                 "tasks": [
                     {
@@ -96,15 +96,33 @@ class DefaultManagerChainTests(unittest.TestCase):
                     "action": "dispatch",
                     "reason_summary": "canonical plan",
                     "report_charter": charter,
-                    "execution_plan": plan,
+                    # Legacy/over-eager Manager output must be ignored: the
+                    # fixed chain belongs to runtime.
+                    "execution_plan": manager_provided_plan,
                     "task_packet": self._packet(
                         0, manager.raw_brief_path, charter
                     ),
                     "user_message": "plan ready",
                 },
             )
-            manager.commit_manager()
-            dispatched = manager.approve()
+            dispatched = manager.commit_manager()
+            state_after_planning = manager.status()["state"]
+            self.assertEqual(dispatched["actor"], "worker")
+            self.assertEqual(dispatched["task"]["agent_id"], "analysis")
+            self.assertIsNone(state_after_planning["human_gate"])
+            self.assertEqual(state_after_planning["current_actor"], "worker")
+            self.assertEqual(
+                state_after_planning["execution_plan"]["plan_id"],
+                "runtime-canonical-chain",
+            )
+            self.assertEqual(
+                state_after_planning["execution_plan"]["human_gates"],
+                ["delivery_options"],
+            )
+            self.assertEqual(
+                len(state_after_planning["execution_plan"]["tasks"]),
+                len(STAGES),
+            )
 
             for index, agent_id in enumerate(STAGES):
                 task_dir = Path(dispatched["task"]["task_dir"])
@@ -133,12 +151,14 @@ class DefaultManagerChainTests(unittest.TestCase):
                     contract_profile="v0_3",
                 )
                 if agent_id == "format":
+                    rendered_path = task_dir / "report_formatted.docx"
+                    rendered_path.write_bytes(b"docx")
                     result = RenderResult(
                         status="rendered",
                         fmt="document",
                         fidelity="formatted",
-                        output_path=str(task_dir / "report_formatted.docx"),
-                        file_bytes=1,
+                        output_path=str(rendered_path),
+                        file_bytes=rendered_path.stat().st_size,
                         unit_count=2,
                     )
                     with patch(
@@ -154,13 +174,21 @@ class DefaultManagerChainTests(unittest.TestCase):
                     worker_result["status"], "pending_human_review"
                 )
                 acceptance = manager.record_worker_completed(worker_result)
+                if agent_id == "format":
+                    # Legacy stuck runs did not persist these top-level fields;
+                    # recovery must fall back to artifact.render_result.
+                    legacy_state = manager.status()["state"]
+                    legacy_state["worker_result"].pop("render_result", None)
+                    legacy_state["worker_result"].pop("rendered_files", None)
+                    legacy_state["current_task"].pop("render_result", None)
+                    legacy_state["current_task"].pop("rendered_files", None)
+                    manager._save_state(legacy_state)
                 decision = {
                     "schema": "manager_decision.v1",
                     "phase": "acceptance",
                     "action": "complete" if agent_id == "format" else "dispatch",
                     "reason_summary": f"accept {agent_id}",
                     "acceptance_report": {
-                        "task_id": f"t{index + 1}",
                         "verdict": "accept",
                         "criteria_results": [],
                         "cross_stage_findings": [],
@@ -174,19 +202,32 @@ class DefaultManagerChainTests(unittest.TestCase):
                         Path(worker_result["artifact_path"]),
                         charter,
                     )
+                elif agent_id == "format":
+                    # Reproduces a stale bookkeeping value left by an earlier
+                    # Storyline feedback/revise cycle. Runtime owns this ID and
+                    # must bind acceptance to the current Format task.
+                    decision["acceptance_report"]["task_id"] = "stale-storyline-task"
                 write_json(Path(acceptance["output_path"]), decision)
                 dispatched = manager.commit_manager()
 
             state = manager.status()["state"]
             self.assertEqual(state["human_gate"], "delivery_options")
+            self.assertEqual(dispatched["rendered_files"], [str(rendered_path)])
+            self.assertEqual(
+                state["last_manager_decision"]["acceptance_report"]["task_id"],
+                "t5",
+            )
+            self.assertEqual(
+                state["last_manager_decision"]["runtime_normalizations"][0]["submitted"],
+                "stale-storyline-task",
+            )
             self.assertEqual(
                 [item["agent_id"] for item in state["accepted_artifacts"]],
                 list(STAGES),
             )
-            self.assertEqual(
-                manager.approve(delivery_option="skip")["status"],
-                "completed",
-            )
+            completed = manager.approve(delivery_option="skip")
+            self.assertEqual(completed["status"], "completed")
+            self.assertEqual(completed["rendered_files"], [str(rendered_path)])
 
     def test_planning_without_materials_asks_human_instead_of_dispatching(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

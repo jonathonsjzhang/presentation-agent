@@ -5,13 +5,17 @@ from pathlib import Path
 
 from presentation_agent.capabilities.models import CapabilityError
 from presentation_agent.capabilities.profile import normalize_report_profile
-from presentation_agent.launch import BriefError, normalize_brief
+from presentation_agent.launch import BriefError, launch_report, normalize_brief
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReportProfileTests(unittest.TestCase):
+    def test_host_launch_requires_worker_spawn_adapter(self) -> None:
+        with self.assertRaisesRegex(BriefError, "显式选择 spawn_adapter"):
+            launch_report({"topic": "AI 产品"}, root=ROOT)
+
     def test_canonical_profile(self) -> None:
         profile = normalize_report_profile(
             {
@@ -80,6 +84,22 @@ class ReportProfileTests(unittest.TestCase):
         self.assertEqual(brief["report_length"], "3页")
         self.assertEqual(brief["output_format"], "document")
         self.assertEqual(brief["delivery_targets"], ["document"])
+        self.assertEqual(brief["research_purpose"], "")
+        self.assertEqual(brief["research_direction"], "")
+
+    def test_raw_brief_does_not_prefill_research_fields_from_decision_fields(self) -> None:
+        brief = normalize_brief(
+            {
+                "topic": "AI 产品",
+                "decision_goal": "确定投入优先级",
+                "expected_action": "形成资源配置结论",
+            },
+            ROOT,
+        )
+        self.assertEqual(brief["research_purpose"], "")
+        self.assertEqual(brief["research_direction"], "")
+        self.assertEqual(brief["decision_goal"], "确定投入优先级")
+        self.assertEqual(brief["expected_action"], "形成资源配置结论")
 
     def test_raw_brief_presets_ppt_length_and_defers_delivery(self) -> None:
         brief = normalize_brief(

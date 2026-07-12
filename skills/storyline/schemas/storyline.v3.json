@@ -13,10 +13,23 @@
       "items": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["heading", "brief", "finding_refs"],
+        "required": ["chapter", "heading", "brief", "finding_refs"],
         "properties": {
-          "heading": {"type": "string", "minLength": 1},
-          "brief": {"type": "string", "minLength": 1},
+          "chapter": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Concise chapter/section name used to identify the topic, not the conclusion."
+          },
+          "heading": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The section leadline: a conclusion-led title that states the judgement established by this section."
+          },
+          "brief": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The core argument explaining how the section establishes its leadline."
+          },
           "finding_refs": {
             "type": "array",
             "minItems": 1,

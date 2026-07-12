@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import io
 import json
 import shutil
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 from presentation_agent.agent_profiles import load_agent_profile
@@ -38,9 +40,17 @@ def write_json_file(path: Path, data: dict) -> None:
 class AgentProfileLoaderTests(unittest.TestCase):
     def test_user_facing_report_start_defaults_to_v03(self) -> None:
         args = build_parser().parse_args(
-            ["report", "start", "--brief-file", "brief.json"]
+            [
+                "report",
+                "start",
+                "--brief-file",
+                "brief.json",
+                "--spawn-adapter",
+                "codex",
+            ]
         )
         self.assertEqual(args.contract_profile, "v0_3")
+        self.assertEqual(args.spawn_adapter, "codex")
         approve = build_parser().parse_args(
             [
                 "report",
@@ -89,6 +99,12 @@ class AgentProfileLoaderTests(unittest.TestCase):
             ]
         )
         self.assertTrue(submit.spawn_completed)
+
+    def test_user_facing_report_start_requires_worker_spawn_adapter(self) -> None:
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            build_parser().parse_args(
+                ["report", "start", "--brief-file", "brief.json"]
+            )
 
     def test_worker_spawn_is_exposed_consistently_at_cli_top_level(self) -> None:
         instruction = {
@@ -155,10 +171,10 @@ class AgentProfileLoaderTests(unittest.TestCase):
             positions = [confirmation.index(item) for item in expected_order]
             self.assertEqual(positions, sorted(positions))
             self.assertIn("研究目的", confirmation)
-            self.assertIn("研究方向 / 论点 hypo", confirmation)
+            self.assertIn("当前研究 hypo", confirmation)
             question_headers = [item["header"] for item in prepared["questions"]]
             self.assertIn("研究目的", question_headers)
-            self.assertIn("研究方向", question_headers)
+            self.assertIn("研究hypo", question_headers)
             self.assertIn("高可信论据", question_headers)
             self.assertNotIn("Review模式", question_headers)
             self.assertNotIn("运行模式", question_headers)
@@ -174,7 +190,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertEqual(approved_state["review_mode"], "schema_only")
             self.assertFalse(approved_state["review_subagents_enabled"])
 
-    def test_brief_gate_exposes_evidence_confidence_selection(self) -> None:
+    def test_brief_gate_exposes_evidence_confidence_text_input(self) -> None:
         brief = normalize_brief(
             {
                 "topic": "AI 产品",
@@ -206,9 +222,11 @@ class AgentProfileLoaderTests(unittest.TestCase):
             for question in prepared["questions"]
             if question["header"] == "高可信论据"
         )
-        self.assertTrue(evidence_question["multiSelect"])
+        self.assertFalse(evidence_question["multiSelect"])
+        self.assertEqual(evidence_question["inputType"], "text")
+        self.assertEqual(evidence_question["options"], [])
         self.assertEqual(
-            evidence_question["options"][0]["label"],
+            prepared["evidence_options"][0]["label"],
             "保存成果用户的回访率更高",
         )
         self.assertIn("保存成果组 D7 回访率", prepared["present_to_user"])
@@ -768,6 +786,15 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertIn("Storyline 确认", gate["present_to_user"])
             self.assertIn("核心答案", gate["present_to_user"])
             self.assertIn("故事线", gate["present_to_user"])
+            self.assertIn(
+                "| 序号 | 章节 | 标题（Leadline） | 核心论证 |",
+                gate["present_to_user"],
+            )
+            self.assertIn("行为差异与证据边界", gate["present_to_user"])
+            self.assertIn(
+                "成果保存与回访共同出现，但因果仍待验证",
+                gate["present_to_user"],
+            )
             values = [option["value"] for option in gate["questions"][0]["options"]]
             self.assertEqual(values, ["approve", "rewrite", "custom"])
 
@@ -1102,7 +1129,8 @@ class AgentProfileLoaderTests(unittest.TestCase):
                     ROOT, run_dir, contract_profile="v0_3"
                 ).initialize_run(brief_path)
                 self.assertEqual(prepared["gate"], "brief")
-                self.assertEqual(prepared["missing_fields"], [])
+                self.assertIn("研究目的", prepared["missing_fields"])
+                self.assertIn("当前研究 hypo", prepared["missing_fields"])
                 self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
                 self.assertIn(
                     "analysis（分析） → storyline（故事线） → report（报告产出） → qa_preparation（追问清单） → format（可视化排版）",

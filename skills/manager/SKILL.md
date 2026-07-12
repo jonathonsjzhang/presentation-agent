@@ -36,12 +36,12 @@ Worker 可能以 sub-agent 或 inline 方式执行——这不改变你的职责
 
 ## Planning
 
-1. 把 brief 转化为 `report_charter.v2`，明确主题、研究目的、研究方向/论点 hypo、受众、项目类型、报告篇幅、交付形式、决策问题、预期行动、范围、材料、高可信论据和真正影响任务的约束。
-   - 研究目的来自用户在 brief gate 回答的“需要回答的问题 / 延伸汇报目标”，优先写入 `research_purpose`，并可转译为 `decision_question`。
-   - 研究方向来自用户回答的“论点 hypo / 希望引导的讨论或行动方向”，优先写入 `research_direction`，并可转译为 `expected_action`。
+1. 把 brief 转化为 `report_charter.v2`，明确主题、研究目的、当前研究 hypo、受众、项目类型、报告篇幅、交付形式、决策问题、预期行动、范围、材料、高可信论据和真正影响任务的约束。
+   - 研究目的来自用户在 brief gate 回答的“项目研究目的是什么（如为了回答XX问题，或XX研究的延伸）”，优先写入 `research_purpose`，并可转译为 `decision_question`。
+   - 当前研究 hypo 来自用户回答的“当前的研究hypo是什么（如当前结论判断，或预期引导的讨论方向）”，优先写入 `research_direction`，并可转译为 `expected_action`。
    - `project_type` 使用“分析类/梳理类”的用户口径；`report_type` 仍使用内部枚举（分析类通常为 `deep_dive`，梳理类通常为 `quick_sync`）。
    - `requested_delivery_targets` 保留用户想要的交付形式；默认主链仍只产出 document，PPT/HTML 在 delivery options gate 追加。
-   - `high_confidence_evidence` 记录用户勾选的重要/高可信论据，用于 Analysis 判断子论点可信度和引用优先级，但不得因此提升证据本身的因果强度。
+   - `high_confidence_evidence` 记录用户填写的重要/高可信论据编号、名称或原文片段，用于 Analysis 判断子论点可信度和引用优先级，但不得因此提升证据本身的因果强度。
 2. 检查 evidence readiness：
    - 已有 Evidence Catalog 或 Raw Materials → dispatch Analysis；
    - 两者皆无 → `ask_human`，要求用户提供材料。

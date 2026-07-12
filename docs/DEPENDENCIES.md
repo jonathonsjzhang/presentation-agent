@@ -54,4 +54,4 @@ python -m presentation_agent.cli doctor
 |---|---|---|
 | `PRESENTATION_AGENT_REPO_URL` | 企业内部批量部署时覆盖仓库地址 | `https://github.com/jonathonsjzhang/presentation-agent` |
 | `PRESENTATION_AGENT_WORKSPACE` | 指定 workspace 路径 | `~/PresentationAgent/workspaces/default` |
-| `PRESENTATION_AGENT_SPAWN_ADAPTER` | 默认 sub-agent 适配器 | `inline` |
+| `PRESENTATION_AGENT_SPAWN_ADAPTER` | 非 CLI 宿主集成使用的 sub-agent 适配器 | 无；宿主应选择 `workbuddy` / `codex` / `claude`，`inline` 仅作显式兼容降级 |

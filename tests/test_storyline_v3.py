@@ -47,10 +47,11 @@ class StorylineV3Tests(unittest.TestCase):
         self.assertTrue(self.storyline["sections"])
         self.assertTrue(
             all(
-                set(section) >= {"heading", "brief", "finding_refs"}
+                set(section) >= {"chapter", "heading", "brief", "finding_refs"}
                 for section in self.storyline["sections"]
             )
         )
+        self.assertTrue(all(section["chapter"] for section in self.storyline["sections"]))
         self.assertNotIn("pages", self.storyline_schema["properties"])
         self.assertNotIn("message_pyramid", self.storyline_schema["properties"])
         self.assertNotIn("report_outline", self.storyline_schema["properties"])

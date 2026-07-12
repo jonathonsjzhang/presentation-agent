@@ -21,7 +21,10 @@ description: >-
 - 只通过高层 CLI 调度：`doctor`、`init-workspace`、`report start/next/submit/approve/status`
 - 宿主不替 Manager 决定阶段顺序，不绕过 harness 自己写最终材料
 - `actor=human` 时把 `present_to_user` 展示给用户；brief gate 尤其要把 brief 摘要先发出来，再等待确认
-- 默认不启用 sub-agent；只有用户明确要求并行、隔离执行或严格审查时，才选择对应 adapter / independent review
+- Brief 确认后的 planning `dispatch` 由 runtime 自动派发 Analysis，不向用户展示或确认固定 execution plan；只有 Manager `ask_human` 时才再次停下
+- Worker 默认使用当前宿主的原生 sub-agent，以独立上下文执行；宿主自动选择对应 adapter，不向用户询问技术执行方式
+- Reviewer sub-agent 默认关闭；只有用户明确要求严格审查、调试质量问题或独立复核时，才使用 `review_mode=independent`
+- `inline` 仅用于宿主确实无法派生 sub-agent 的兼容降级；不得静默降级，必须向用户说明 Worker 将失去上下文隔离
 - 有 `spawn.detail` 时按 detail 派真实 sub-agent；不要为了省事在主对话代写 worker/reviewer 输出
 - 写入 `output_path` 时只写一个合法 JSON 对象，不加 Markdown 前后文
 - 不在命令中放 token、API key，也不执行会删除、reset 或覆盖 workspace 的命令
@@ -90,15 +93,15 @@ python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces
 
 ## 2. 发起汇报
 
-用户提出汇报需求时，只做输入归集，不在宿主层替 Manager 完成任务定位。只要有可启动的需求线索，就先启动 Manager，让 Manager 在 brief gate 里补问研究目的、研究方向和高可信论据。
+用户提出汇报需求时，只做输入归集，不在宿主层替 Manager 完成任务定位。只要有可启动的需求线索，就先启动 Manager，让 Manager 在 brief gate 里补问研究目的、当前研究 hypo 和高可信论据。
 
 最小 brief 只需要能表达用户想做什么；其余字段可留空，由 brief gate 汇总默认值并让用户确认：
 
 | 字段 | 建议 | 说明 |
 |---|---|---|
 | `topic` | 可空 | 报告主题；可由 Manager 根据输入信息和论据总结 |
-| `research_purpose` / `decision_goal` | 可空 | 研究目的；brief gate 会主动问“项目的研究目的是什么” |
-| `research_direction` / `expected_action` / `hypothesis` | 可空 | 论点 hypo 或希望引导的讨论/行动方向；brief gate 会主动问 |
+| `research_purpose` / `decision_goal` | 可空 | `research_purpose` 仅在用户明确提供时填写；brief gate 会主动问“项目研究目的是什么（如为了回答XX问题，或XX研究的延伸）” |
+| `research_direction` / `expected_action` / `hypothesis` | 可空 | `research_direction` 仅在用户明确提供研究 hypo 时填写；brief gate 会主动问“当前的研究hypo是什么（如当前结论判断，或预期引导的讨论方向）” |
 | `audience` | 可空 | 默认总办（`exec_office`） |
 | `project_type` | 可空 | 默认“分析类”；可填“分析类/梳理类” |
 | `delivery_targets` / `output_format` | 可空 | 默认文档；如用户要 PPT，则 brief 预设篇幅为 10 页 PPT |
@@ -113,14 +116,16 @@ python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces
 ~/PresentationAgent/workspaces/default/artifacts/briefs/<slug>.json
 ```
 
-默认不启用 sub-agent，使用 `inline`。只有用户明确提出要并行、隔离执行、使用 WorkBuddy/Codex/Claude 子任务，或正在调试 sub-agent 调度时，才选择对应 adapter：
+Worker 默认启用独立 sub-agent。宿主应根据自身运行环境自动选择原生 adapter，不要询问用户选择哪种 adapter：
 
 | 当前宿主 | `--spawn-adapter` |
 |---|---|
-| 默认 / 常规运行 | `inline` |
-| 明确使用 WorkBuddy sub-agent | `workbuddy` |
-| 明确使用 Codex sub-agent | `codex` |
-| 明确使用 Claude Code sub-agent | `claude` |
+| WorkBuddy | `workbuddy` |
+| Codex | `codex` |
+| Claude Code | `claude` |
+| 不支持 sub-agent 的宿主 | `inline`（仅兼容降级，需明确告知用户） |
+
+这里的 Worker sub-agent 与 Reviewer sub-agent 是两项独立策略：Worker 隔离默认开启；Reviewer 默认关闭，仍使用 brief gate 的 `review_mode=schema_only`。只有用户明确要求严格审查、调试质量问题或独立复核时，才切换为 `review_mode=independent`。
 
 启动：
 
@@ -131,10 +136,12 @@ python -m presentation_agent.cli \
   report start \
   --brief-file "<brief_file>" \
   --contract-profile "v0_3" \
-  --spawn-adapter "inline"
+  --spawn-adapter "<workbuddy|codex|claude>"
 ```
 
-第一轮通常会进入 brief human gate。先把 CLI 返回的 `instruction.present_to_user` 原样展示给用户，它里面应按顺序包含研究目的、研究方向、论据列表、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”；不要只说“请确认 brief”。如果返回的 `instruction.questions` 存在，宿主应按 WorkBuddy/AskUserQuestion 风格发起结构化提问：两个文本题分别收集研究目的和研究方向，一个多选题让用户勾选高可信论据。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。用户回答、修改或补充后用 `report feedback --text '<用户原话或结构化答案摘要>'` 回传；用户确认继续后再 approve。若 `present_to_user` 缺少 brief 摘要，先执行 `report status --run "<run_id>"` 检查状态，仍缺失时把 `raw_brief.json` 的主要内容整理给用户看，再请用户确认。
+尖括号内容不是字面值：宿主必须替换成上表中与自身对应的 adapter。若当前宿主无法使用 sub-agent，应先向用户说明无法保证 Worker 上下文隔离，再显式传入 `--spawn-adapter "inline"`；不要在失败后静默改用主对话代写。
+
+第一轮通常会进入 brief human gate。必须先把 CLI 返回的 `instruction.present_to_user` 原样展示给用户，它里面应按顺序包含研究目的、当前研究 hypo、论据列表、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”；不要只发结构化问题，也不要只说“请确认 brief”。如果返回的 `instruction.questions` 存在，宿主应在展示完 Brief 后按 WorkBuddy/AskUserQuestion 风格发起结构化提问：两个文本题分别收集“项目研究目的是什么（如为了回答XX问题，或XX研究的延伸）”和“当前的研究hypo是什么（如当前结论判断，或预期引导的讨论方向）”，一个文本填空题让用户填写高可信论据编号、名称或原文片段。高可信论据不要做成多选题，也不要把 evidence list 截断成少量可选项。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。用户回答、修改或补充后用 `report feedback --text '<用户原话或结构化答案摘要>'` 回传；用户确认继续后再 approve。若 `present_to_user` 缺少 brief 摘要，先执行 `report status --run "<run_id>"` 检查状态，仍缺失时把 `raw_brief.json` 的主要内容整理给用户看，再请用户确认。
 
 ## 3. 推进 report loop
 
@@ -150,10 +157,10 @@ python -m presentation_agent.cli \
 
 ### actor=human
 
-展示 `present_to_user`，等待用户决定。brief gate 时要先展示 brief 摘要；若 `questions` 存在，优先用结构化提问收集研究目的、研究方向和高可信论据，再问是否继续。不要询问 worker 选择或 review sub_agent 选择，不要把确认问题和 brief 内容拆开。
+展示 `present_to_user`，等待用户决定。brief gate 时必须先展示 brief 摘要；若 `questions` 存在，展示后再用结构化提问收集研究目的、当前研究 hypo 和高可信论据填空，再问是否继续。不要询问 worker 选择或 review sub_agent 选择，不要把确认问题和 brief 内容拆开。
 
 - 用户确认继续：`report approve`
-- 用户回答研究目的/研究方向、勾选高可信论据，或要求修改补充信息：`report feedback --text '<用户原话或结构化答案摘要>'`
+- 用户回答研究目的/当前研究 hypo、填写高可信论据，或要求修改补充信息：`report feedback --text '<用户原话或结构化答案摘要>'`
 - brief gate 默认 approve 不传 `--run-mode`，runtime 会在 analysis、storyline 后暂停确认；用户明确要求逐步看结果时才传 `--run-mode step_by_step`
 - brief 阶段不要主动询问 review sub_agent；只有用户明确要求严格质量审查、调试质量问题或最终验收时，才使用 `--review-mode independent`
 

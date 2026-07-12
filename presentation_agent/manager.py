@@ -158,7 +158,7 @@ class ManagerAgentRuntime:
             "- 首个 task_packet 派发 analysis，只写目标、输入引用和必要返工意见。",
             "- evidence_harvester 是 Analysis 的内部子任务。",
             "- 如 material_inventory 中无任何素材 → 使用 ask_human，不要 dispatch。",
-            "- high_confidence_evidence 表示用户勾选的重要/高可信论据，只影响分析优先级，不提升证据因果强度。",
+            "- high_confidence_evidence 表示用户填写的重要/高可信论据，只影响分析优先级，不提升证据因果强度。",
             "- PPT、HTML 只允许在默认五阶段完成后的 delivery options gate 追加。",
             "",
             "### acceptance_report（acceptance 阶段）",
@@ -249,9 +249,45 @@ class ManagerAgentRuntime:
             raise StepError("Manager decision 校验失败:\n- " + "\n- ".join(errors))
         decision["phase"] = phase
         decision["schema"] = "manager_decision.v1"
+        if phase == "acceptance":
+            # task_id is runtime bookkeeping, not a judgement the Manager model
+            # should have to reproduce. Always bind acceptance to the task that
+            # is currently under review so stale IDs cannot deadlock the loop.
+            current_task_id = (
+                read_json(self.run_dir / "manager_state.json", default={})
+                .get("current_task", {})
+                .get("task_id")
+            )
+            report = decision.get("acceptance_report")
+            if isinstance(report, dict) and current_task_id:
+                submitted_task_id = report.get("task_id")
+                if submitted_task_id not in (None, "", current_task_id):
+                    decision.setdefault("runtime_normalizations", []).append(
+                        {
+                            "field": "acceptance_report.task_id",
+                            "submitted": submitted_task_id,
+                            "effective": current_task_id,
+                            "reason": "acceptance is bound to current runtime task",
+                        }
+                    )
+                report["task_id"] = current_task_id
         packet = decision.get("task_packet")
         if isinstance(packet, dict):
             packet.setdefault("task_id", f"{phase}-{packet.get('agent_id', 'worker')}")
+        if phase == "planning" and "execution_plan" in decision:
+            # The production chain is a runtime invariant. Older Manager
+            # prompts sometimes still return a bespoke execution_plan; ignore
+            # it so model output cannot change the chain or reintroduce a plan
+            # approval step.
+            decision.pop("execution_plan", None)
+            decision.setdefault("runtime_normalizations", []).append(
+                {
+                    "field": "execution_plan",
+                    "submitted": "manager-provided",
+                    "effective": "runtime-canonical-chain",
+                    "reason": "fixed execution chain is owned by runtime",
+                }
+            )
         return decision
 
     @staticmethod
@@ -654,19 +690,15 @@ class ManagerOrchestrator:
         if phase == "brief_confirmation":
             brief = read_json(self.raw_brief_path, default={})
             missing = []
-            if not self._first_brief_text(
-                brief, "research_purpose", "decision_goal", "analysis_objective"
-            ):
+            if not self._first_brief_text(brief, "research_purpose"):
                 missing.append("研究目的")
             if not self._first_brief_text(
                 brief,
                 "research_direction",
                 "hypothesis",
                 "hypo",
-                "expected_action",
-                "discussion_direction",
             ):
-                missing.append("研究方向 / 论点 hypo")
+                missing.append("当前研究 hypo")
             user_message = self._format_brief_confirmation(brief)
             state["current_actor"] = "human"
             state["human_gate"] = "brief"
@@ -811,13 +843,25 @@ class ManagerOrchestrator:
                 for item in cross_issues
                 if isinstance(item, dict) and item.get("severity") == "P0"
             ]
-            if action in ("dispatch", "complete") and (
-                truly_blocking or blocking_cross_issues
+            # These are acceptance signals, not runtime state invariants. The
+            # Manager may knowingly accept a narrowed claim or a presentation
+            # warning; rejecting that decision here can strand a successfully
+            # rendered deliverable behind a stale cross-stage observation.
+            acceptance_warnings = [*truly_blocking, *blocking_cross_issues]
+            if acceptance_warnings:
+                decision.setdefault("runtime_acceptance_warnings", []).extend(
+                    acceptance_warnings
+                )
+            # The concrete carrier is the one Format-specific hard gate: a run
+            # must not claim completion when no readable file was materialized.
+            if (
+                action == "complete"
+                and current_task.get("agent_id") == "format"
+                and not self._format_delivery_succeeded(worker_result)
             ):
                 raise StepError(
-                    "当前 Worker 存在真正阻断性的上游返工请求或跨阶段 P0 "
-                    "（已排除通过 editorial_decisions 缩窄范围的 gap），"
-                    "Manager 必须 action=revise 并派发相应上游 Worker"
+                    "Format 不能 complete：runtime renderer 未产出可读取的正式交付文件。"
+                    "请修复渲染错误后重试。"
                 )
         self._archive_decision(decision)
         self._append_decision(
@@ -841,6 +885,8 @@ class ManagerOrchestrator:
         task["status"] = "worker_completed"
         task["artifact_path"] = result.get("artifact_path")
         task["review_summary"] = result.get("review_summary")
+        task["render_result"] = result.get("render_result")
+        task["rendered_files"] = list(result.get("rendered_files") or [])
         task["completed_at"] = now_iso()
         self._replace_task(state, task)
         self._set_plan_task_status(str(task.get("task_id") or ""), "completed")
@@ -855,6 +901,8 @@ class ManagerOrchestrator:
             "artifact": read_json(Path(str(result.get("artifact_path"))), default={}),
             "worker_review_summary": result.get("review_summary"),
             "worker_memory_notes": result.get("memory_notes"),
+            "render_result": result.get("render_result"),
+            "rendered_files": list(result.get("rendered_files") or []),
             "cross_stage_review": cross_review,
             "profile_inheritance": self._profile_inheritance(
                 state.get("report_charter", {}),
@@ -930,6 +978,8 @@ class ManagerOrchestrator:
             return {"actor": "manager", "step": "planning",
                     "message": "Brief 已确认，开始规划。"}
         if gate == "plan":
+            # Backward compatibility for runs created before planning started
+            # dispatching the first Worker automatically.
             packet = decision.get("task_packet")
             if not isinstance(packet, dict):
                 raise StepError("已批准计划，但 Manager decision 中没有首个 task_packet")
@@ -983,6 +1033,7 @@ class ManagerOrchestrator:
                 "status": "completed",
                 "run_dir": str(self.run_dir),
                 "accepted_artifacts": state.get("accepted_artifacts", []),
+                "rendered_files": self._accepted_rendered_files(state),
                 "present_to_user": decision.get("user_message") or "汇报项目已完成并通过最终确认。",
             }
         if gate == "delivery_options":
@@ -1007,6 +1058,7 @@ class ManagerOrchestrator:
                 "status": "completed",
                 "run_dir": str(self.run_dir),
                 "accepted_artifacts": state.get("accepted_artifacts", []),
+                "rendered_files": self._accepted_rendered_files(state),
                 "present_to_user": "默认五阶段已完成；本次未继续转译 PPT/HTML。",
             }
         if gate == "decision":
@@ -1241,7 +1293,7 @@ class ManagerOrchestrator:
             self._save_state(state)
             return self._human_gate_result(state)
 
-        plan = decision.get("execution_plan") or {
+        plan = {
             "plan_id": "runtime-canonical-chain",
             "tasks": [
                 {
@@ -1264,19 +1316,20 @@ class ManagerOrchestrator:
                     1,
                 )
             ],
-            "human_gates": ["plan", "delivery_options"],
+            "human_gates": ["delivery_options"],
             "completion_criteria": ["format delivered"],
             "generated_by": "runtime",
         }
         decision["execution_plan"] = plan
         write_json(self.plan_path, plan)
         state["execution_plan"] = plan
-        state["current_actor"] = "human"
-        state["human_gate"] = "plan"
-        state["pending_decision"] = decision
-        state["status"] = "awaiting_plan_approval"
-        self._save_state(state)
-        return self._human_gate_result(state)
+        state["human_gate"] = None
+        state["pending_decision"] = None
+        return self._dispatch(
+            state,
+            decision["task_packet"],
+            reason="Manager planning completed; automatically dispatched first Worker",
+        )
 
     def _scan_acceptance_memory(
         self, state: dict[str, Any], decision: dict[str, Any]
@@ -1323,6 +1376,15 @@ class ManagerOrchestrator:
             decision.setdefault("memory_alerts", []).extend(memory_alerts)
 
         if isinstance(task, dict):
+            if task.get("agent_id") == "format":
+                worker_result = state.get("worker_result") or {}
+                artifact = worker_result.get("artifact") or {}
+                task["render_result"] = (
+                    worker_result.get("render_result")
+                    or artifact.get("render_result")
+                    or task.get("render_result")
+                )
+                task["rendered_files"] = self._format_rendered_files(worker_result)
             task["manager_acceptance"] = decision.get("acceptance_report")
             task["status"] = "accepted" if action in ("dispatch", "complete") else "revision_required"
             task["accepted_at"] = now_iso() if task["status"] == "accepted" else None
@@ -1341,6 +1403,8 @@ class ManagerOrchestrator:
                     "agent_id": task.get("agent_id"),
                     "artifact_path": task.get("artifact_path"),
                     "task_dir": task.get("task_dir"),
+                    "render_result": task.get("render_result"),
+                    "rendered_files": list(task.get("rendered_files") or []),
                 })
 
         if action in ("dispatch", "revise"):
@@ -1396,6 +1460,45 @@ class ManagerOrchestrator:
         context = task.get("context") if isinstance(task.get("context"), dict) else {}
         target = task.get("delivery_target") or context.get("delivery_target") or "document"
         return str(target) == "document"
+
+    @staticmethod
+    def _format_delivery_succeeded(worker_result: dict[str, Any]) -> bool:
+        artifact = worker_result.get("artifact") or {}
+        render_result = worker_result.get("render_result") or artifact.get("render_result")
+        if not isinstance(render_result, dict) or render_result.get("status") != "rendered":
+            return False
+        return bool(ManagerOrchestrator._format_rendered_files(worker_result))
+
+    @staticmethod
+    def _format_rendered_files(worker_result: dict[str, Any]) -> list[str]:
+        artifact = worker_result.get("artifact") or {}
+        render_result = worker_result.get("render_result") or artifact.get("render_result") or {}
+        candidates = list(worker_result.get("rendered_files") or [])
+        output_path = str(render_result.get("output_path") or "")
+        if output_path:
+            candidates.append(output_path)
+        artifact_path = Path(str(worker_result.get("artifact_path") or ""))
+        base_dir = artifact_path.parent if artifact_path.name else None
+        files: list[str] = []
+        for value in candidates:
+            path = Path(str(value))
+            if not path.is_absolute() and base_dir is not None:
+                path = base_dir / path
+            if path.is_file() and str(path) not in files:
+                files.append(str(path))
+        return files
+
+    @staticmethod
+    def _accepted_rendered_files(state: dict[str, Any]) -> list[str]:
+        files: list[str] = []
+        for item in state.get("accepted_artifacts", []):
+            if item.get("agent_id") != "format":
+                continue
+            for path in item.get("rendered_files") or []:
+                value = str(path)
+                if value and value not in files:
+                    files.append(value)
+        return files
 
     def _dispatch(
         self,
@@ -1627,7 +1730,7 @@ class ManagerOrchestrator:
             option = {
                 "label": clean_label[:80],
                 "value": clean_value[:120],
-                "description": str(description or "用户可标记为高可信论据")[:180],
+                "description": str(description or "用户可填写为高可信论据")[:180],
             }
             options.append(option)
 
@@ -1709,7 +1812,7 @@ class ManagerOrchestrator:
                     add_option(value, label, evidence_description(material))
                 else:
                     add_option(f"M{index}", str(material))
-        return options[:12]
+        return options[:24]
 
     @staticmethod
     def _display_audience(value: Any) -> str:
@@ -1768,15 +1871,13 @@ class ManagerOrchestrator:
             brief.get("topic") or "Manager 将根据输入信息和论据总结"
         )
         research_purpose = ManagerOrchestrator._first_brief_text(
-            brief, "research_purpose", "decision_goal", "analysis_objective"
+            brief, "research_purpose"
         ) or "待用户补充"
         research_direction = ManagerOrchestrator._first_brief_text(
             brief,
             "research_direction",
             "hypothesis",
             "hypo",
-            "expected_action",
-            "discussion_direction",
         ) or "待用户补充"
         audience = ManagerOrchestrator._display_audience(
             brief.get("audience") or "exec_office"
@@ -1795,7 +1896,7 @@ class ManagerOrchestrator:
             "| 项目 | 内容 |",
             "|------|------|",
             f"| **研究目的** | {research_purpose} |",
-            f"| **研究方向 / 论点 hypo** | {research_direction} |",
+            f"| **当前研究 hypo** | {research_direction} |",
         ]
 
         lines.extend([
@@ -1804,13 +1905,15 @@ class ManagerOrchestrator:
             "",
         ])
         if evidence_options:
-            lines.append("以下是 agent 根据当前输入整理的论据列表，请在提问中勾选你认为高可信的论据：")
+            lines.append(
+                "以下是 agent 根据当前输入整理的论据列表，请在提问中填写你认为高可信的论据编号、名称或原文片段："
+            )
             for index, item in enumerate(evidence_options, 1):
                 description = item.get("description", "")
                 suffix = f"：{description}" if description else ""
                 lines.append(f"{index}. **{item['label']}**{suffix}")
         else:
-            lines.append("当前还没有可勾选的论据；如已有材料或证据，请在回复中补充。")
+            lines.append("当前还没有可引用的论据；如已有材料或证据，请在回复中补充。")
 
         lines.extend([
             "",
@@ -1841,7 +1944,7 @@ class ManagerOrchestrator:
         lines.append("---")
         lines.append("")
         lines.append(
-            "请先回答研究目的、研究方向，并勾选高可信论据；若报告设定无误，再确认继续。"
+            "请先回答研究目的、当前研究 hypo，并填写高可信论据；若报告设定无误，再确认继续。"
             "默认会在 analysis 和 storyline 完成后各暂停确认一次，之后自动走到最终报告。"
         )
 
@@ -1857,7 +1960,7 @@ class ManagerOrchestrator:
             )
         else:
             present_to_user = decision.get("user_message") or {
-            "brief": "请确认 brief 信息是否完整、准确。请补充研究目的、研究方向，并勾选高可信论据；可调整报告主题、听众、项目类型、交付形式和报告篇幅。",
+            "brief": "请确认 brief 信息是否完整、准确。请补充研究目的、当前研究 hypo，并填写高可信论据；可调整报告主题、听众、项目类型、交付形式和报告篇幅。",
             "plan": "请确认 Manager 的任务定义和执行计划。",
             "worker_result": "当前步骤已完成，请查看中间产物。如需继续，确认后进入下一步。",
             "final": "所有任务已完成，请确认最终交付物。",
@@ -1900,23 +2003,24 @@ class ManagerOrchestrator:
             result["questions"] = [
                 {
                     "header": "研究目的",
-                    "question": "项目的研究目的是什么（如需要回答的问题，或某话题的延伸汇报），越详细则 agent 更能理解需求。",
+                    "question": "项目研究目的是什么（如为了回答XX问题，或XX研究的延伸），越详细则 agent 更能理解需求。",
                     "inputType": "text",
                     "multiSelect": False,
                     "options": [],
                 },
                 {
-                    "header": "研究方向",
-                    "question": "项目的研究方向是什么（如论点 hypo，希望引导的讨论或行动方向），越详细则 agent 更能理解需求。",
+                    "header": "研究hypo",
+                    "question": "当前的研究hypo是什么（如当前结论判断，或预期引导的讨论方向），越详细则 agent 更能理解需求。",
                     "inputType": "text",
                     "multiSelect": False,
                     "options": [],
                 },
                 {
                     "header": "高可信论据",
-                    "question": "以下是 agent 整理的证据列表，请选择你认为重要性高的论据，汇报助手将根据重要性判断子论点的可信度和引用优先级。",
-                    "multiSelect": True,
-                    "options": evidence_options,
+                    "question": "请填写你认为高可信或重要的论据（可直接写上方 evidence list 的编号、证据名称或原文片段）；汇报助手会根据 evidence list 判断子论点可信度和引用优先级。",
+                    "inputType": "text",
+                    "multiSelect": False,
+                    "options": [],
                 },
                 {
                     "header": "Brief确认",
@@ -1973,6 +2077,7 @@ class ManagerOrchestrator:
 
         elif gate == "delivery_options":
             result["accepted_artifacts"] = state.get("accepted_artifacts", [])
+            result["rendered_files"] = self._accepted_rendered_files(state)
             raw_brief = read_json(self.raw_brief_path, default={})
             result["requested_followup_targets"] = (
                 raw_brief.get("requested_followup_targets", [])
@@ -2634,21 +2739,26 @@ class ManagerOrchestrator:
         sections = artifact.get("sections") or []
         if isinstance(sections, list) and sections:
             lines.extend(["", "### 故事线"])
+            lines.extend(
+                [
+                    "| 序号 | 章节 | 标题（Leadline） | 核心论证 |",
+                    "|---:|---|---|---|",
+                ]
+            )
             for index, section in enumerate(sections, 1):
                 if not isinstance(section, dict):
                     continue
+                chapter = str(section.get("chapter") or f"第 {index} 章").strip()
                 heading = str(section.get("heading") or f"Section {index}").strip()
                 brief = str(section.get("brief") or "").strip()
-                refs = [
-                    str(ref)
-                    for ref in section.get("finding_refs", [])
-                    if str(ref).strip()
-                ] if isinstance(section.get("finding_refs"), list) else []
-                lines.append(f"{index}. **{heading}**")
-                if brief:
-                    lines.append(f"   - 论证任务：{brief}")
-                if refs:
-                    lines.append(f"   - 支撑 finding：{', '.join(refs)}")
+                cells = [chapter, heading, brief or "—"]
+                escaped = [
+                    value.replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+                    for value in cells
+                ]
+                lines.append(
+                    f"| {index} | {escaped[0]} | {escaped[1]} | {escaped[2]} |"
+                )
 
         appendix_refs = artifact.get("appendix_finding_refs") or []
         open_items = artifact.get("open_issues") or artifact.get("open_questions") or []
@@ -2984,6 +3094,31 @@ class ManagerOrchestrator:
                 task["status"] = status
                 found = True
                 break
+        if not found and task_record:
+            # Canonical plans are created before later task IDs exist. Bind the
+            # planned slot for this Worker to the actual runtime task instead
+            # of appending a duplicate plan entry.
+            agent_id = task_record.get("agent_id")
+            packet = task_record.get("packet") or {}
+            for task in tasks:
+                if (
+                    task.get("agent_id") == agent_id
+                    and task.get("status") in ("planned", "pending")
+                ):
+                    task.update(
+                        {
+                            "task_id": task_id,
+                            "objective": packet.get(
+                                "objective", task.get("objective", "")
+                            ),
+                            "dependencies": packet.get(
+                                "dependencies", task.get("dependencies", [])
+                            ),
+                            "status": status,
+                        }
+                    )
+                    found = True
+                    break
         if not found and task_record:
             packet = task_record.get("packet") or {}
             tasks.append({

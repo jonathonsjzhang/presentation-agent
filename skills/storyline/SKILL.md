@@ -69,11 +69,11 @@ Storyline 不是 Findings 汇编。主线应保留使核心答案成立所必要
 
 反证和 caveat 不是装饰。会改变核心答案、适用范围或置信度的边界应紧跟对应结论处理；不会改变主判断的限制不必反复打断主线。
 
-### 七、每节完成一个论证任务，标题链就是故事线
+### 七、每节完成一个论证任务，Leadline 链就是故事线
 
 一个 section 的价值在于完成一项必要的认知或证明动作，而不是承接一条 finding。承担相同论证作用的 findings 应合并使用；只有承担不同且必要的任务时才拆节。
 
-标题表达本节最终建立的判断，标题链单独阅读时应能讲清同一条故事。不要把前提、证据、边界和战略含义全部挤进一个标题；`brief` 负责说明如何证明，Report 负责展开正文。
+每节同时保留两个不同层级：`chapter` 是便于定位主题的简短章节名称，`heading` 是本节的判断式标题（leadline）。Leadline 表达本节最终建立的判断，leadline 链单独阅读时应能讲清同一条故事。不要把 `chapter` 写成结论句，也不要把前提、证据、边界和战略含义全部挤进 leadline；`brief` 负责说明核心论证如何成立，Report 负责展开正文。
 
 节奏上区分主线层、展开层和证明层：主线层让受众记住判断，展开层解释为什么，证明层使用数据或案例支撑。不要把所有证据塞进标题链，也不要只写漂亮标题而缺少证明动作。
 
@@ -140,7 +140,7 @@ Storyline 面向的是最终汇报读者和下游 Report 作者，不是给 revi
 
 本步守住：核心答案要改变原有认识；只选一条主线，避免把多个问题拼成一份报告。如果 `sections[]` 看起来是在平铺多个“也很重要”的发现，而不是一步步证明 `core_answer`，回到本步骤重新剪枝。
 
-### 3. 搭故事树，并排成标题链
+### 3. 搭故事树，并排成 Leadline 链
 
 先在内部搭一页 message pyramid，再展开章节：
 
@@ -150,16 +150,17 @@ Storyline 面向的是最终汇报读者和下游 Report 作者，不是给 revi
 
 Pyramid 是内部思考工具，不进入最终输出。
 
-再把故事树排成标题链。标题链应能单独读出一条故事，不是“另外/同时/还有”，而是能形成“因此/但问题是/所以/这意味着”的推进。每节只完成一个论证任务；同一任务下的多个 findings 合并使用。相关但不属于主线的 findings 写入 `appendix_finding_refs`。
+再把故事树排成 leadline 链。Leadline 链应能单独读出一条故事，不是“另外/同时/还有”，而是能形成“因此/但问题是/所以/这意味着”的推进。每条 leadline 再配一个不重复结论的简短 `chapter` 名称。每节只完成一个论证任务；同一任务下的多个 findings 合并使用。相关但不属于主线的 findings 写入 `appendix_finding_refs`。
 
 本步守住：用金字塔原理分解，不按 finding 分类；标题链要形成论证累进。
 
 ### 4. 写 Section Briefs，最后写 ES 并输出
 
-确认标题链后形成 `sections[]`：
+确认 leadline 链后形成 `sections[]`：
 
-- `heading`：清楚表达本节最终建立的判断，不过度塞入证据、边界和后续含义；
-- `brief`：说明本节的论证动作、关键证据、必要边界，以及如何推进下一节；不预写完整正文；
+- `chapter`：简短、名词化的章节名称，只标识本节讨论的主题，不承担结论表达；
+- `heading`：本节标题（leadline），清楚表达本节最终建立的判断，不过度塞入证据、边界和后续含义；
+- `brief`：本节核心论证，说明论证动作、关键证据、必要边界，以及如何推进下一节；不预写完整正文；
 - `finding_refs`：只引用本节实际使用的 Analysis finding ID。
 
 最后写 `executive_summary`。ES 是核心答案和故事树的压缩版，不是 findings 清单或章节目录。只保留答案成立的关键逻辑、会实质改变判断的重要边界，以及任务明确要求的业务或决策含义。
@@ -176,7 +177,7 @@ Pyramid 是内部思考工具，不进入最终输出。
 
 - `executive_summary`
 - `core_answer`
-- `sections[]`：`heading`、`brief`、`finding_refs`
+- `sections[]`：`chapter`、`heading`（标题 / leadline）、`brief`（核心论证）、`finding_refs`
 - `appendix_finding_refs[]`：可选
 - `open_issues[]`：可选
 
@@ -184,4 +185,12 @@ Pyramid 是内部思考工具，不进入最终输出。
 
 Message pyramid、content units、depends_on、transition_to 和全量 editorial decisions 是构建故事线时完成的内部思考，不进入最终输出。
 
-禁止输出 pages、page_no、slide、leadline、layout、chart type 或 visual brief。
+禁止输出 pages、page_no、slide、layout、chart type 或 visual brief。章节 leadline 统一写入 `heading`，不要另建重复的 `leadline` 字段。
+
+供 Worker 填写和用户确认的标准视图固定为四列：
+
+| 序号 | 章节 | 标题（Leadline） | 核心论证 |
+|---:|---|---|---|
+| 1 | 市场进入条件 | 需求空间成立，但本地履约能力决定首批市场的可进入性 | 先用需求与竞争证据确认机会，再用履约差异收窄可行市场，并保留样本口径边界。 |
+
+上表仅用于说明字段粒度与写法。实际输出必须完全基于当前 Analysis，不得复制示意内容，也不得把表格作为 JSON 之外的额外输出。

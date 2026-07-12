@@ -54,6 +54,7 @@ class V03SchemaContractTests(unittest.TestCase):
         self.assertNotIn("pages", schema["properties"])
         self.assertNotIn("pages", fixture)
         self.assertTrue(fixture["sections"])
+        self.assertTrue(all(section["chapter"] for section in fixture["sections"]))
         self.assertTrue(all(section["brief"] for section in fixture["sections"]))
         self.assertTrue(fixture["core_answer"])
 
