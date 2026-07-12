@@ -149,19 +149,12 @@ def normalize_brief(
 
     normalized["materials"] = _normalize_materials(normalized.get("materials"))
     normalized["constraints"] = _as_str_list(normalized.get("constraints"))
-    normalized["research_purpose"] = _first_text(
-        normalized,
-        "research_purpose",
-        "decision_goal",
-        "analysis_objective",
-    )
+    normalized["research_purpose"] = _first_text(normalized, "research_purpose")
     normalized["research_direction"] = _first_text(
         normalized,
         "research_direction",
         "hypothesis",
         "hypo",
-        "expected_action",
-        "discussion_direction",
     )
     if not str(normalized.get("decision_goal", "")).strip():
         normalized["decision_goal"] = normalized["research_purpose"]
@@ -335,6 +328,11 @@ def launch_report(
     if not use_manager:
         raise BriefError(
             "Direct Pipeline 已移除；请使用默认 Manager 路径"
+        )
+    if not spawn_adapter:
+        raise BriefError(
+            "Manager 路径要求宿主显式选择 spawn_adapter（workbuddy/codex/claude）；"
+            "仅当宿主无法派生 sub-agent 时才显式使用 inline"
         )
     profile_request = contract_profile
     selected_profile = load_agent_profile(

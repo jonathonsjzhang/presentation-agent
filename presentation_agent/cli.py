@@ -15,14 +15,18 @@ from presentation_agent.step import PipelineStepper, StepError, StepRunner
 from presentation_agent.workspace import init_workspace, resolve_workspace, workspace_status
 
 
-def _add_spawn_adapter_option(parser: argparse.ArgumentParser) -> None:
+def _add_spawn_adapter_option(
+    parser: argparse.ArgumentParser, *, required: bool = False
+) -> None:
     parser.add_argument(
         "--spawn-adapter",
         choices=["inline", "workbuddy", "claude", "codex", "cli"],
+        required=required,
         help=(
             "Sub-agent host for this run. The override is persisted in manager_state; "
-            "report start defaults to inline; later commands preserve the run's persisted adapter unless overridden. "
-            "Use workbuddy/codex/claude only when the user explicitly wants sub-agents."
+            "report start requires the host to select its native adapter; later commands "
+            "preserve the run's persisted adapter unless overridden. Use inline only as "
+            "an explicit compatibility fallback when the host cannot spawn sub-agents."
         ),
     )
 
@@ -61,7 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="v0_3",
         help="Runtime contract profile. Defaults to the document-first v0_3 user flow.",
     )
-    _add_spawn_adapter_option(report_start)
+    _add_spawn_adapter_option(report_start, required=True)
 
     report_next = report_subs.add_parser("next", help="Return the current report instruction.")
     report_next.add_argument("--run", required=True, help="Run id or run directory.")
@@ -184,7 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     launch = sub.add_parser(
         "launch",
-        help="Host entry: normalize a brief (file or inline JSON) and run the pipeline.",
+        help="Host entry: normalize a brief and initialize a Manager-controlled report run.",
     )
     launch.add_argument(
         "--brief",
@@ -209,6 +213,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Only initialize the pipeline (write brief, create stage dirs); do not run any agent.",
     )
+    _add_spawn_adapter_option(launch, required=True)
 
     # ---- inline step commands (host-self-execution) -------------------------
     step = sub.add_parser("step", help="Inline step commands (host-driven single-step execution).")
@@ -414,6 +419,7 @@ def main() -> None:
                 provider=args.provider,
                 auto=args.auto,
                 out=Path(args.out).resolve() if args.out else None,
+                spawn_adapter=args.spawn_adapter,
                 init_only=getattr(args, "init_only", False),
                 contract_profile=args.contract_profile,
             )
@@ -741,7 +747,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             root,
             run_dir,
             data_root=workspace.data_dir,
-            spawn_adapter=args.spawn_adapter or "inline",
+            spawn_adapter=args.spawn_adapter,
             contract_profile=args.contract_profile,
         )
         prepared = manager.initialize_run(brief_path)
