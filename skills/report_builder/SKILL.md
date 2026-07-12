@@ -21,6 +21,7 @@ description: >-
 - 只通过高层 CLI 调度：`doctor`、`init-workspace`、`report start/next/submit/approve/status`
 - 宿主不替 Manager 决定阶段顺序，不绕过 harness 自己写最终材料
 - `actor=human` 时把 `present_to_user` 展示给用户；brief gate 尤其要把 brief 摘要先发出来，再等待确认
+- Brief 确认后的 planning `dispatch` 由 runtime 自动派发 Analysis，不向用户展示或确认固定 execution plan；只有 Manager `ask_human` 时才再次停下
 - Worker 默认使用当前宿主的原生 sub-agent，以独立上下文执行；宿主自动选择对应 adapter，不向用户询问技术执行方式
 - Reviewer sub-agent 默认关闭；只有用户明确要求严格审查、调试质量问题或独立复核时，才使用 `review_mode=independent`
 - `inline` 仅用于宿主确实无法派生 sub-agent 的兼容降级；不得静默降级，必须向用户说明 Worker 将失去上下文隔离

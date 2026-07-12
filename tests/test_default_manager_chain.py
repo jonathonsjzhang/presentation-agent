@@ -62,7 +62,7 @@ class DefaultManagerChainTests(unittest.TestCase):
             charter = read_json(FIXTURES / "report_charter.v2.valid.json")
             write_json(brief_path, charter)
 
-            plan = {
+            manager_provided_plan = {
                 "plan_id": "default-chain",
                 "tasks": [
                     {
@@ -96,15 +96,33 @@ class DefaultManagerChainTests(unittest.TestCase):
                     "action": "dispatch",
                     "reason_summary": "canonical plan",
                     "report_charter": charter,
-                    "execution_plan": plan,
+                    # Legacy/over-eager Manager output must be ignored: the
+                    # fixed chain belongs to runtime.
+                    "execution_plan": manager_provided_plan,
                     "task_packet": self._packet(
                         0, manager.raw_brief_path, charter
                     ),
                     "user_message": "plan ready",
                 },
             )
-            manager.commit_manager()
-            dispatched = manager.approve()
+            dispatched = manager.commit_manager()
+            state_after_planning = manager.status()["state"]
+            self.assertEqual(dispatched["actor"], "worker")
+            self.assertEqual(dispatched["task"]["agent_id"], "analysis")
+            self.assertIsNone(state_after_planning["human_gate"])
+            self.assertEqual(state_after_planning["current_actor"], "worker")
+            self.assertEqual(
+                state_after_planning["execution_plan"]["plan_id"],
+                "runtime-canonical-chain",
+            )
+            self.assertEqual(
+                state_after_planning["execution_plan"]["human_gates"],
+                ["delivery_options"],
+            )
+            self.assertEqual(
+                len(state_after_planning["execution_plan"]["tasks"]),
+                len(STAGES),
+            )
 
             for index, agent_id in enumerate(STAGES):
                 task_dir = Path(dispatched["task"]["task_dir"])

@@ -114,7 +114,7 @@ class WebApp:
                 "input_contract": {"required_inputs": ["raw brief", "Worker capabilities", "run state"]},
                 "output_contract": {
                     "primary_artifact": "Manager decision",
-                    "required_handoff_fields": ["report_charter", "execution_plan", "task_packet", "acceptance_report"],
+                    "required_handoff_fields": ["report_charter", "task_packet", "acceptance_report"],
                 },
                 "memory_dimensions": control_plane.get("memory_dimensions", []),
                 "state": {"agent_memory_scope": "manager_only"},

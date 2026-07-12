@@ -274,6 +274,20 @@ class ManagerAgentRuntime:
         packet = decision.get("task_packet")
         if isinstance(packet, dict):
             packet.setdefault("task_id", f"{phase}-{packet.get('agent_id', 'worker')}")
+        if phase == "planning" and "execution_plan" in decision:
+            # The production chain is a runtime invariant. Older Manager
+            # prompts sometimes still return a bespoke execution_plan; ignore
+            # it so model output cannot change the chain or reintroduce a plan
+            # approval step.
+            decision.pop("execution_plan", None)
+            decision.setdefault("runtime_normalizations", []).append(
+                {
+                    "field": "execution_plan",
+                    "submitted": "manager-provided",
+                    "effective": "runtime-canonical-chain",
+                    "reason": "fixed execution chain is owned by runtime",
+                }
+            )
         return decision
 
     @staticmethod
@@ -964,6 +978,8 @@ class ManagerOrchestrator:
             return {"actor": "manager", "step": "planning",
                     "message": "Brief 已确认，开始规划。"}
         if gate == "plan":
+            # Backward compatibility for runs created before planning started
+            # dispatching the first Worker automatically.
             packet = decision.get("task_packet")
             if not isinstance(packet, dict):
                 raise StepError("已批准计划，但 Manager decision 中没有首个 task_packet")
@@ -1277,7 +1293,7 @@ class ManagerOrchestrator:
             self._save_state(state)
             return self._human_gate_result(state)
 
-        plan = decision.get("execution_plan") or {
+        plan = {
             "plan_id": "runtime-canonical-chain",
             "tasks": [
                 {
@@ -1300,19 +1316,20 @@ class ManagerOrchestrator:
                     1,
                 )
             ],
-            "human_gates": ["plan", "delivery_options"],
+            "human_gates": ["delivery_options"],
             "completion_criteria": ["format delivered"],
             "generated_by": "runtime",
         }
         decision["execution_plan"] = plan
         write_json(self.plan_path, plan)
         state["execution_plan"] = plan
-        state["current_actor"] = "human"
-        state["human_gate"] = "plan"
-        state["pending_decision"] = decision
-        state["status"] = "awaiting_plan_approval"
-        self._save_state(state)
-        return self._human_gate_result(state)
+        state["human_gate"] = None
+        state["pending_decision"] = None
+        return self._dispatch(
+            state,
+            decision["task_packet"],
+            reason="Manager planning completed; automatically dispatched first Worker",
+        )
 
     def _scan_acceptance_memory(
         self, state: dict[str, Any], decision: dict[str, Any]
@@ -3077,6 +3094,31 @@ class ManagerOrchestrator:
                 task["status"] = status
                 found = True
                 break
+        if not found and task_record:
+            # Canonical plans are created before later task IDs exist. Bind the
+            # planned slot for this Worker to the actual runtime task instead
+            # of appending a duplicate plan entry.
+            agent_id = task_record.get("agent_id")
+            packet = task_record.get("packet") or {}
+            for task in tasks:
+                if (
+                    task.get("agent_id") == agent_id
+                    and task.get("status") in ("planned", "pending")
+                ):
+                    task.update(
+                        {
+                            "task_id": task_id,
+                            "objective": packet.get(
+                                "objective", task.get("objective", "")
+                            ),
+                            "dependencies": packet.get(
+                                "dependencies", task.get("dependencies", [])
+                            ),
+                            "status": status,
+                        }
+                    )
+                    found = True
+                    break
         if not found and task_record:
             packet = task_record.get("packet") or {}
             tasks.append({
