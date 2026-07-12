@@ -2722,21 +2722,26 @@ class ManagerOrchestrator:
         sections = artifact.get("sections") or []
         if isinstance(sections, list) and sections:
             lines.extend(["", "### 故事线"])
+            lines.extend(
+                [
+                    "| 序号 | 章节 | 标题（Leadline） | 核心论证 |",
+                    "|---:|---|---|---|",
+                ]
+            )
             for index, section in enumerate(sections, 1):
                 if not isinstance(section, dict):
                     continue
+                chapter = str(section.get("chapter") or f"第 {index} 章").strip()
                 heading = str(section.get("heading") or f"Section {index}").strip()
                 brief = str(section.get("brief") or "").strip()
-                refs = [
-                    str(ref)
-                    for ref in section.get("finding_refs", [])
-                    if str(ref).strip()
-                ] if isinstance(section.get("finding_refs"), list) else []
-                lines.append(f"{index}. **{heading}**")
-                if brief:
-                    lines.append(f"   - 论证任务：{brief}")
-                if refs:
-                    lines.append(f"   - 支撑 finding：{', '.join(refs)}")
+                cells = [chapter, heading, brief or "—"]
+                escaped = [
+                    value.replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+                    for value in cells
+                ]
+                lines.append(
+                    f"| {index} | {escaped[0]} | {escaped[1]} | {escaped[2]} |"
+                )
 
         appendix_refs = artifact.get("appendix_finding_refs") or []
         open_items = artifact.get("open_issues") or artifact.get("open_questions") or []

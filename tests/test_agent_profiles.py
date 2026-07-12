@@ -786,6 +786,15 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertIn("Storyline 确认", gate["present_to_user"])
             self.assertIn("核心答案", gate["present_to_user"])
             self.assertIn("故事线", gate["present_to_user"])
+            self.assertIn(
+                "| 序号 | 章节 | 标题（Leadline） | 核心论证 |",
+                gate["present_to_user"],
+            )
+            self.assertIn("行为差异与证据边界", gate["present_to_user"])
+            self.assertIn(
+                "成果保存与回访共同出现，但因果仍待验证",
+                gate["present_to_user"],
+            )
             values = [option["value"] for option in gate["questions"][0]["options"]]
             self.assertEqual(values, ["approve", "rewrite", "custom"])
 
