@@ -34,7 +34,13 @@ def _validate(formatted: dict[str, Any], report: dict[str, Any]) -> None:
         raise ValueError("formatted document renderer requires formatted_material.v2")
     if formatted.get("delivery_target") != "document":
         raise ValueError("formatted document renderer only accepts delivery_target=document")
-    if report.get("agent_id") != "report" or report.get("schema") != "report.v1":
+    # Report authors the canonical manuscript, then Q&A appends the approved
+    # question list while preserving the report.v1 schema. Format consumes
+    # that enhanced manuscript, so both runtime producers are legitimate.
+    if (
+        report.get("agent_id") not in {"report", "qa_preparation"}
+        or report.get("schema") != "report.v1"
+    ):
         raise ValueError("formatted document renderer requires report.v1")
     if not str(report.get("report_markdown") or "").strip():
         raise ValueError("report.v1 requires report_markdown")
