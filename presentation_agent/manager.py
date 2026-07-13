@@ -399,13 +399,17 @@ class ManagerAgentRuntime:
             objectives.get(target_agent, f"修订当前 {target_agent} 产物。"),
         )
         packet.setdefault("task_id", f"acceptance-{target_agent}")
-        if action == "revise" and not packet.get("revision_feedback"):
+        if action == "revise":
             report = decision.get("acceptance_report") or {}
             requirements = report.get("revision_requirements") or []
             if requirements:
                 packet["revision_feedback"] = [
                     str(item) for item in requirements if str(item).strip()
                 ]
+            elif "revision_feedback" not in submitted_packet:
+                # The current acceptance decision owns the revision round.
+                # Never silently carry feedback from an earlier packet.
+                packet.pop("revision_feedback", None)
         if action == "revise" and upstream_requests:
             reasons = [
                 str(item.get("reason") or "可视化论据不完整")
@@ -655,6 +659,8 @@ class WorkerExecutor:
             "context_mode": "projected",
             "context_manifest_path": str(context_manifest_path),
             "output_dir": str(task_dir),
+            "manager_run_dir": str(self.run_dir),
+            "global_state_path": str(self.run_dir / "state.json"),
             "p0_open": [],
             "p1_open": [],
             "produced_artifacts": [],
@@ -2755,34 +2761,6 @@ class ManagerOrchestrator:
                 result["next_action"] = (
                     "host_call_AskUserQuestion_then_report_feedback"
                 )
-            result["interaction_required"] = bool(result["questions"])
-            result["preferred_tool"] = "AskUserQuestion"
-            result["must_call_tool_before_next_cli"] = bool(result["questions"])
-            result["presentation_required_before_tool"] = bool(
-                result["questions"]
-            )
-            result["presentation_text"] = present_to_user
-            result["presentation_delivery_mode"] = (
-                "separate_user_visible_message_before_tool"
-                if result["questions"]
-                else "none"
-            )
-            result["host_action_sequence"] = (
-                ["send_present_to_user_message", "call_AskUserQuestion"]
-                if result["questions"]
-                else []
-            )
-            result["ask_user_question_payload"] = {
-                "questions": [
-                    {
-                        "question": question["question"],
-                        "header": question["header"],
-                        "options": question.get("options", []),
-                        "multiSelect": bool(question.get("multiSelect", False)),
-                    }
-                    for question in result["questions"]
-                ]
-            }
             if state.get("brief_feedback_error"):
                 result["feedback_error"] = state["brief_feedback_error"]
 
@@ -2876,7 +2854,43 @@ class ManagerOrchestrator:
         else:
             result["next_action"] = "human_feedback"
 
+        self._attach_question_interaction(result)
         return result
+
+    @staticmethod
+    def _attach_question_interaction(result: dict[str, Any]) -> None:
+        """Attach one deterministic WorkBuddy adapter to every question gate."""
+
+        questions = result.get("questions")
+        if not isinstance(questions, list):
+            return
+        interaction_required = bool(questions)
+        result["interaction_required"] = interaction_required
+        result["preferred_tool"] = "AskUserQuestion"
+        result["must_call_tool_before_next_cli"] = interaction_required
+        result["presentation_required_before_tool"] = interaction_required
+        result["presentation_text"] = result.get("present_to_user", "")
+        result["presentation_delivery_mode"] = (
+            "separate_user_visible_message_before_tool"
+            if interaction_required
+            else "none"
+        )
+        result["host_action_sequence"] = (
+            ["send_present_to_user_message", "call_AskUserQuestion"]
+            if interaction_required
+            else []
+        )
+        result["ask_user_question_payload"] = {
+            "questions": [
+                {
+                    "question": question["question"],
+                    "header": question["header"],
+                    "options": question.get("options", []),
+                    "multiSelect": bool(question.get("multiSelect", False)),
+                }
+                for question in questions
+            ]
+        }
 
     def _is_analysis_thesis_gate(self, state: dict[str, Any]) -> bool:
         current = state.get("current_task") or {}

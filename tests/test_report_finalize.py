@@ -7,7 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from presentation_agent.io import read_json, write_json
-from presentation_agent.step import StepRunner
+from presentation_agent.renderers.base import RenderResult
+from presentation_agent.step import StepRunner, _resolve_global_state_path
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,6 +72,88 @@ class ReportFinalizeIntegrationTests(unittest.TestCase):
         self.assertEqual(result["status"], "pending_human_review")
         self.assertEqual(result["rendered_files"], [str(markdown_path)])
         self.assertEqual(result["render_result"]["format"], "markdown")
+
+    def test_manager_nested_task_loads_run_level_delivery_budget(self) -> None:
+        run_dir = self.tmp / "manager-run"
+        task_dir = run_dir / "tasks" / "report-001_report"
+        task_dir.mkdir(parents=True)
+        global_state_path = run_dir / "state.json"
+        write_json(
+            global_state_path,
+            {
+                "delivery_budget": {
+                    "body_page_limit": 3,
+                    "report_body_char_limit": 2700,
+                    "executive_summary_char_min": 300,
+                    "executive_summary_char_max": 350,
+                }
+            },
+        )
+        input_path = task_dir / "input.json"
+        write_json(input_path, {"report_objective": "nested task test"})
+        write_json(
+            task_dir / "run_state.json",
+            {
+                "run_id": "nested-report-test",
+                "contract_profile": "v0_3",
+                "agent_id": "report",
+                "agent_name": "报告产出",
+                "stage": 3,
+                "status": "init",
+                "current_step": "init",
+                "round_index": 0,
+                "input_path": str(input_path),
+                "output_dir": str(task_dir),
+                "global_state_path": str(global_state_path),
+                "p0_open": [],
+                "p1_open": [],
+                "produced_artifacts": [],
+                "history": [],
+            },
+        )
+
+        runner = StepRunner(
+            ROOT,
+            task_dir,
+            data_root=self.tmp / "data",
+            contract_profile="v0_3",
+        )
+        render_result = RenderResult(
+            status="rendered",
+            fmt="markdown",
+            fidelity="content",
+        )
+        audit = {
+            "available": True,
+            "passed": True,
+            "body_page_count": 2,
+            "body_page_limit": 3,
+            "body_chars": 2000,
+            "detail": "正文实际渲染 2 页，限制 3 页",
+        }
+        with patch(
+            "presentation_agent.page_budget.audit_document_body_pages",
+            return_value=audit,
+        ) as mocked_audit:
+            runner._apply_report_body_budget_audit(
+                read_json(REPORT_FIXTURE), render_result
+            )
+
+        mocked_audit.assert_called_once()
+        self.assertEqual(runner.global_state_path, global_state_path)
+        self.assertTrue(render_result.metrics["body_budget_audit"]["passed"])
+
+    def test_legacy_manager_task_discovers_run_level_state(self) -> None:
+        run_dir = self.tmp / "legacy-manager-run"
+        task_dir = run_dir / "tasks" / "report-001_report"
+        task_dir.mkdir(parents=True)
+        write_json(run_dir / "manager_state.json", {"run_id": "legacy"})
+        write_json(run_dir / "state.json", {"delivery_budget": {}})
+
+        self.assertEqual(
+            _resolve_global_state_path(task_dir),
+            run_dir / "state.json",
+        )
 
     def test_empty_markdown_is_rejected_before_finalize(self) -> None:
         report = read_json(REPORT_FIXTURE)
