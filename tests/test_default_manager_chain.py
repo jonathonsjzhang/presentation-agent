@@ -132,6 +132,13 @@ class DefaultManagerChainTests(unittest.TestCase):
                 len(state_after_planning["execution_plan"]["tasks"]),
                 len(STAGES),
             )
+            first_worker_state = read_json(
+                Path(dispatched["task"]["task_dir"]) / "run_state.json"
+            )
+            self.assertEqual(
+                first_worker_state["global_state_path"],
+                str(run_dir / "state.json"),
+            )
 
             for index, agent_id in enumerate(STAGES):
                 task_dir = Path(dispatched["task"]["task_dir"])

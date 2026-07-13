@@ -515,6 +515,64 @@ class AgentProfileLoaderTests(unittest.TestCase):
             )
             self.assertTrue(decision.get("runtime_normalizations"))
 
+    def test_v03_revision_feedback_uses_current_acceptance_round(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            old_packet = {
+                "agent_id": "report",
+                "objective": "修订报告",
+                "input_artifacts": ["storyline.json"],
+                "revision_feedback": ["正文控制在1800-2000字符"],
+            }
+            write_json_file(
+                run_dir / "manager_state.json",
+                {
+                    "current_task": {
+                        "task_id": "report-001",
+                        "agent_id": "report",
+                        "packet": old_packet,
+                    },
+                    "tasks": [
+                        {
+                            "task_id": "report-001",
+                            "agent_id": "report",
+                            "packet": old_packet,
+                        }
+                    ],
+                    "worker_result": {"artifact": {}},
+                },
+            )
+            runtime = ManagerAgentRuntime(
+                ROOT,
+                run_dir,
+                run_dir / "data",
+                contract_profile="v0_3",
+            )
+            write_json_file(
+                runtime.output_path("acceptance"),
+                {
+                    "action": "revise",
+                    "acceptance_report": {
+                        "verdict": "revise",
+                        "reason": "继续压缩并拆分方法边界",
+                        "revision_requirements": [
+                            "正文控制在1500-1700字符",
+                            "方法与边界使用独立字段",
+                        ],
+                    },
+                },
+            )
+
+            decision = runtime.read_decision("acceptance")
+
+            self.assertEqual(
+                decision["task_packet"]["revision_feedback"],
+                [
+                    "正文控制在1500-1700字符",
+                    "方法与边界使用独立字段",
+                ],
+            )
+
     def test_worker_artifact_resolver_prefers_artifact_over_handoff_output(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             run_dir = Path(temp_dir)
@@ -664,6 +722,12 @@ class AgentProfileLoaderTests(unittest.TestCase):
                     "format:html",
                     "skip",
                 ],
+            )
+            self.assertTrue(gate["interaction_required"])
+            self.assertEqual(gate["preferred_tool"], "AskUserQuestion")
+            self.assertEqual(
+                gate["ask_user_question_payload"]["questions"][0]["header"],
+                "追加交付",
             )
 
             result = manager.approve(delivery_option="format:ppt")
@@ -817,6 +881,12 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertEqual(gate["questions"][0]["options"], [])
             self.assertIn("TG-01 / TG-02", gate["questions"][0]["question"])
             self.assertIn("一个输入框", gate["questions"][0]["question"])
+            self.assertTrue(gate["interaction_required"])
+            self.assertEqual(gate["preferred_tool"], "AskUserQuestion")
+            self.assertEqual(
+                gate["ask_user_question_payload"]["questions"][0]["header"],
+                "论点组确认",
+            )
 
     def test_analysis_thesis_selection_is_stored_for_storyline(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1058,6 +1128,20 @@ class AgentProfileLoaderTests(unittest.TestCase):
             )
             values = [option["value"] for option in gate["questions"][0]["options"]]
             self.assertEqual(values, ["approve", "rewrite", "custom"])
+            self.assertTrue(gate["interaction_required"])
+            self.assertEqual(gate["preferred_tool"], "AskUserQuestion")
+            self.assertEqual(
+                gate["ask_user_question_payload"]["questions"],
+                [
+                    {
+                        "question": question["question"],
+                        "header": question["header"],
+                        "options": question.get("options", []),
+                        "multiSelect": bool(question.get("multiSelect", False)),
+                    }
+                    for question in gate["questions"]
+                ],
+            )
 
     def test_storyline_approval_dispatches_report(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

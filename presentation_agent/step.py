@@ -33,7 +33,33 @@ class StepError(RuntimeError):
     """Raised when a step operation is called at the wrong state."""
 
 
-def _load_run_state(root: Path, run_dir: Path, data_root: Optional[Path] = None) -> dict[str, Any]:
+def _resolve_global_state_path(
+    run_dir: Path,
+    run_state: Optional[dict[str, Any]] = None,
+) -> Path:
+    """Resolve the canonical per-run state path for legacy and Manager tasks."""
+
+    explicit = str((run_state or {}).get("global_state_path") or "").strip()
+    if explicit:
+        path = Path(explicit).expanduser()
+        return path if path.is_absolute() else (run_dir / path).resolve()
+
+    # Manager tasks live at <run>/tasks/<task>. Older runs do not carry an
+    # explicit path, so locate their Manager run root instead of assuming the
+    # task's direct parent owns state.json.
+    for ancestor in run_dir.parents:
+        if (ancestor / "manager_state.json").is_file():
+            return ancestor / "state.json"
+    return run_dir.parent / "state.json"
+
+
+def _load_run_state(
+    root: Path,
+    run_dir: Path,
+    data_root: Optional[Path] = None,
+    *,
+    state_path: Optional[Path] = None,
+) -> dict[str, Any]:
     """Load the per-run global state, seeded from the global template on first use.
 
     Each pipeline run (``artifacts/<run_name>/``) has its own ``state.json`` so
@@ -41,7 +67,7 @@ def _load_run_state(root: Path, run_dir: Path, data_root: Optional[Path] = None)
     ``data/global/state.json`` serves only as the initial seed/template — once
     a run's state exists, the global file is never read for that run again.
     """
-    state_path = run_dir.parent / "state.json"
+    state_path = state_path or _resolve_global_state_path(run_dir)
     if state_path.exists():
         return read_json(state_path, default={})
     template = (data_root or (root / "data")) / "global" / "state.json"
@@ -134,7 +160,13 @@ class StepRunner:
         write_json(self.run_state_path, state)
         self.skill = get_skill(self.spec.skill, llm=None)  # no LLM — host model generates
 
-        self.full_global_state = _load_run_state(root, run_dir, data_root=self.data_root)
+        self.global_state_path = _resolve_global_state_path(run_dir, state)
+        self.full_global_state = _load_run_state(
+            root,
+            run_dir,
+            data_root=self.data_root,
+            state_path=self.global_state_path,
+        )
 
         self.reviewer = ArtifactReviewer(llm=None)  # deterministic-only in inline mode
         # 宿主自执行模式下不创建独立的 LLM checker。
@@ -1173,7 +1205,7 @@ class StepRunner:
 
         if applied:
             updated["updated_at"] = now_iso()
-            write_json(self.run_dir.parent / "state.json", updated)
+            write_json(self.global_state_path, updated)
         return applied
 
     def _read_and_validate_output(self, filename: str, state: dict[str, Any]) -> dict[str, Any]:
