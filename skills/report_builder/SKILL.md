@@ -179,7 +179,17 @@ AskUserQuestion(
 
 `options=[]` 在 WorkBuddy 中会保留自由输入框；不要为了“让工具更像选择题”而补任何占位 option。
 
-1. `brief_stage=collection_and_confirmation`：先原样展示 `present_to_user` 的 Brief 草案，然后**调用一次 `AskUserQuestion`**，在同一个工具调用中原样传入 4 个问题：研究目的、当前研究 hypo、高可信论据、Brief 确认。前三题即使草案已有推断值也必须再次询问，不能因“已有内容”而删除；前三题保持 `options=[]`，第四题保持“准确，继续 / 需要修改”。
+### Brief 展示顺序硬约束
+
+runtime 会返回 `presentation_required_before_tool=true`、独立的 `presentation_text`、`presentation_delivery_mode=separate_user_visible_message_before_tool` 和固定的 `host_action_sequence=["send_present_to_user_message", "call_AskUserQuestion"]`。宿主必须严格执行：
+
+1. 先发送一条**独立且不带任何 tool call** 的用户可见消息，正文原样使用 `presentation_text`（即完整 `present_to_user`）；
+2. 等这条消息完成发送并已在用户界面中展示；确认正文中出现 `## Brief 草案`、Evidence List、报告设定和执行流程；
+3. 再执行后续 host action，调用 `AskUserQuestion`。
+
+把 Brief 写在一个同时含有 `tool_calls` 的 assistant completion 的 `content` 前缀中，不算完成展示。禁止只说“现在进入 Brief 确认”或自行缩写 Brief 后就调用工具；禁止把 Brief 塞进某一道题的 `question` 文本；禁止先调用工具再补 Brief。
+
+1. `brief_stage=collection_and_confirmation`：严格先完整输出 `presentation_text`，然后**调用一次 `AskUserQuestion`**，在同一个工具调用中原样传入 4 个问题：研究目的、当前研究 hypo、高可信论据、Brief 确认。前三题即使草案已有推断值也必须再次询问，不能因“已有内容”而删除；前三题保持 `options=[]`，第四题保持“准确，继续 / 需要修改”。
 2. 将四题答案汇总为 JSON 回传，例如 `{"research_purpose":"...","research_direction":"...","high_confidence_evidence":["EV-003","EV-008"],"brief_confirmed":true}`；没有特别优先的论据也必须显式传 `"high_confidence_evidence":[]`。执行 `report feedback --text '<上述 JSON>'` 后，runtime 会把答案写回 `raw_brief.json` 并记录本次明确确认。
 3. 若用户选择“准确，继续”，feedback 返回 `next_action=report_approve_without_asking_again`，直接执行 `report approve`，**不得再弹第二个确认面板**。若用户选择“需要修改”，把修改归入 `brief_updates` 且传 `"brief_confirmed":false`；runtime 重显更新后的完整 Brief，并只再次询问确认。
 
@@ -209,10 +219,11 @@ python -m presentation_agent.cli \
 
 Analysis 论点组确认 gate：
 
-- 如果 `present_to_user` 是“Analysis 论点组确认”且 `questions` 包含“论点组选择”，先把 2-3 组主论点/分论点完整展示给用户，并用结构化提问让用户选择。
-- 用户选择某个方案编号（如 `TG-01`）：先执行 `report feedback --text '<选择 TG-01 + 用户说明>'`，CLI 会记录到 `selected_analysis_thesis`；随后在用户明确表示可以后再执行 `report approve` 进入 Storyline。
-- 用户选择“都不好，重新写”：必须让用户说明原因，再执行 `report feedback --text '<都不好 + 原因>'`。不要直接 approve；runtime 会复用当前 Analysis task 进入 revise，修订后会再次回到同一个确认 gate。
-- 用户选择“我自己修改”：把用户的非结构化修改意见原样放进 `report feedback --text`。不要替用户整理成最终 JSON；当前 Analysis agent 会根据反馈重新整理结构化论点组，并再次请求确认。
+- 如果 `present_to_user` 是“Analysis 论点组确认”，先把 2-3 组主论点/分论点完整展示给用户，然后只发起 **1 个自由输入问题**（`inputType=text, options=[]`），不得再追加“选择说明/其他补充”第二题。
+- 这一个输入框同时承载确认和修改：用户填写方案编号（如 `TG-01`，理由可选）即确认；填写“都不好 + 原因”即要求重写；直接填写修改意见即表示“我自己修改”。
+- 用户填写某个方案编号：先执行 `report feedback --text '<选择 TG-01 + 可选理由>'`，CLI 会记录到 `selected_analysis_thesis`；随后执行 `report approve` 进入 Storyline。
+- 用户填写“都不好 + 原因”：执行 `report feedback --text '<都不好 + 原因>'`。不要直接 approve；runtime 会复用当前 Analysis task 进入 revise，修订后会再次回到同一个确认 gate。
+- 用户直接填写修改意见：把非结构化修改意见原样放进 `report feedback --text`。不要替用户整理成最终 JSON；当前 Analysis agent 会根据反馈重新整理结构化论点组，并再次请求确认。
 
 Storyline 确认 gate：
 

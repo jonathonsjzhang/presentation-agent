@@ -1270,7 +1270,8 @@ class ManagerOrchestrator:
                 selection = self._analysis_thesis_selection(state)
                 if not selection:
                     state["analysis_feedback_error"] = (
-                        "请先选择一个 Analysis 主论点组；如果都不合适，请选择“都不好，重新写”并说明原因。"
+                        "请在确认框填写一个 Analysis 主论点组编号；如果都不合适，"
+                        "请在同一输入框填写“都不好”及原因或直接写出修改意见。"
                     )
                     self._save_state(state)
                     return self._human_gate_result(state)
@@ -2757,6 +2758,20 @@ class ManagerOrchestrator:
             result["interaction_required"] = bool(result["questions"])
             result["preferred_tool"] = "AskUserQuestion"
             result["must_call_tool_before_next_cli"] = bool(result["questions"])
+            result["presentation_required_before_tool"] = bool(
+                result["questions"]
+            )
+            result["presentation_text"] = present_to_user
+            result["presentation_delivery_mode"] = (
+                "separate_user_visible_message_before_tool"
+                if result["questions"]
+                else "none"
+            )
+            result["host_action_sequence"] = (
+                ["send_present_to_user_message", "call_AskUserQuestion"]
+                if result["questions"]
+                else []
+            )
             result["ask_user_question_payload"] = {
                 "questions": [
                     {
@@ -3013,7 +3028,7 @@ class ManagerOrchestrator:
         lines = [
             "## Analysis 论点组确认",
             "",
-            "Analysis 已基于当前证据整理出可进入 Storyline 的主论点方案。请选择最适合本次汇报的一组；如果都不合适，请说明原因后让同一个 Analysis agent 重写；如果你希望自己修改，请直接写出修改方向或新版本，Analysis 会重新整理成结构化表达。",
+            "Analysis 已基于当前证据整理出可进入 Storyline 的主论点方案。请在下方唯一输入框填写最适合本次汇报的方案编号；如果都不合适，请在同一处说明原因；如果你希望自己修改，也直接在同一处写出修改方向或新版本，Analysis 会重新整理成结构化表达。",
         ]
         if error:
             lines.extend(["", f"需要补充：{error}"])
@@ -3055,7 +3070,7 @@ class ManagerOrchestrator:
                 "",
                 "---",
                 "",
-                "请选择一个论点组；或选择“都不好，重新写”并说明为什么；或选择“我自己修改”并写出你的修改意见。",
+                "请在同一个输入框填写方案编号；或填写“都不好 + 原因”；或直接写出你的修改意见。",
             ]
         )
         return "\n".join(lines)
@@ -3064,46 +3079,20 @@ class ManagerOrchestrator:
     def _analysis_thesis_questions(
         options: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        choice_options = []
-        for option in options:
-            label = f"{option['option_id']}｜{option['main_thesis'][:34]}"
-            description_parts = []
-            if option.get("best_for"):
-                description_parts.append(str(option["best_for"]))
-            if option.get("evidence_strength"):
-                description_parts.append(f"证据强度：{option['evidence_strength']}")
-            choice_options.append(
-                {
-                    "label": label,
-                    "value": option["option_id"],
-                    "description": "；".join(description_parts)
-                    or "选择该主论点组进入 Storyline",
-                }
-            )
-        choice_options.extend(
-            [
-                {
-                    "label": "都不好，重新写",
-                    "value": "rewrite",
-                    "description": "需要说明原因；会复用当前 Analysis agent 上下文重写",
-                },
-                {
-                    "label": "我自己修改",
-                    "value": "custom",
-                    "description": "可直接写非结构化修改意见；Analysis 会整理为结构化论点组",
-                },
-            ]
+        option_ids = " / ".join(
+            str(option.get("option_id") or "").strip()
+            for option in options
+            if str(option.get("option_id") or "").strip()
         )
+        choice_hint = f"（{option_ids}）" if option_ids else ""
         return [
             {
-                "header": "论点组选择",
-                "question": "请选择你认为最适合本次汇报的主论点组；如果都不合适，也可以选择重写或自己修改。",
-                "multiSelect": False,
-                "options": choice_options,
-            },
-            {
-                "header": "选择说明",
-                "question": "如选择“都不好”或“我自己修改”，请说明原因或直接写出你的修改意见；如选择已有方案，可补充为什么选择。",
+                "header": "论点组确认",
+                "question": (
+                    "请在一个输入框内完成确认或修改：同意已有方案时填写方案编号"
+                    f"{choice_hint}，可选填理由；不同意时填写“都不好 + 原因”，"
+                    "或直接写出你的修改意见。"
+                ),
                 "inputType": "text",
                 "multiSelect": False,
                 "options": [],

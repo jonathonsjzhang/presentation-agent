@@ -48,6 +48,10 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertIn("禁止只把问题写成普通文本", instructions)
         self.assertIn('"options": []', instructions)
         self.assertIn("同一个工具调用中原样传入 4 个问题", instructions)
+        self.assertIn("`presentation_text`（即完整 `present_to_user`）", instructions)
+        self.assertIn("禁止把 Brief 塞进某一道题", instructions)
+        self.assertIn("独立且不带任何 tool call", instructions)
+        self.assertIn("同时含有 `tool_calls`", instructions)
 
     def test_user_facing_report_start_defaults_to_v03(self) -> None:
         args = build_parser().parse_args(
@@ -213,6 +217,22 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 )
             )
             self.assertEqual(prepared["questions"][3]["header"], "Brief确认")
+            self.assertTrue(prepared["presentation_required_before_tool"])
+            self.assertEqual(
+                prepared["presentation_text"], prepared["present_to_user"]
+            )
+            self.assertEqual(
+                prepared["presentation_delivery_mode"],
+                "separate_user_visible_message_before_tool",
+            )
+            self.assertEqual(
+                prepared["host_action_sequence"],
+                ["send_present_to_user_message", "call_AskUserQuestion"],
+            )
+            self.assertIn("## Brief 草案", prepared["presentation_text"])
+            self.assertNotIn(
+                "Brief 草案", prepared["questions"][0]["question"]
+            )
             self.assertEqual(
                 prepared["ask_user_question_payload"]["questions"],
                 [
@@ -792,10 +812,11 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertIn("Analysis 论点组确认", gate["present_to_user"])
             self.assertIn("TG-01", gate["present_to_user"])
             self.assertIn("论点组", gate["questions"][0]["header"])
-            values = [option["value"] for option in gate["questions"][0]["options"]]
-            self.assertIn("TG-01", values)
-            self.assertIn("rewrite", values)
-            self.assertIn("custom", values)
+            self.assertEqual(len(gate["questions"]), 1)
+            self.assertEqual(gate["questions"][0]["inputType"], "text")
+            self.assertEqual(gate["questions"][0]["options"], [])
+            self.assertIn("TG-01 / TG-02", gate["questions"][0]["question"])
+            self.assertIn("一个输入框", gate["questions"][0]["question"])
 
     def test_analysis_thesis_selection_is_stored_for_storyline(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
