@@ -145,11 +145,43 @@ python -m presentation_agent.cli \
 
 有文件、目录或原始数据时，第一轮先返回 Evidence Harvester worker instruction；宿主按正常 spawn/submit 协议完成后，runtime 才进入 brief human gate。没有待处理原始材料或已有可复用 Catalog 时，第一轮直接进入 brief human gate。
 
-Brief gate 必须严格按 runtime 返回的 `brief_stage` 执行两段式协议，不得合并、跳步或自行增删问题：
+Brief gate 必须严格按 runtime 返回的单次四题协议执行，不得拆分、跳步或自行增删问题：
 
-1. `brief_stage=collection`：先原样展示 `present_to_user` 的 Brief 草案，再逐项发起 `questions` 中最多 3 个纯文本填空。每题必须原样保留 `inputType=text` 与 `options=[]`；**禁止**添加“用户提供”“用户填写”“自定义”等占位选项。宿主工具若会为自造选项再附加一个自由输入框，就不要传任何自造选项，只保留自由输入框。不要在这一轮追加第四个确认题。
-2. 将答案汇总为 JSON 对象回传，例如 `{"research_purpose":"...","research_direction":"...","high_confidence_evidence":["EV-003","EV-008"]}`；没有特别优先的论据也必须显式传 `"high_confidence_evidence":[]`。执行 `report feedback --text '<上述 JSON>'` 后，runtime 会把答案写回 `raw_brief.json`。
-3. `brief_stage=confirmation`：原样展示更新后的 `present_to_user`（标题为“Brief 最终确认”），此时 `questions` 只能有一个“准确，继续 / 需要修改”确认题。只有用户选择“准确，继续”才执行 `report approve`。选择“需要修改”时，把修改归入 `brief_updates` 后再次执行 `report feedback`，等待 runtime 重显完整 Brief；不得直接 approve。
+### WorkBuddy 工具调用硬约束
+
+进入任何 Brief human gate 后，先检查当前工具列表：
+
+- 有 `AskUserQuestion`：`interaction_required=true` 时，**下一步唯一合法动作是实际调用 `AskUserQuestion` 工具**。展示 `present_to_user` 后必须在同一轮发起工具调用；禁止只把问题写成普通文本，禁止先输出最终答复，禁止先执行 `report feedback` / `report approve` / `report next`。
+- 没有 `AskUserQuestion`：才允许用普通文本逐项提问，并明确这是宿主工具不可用时的降级。不得因为模型觉得信息“已经足够”而跳过问题。
+
+不要自行拼参数。runtime 已提供可直接透传的 `ask_user_question_payload`。WorkBuddy 调用形态固定为：
+
+```tool_call
+AskUserQuestion(
+  questions = instruction.ask_user_question_payload.questions
+)
+```
+
+例如填空阶段的实际参数应形如：
+
+```json
+{
+  "questions": [
+    {
+      "question": "当前的研究hypo是什么？",
+      "header": "当前研究 hypo",
+      "options": [],
+      "multiSelect": false
+    }
+  ]
+}
+```
+
+`options=[]` 在 WorkBuddy 中会保留自由输入框；不要为了“让工具更像选择题”而补任何占位 option。
+
+1. `brief_stage=collection_and_confirmation`：先原样展示 `present_to_user` 的 Brief 草案，然后**调用一次 `AskUserQuestion`**，在同一个工具调用中原样传入 4 个问题：研究目的、当前研究 hypo、高可信论据、Brief 确认。前三题即使草案已有推断值也必须再次询问，不能因“已有内容”而删除；前三题保持 `options=[]`，第四题保持“准确，继续 / 需要修改”。
+2. 将四题答案汇总为 JSON 回传，例如 `{"research_purpose":"...","research_direction":"...","high_confidence_evidence":["EV-003","EV-008"],"brief_confirmed":true}`；没有特别优先的论据也必须显式传 `"high_confidence_evidence":[]`。执行 `report feedback --text '<上述 JSON>'` 后，runtime 会把答案写回 `raw_brief.json` 并记录本次明确确认。
+3. 若用户选择“准确，继续”，feedback 返回 `next_action=report_approve_without_asking_again`，直接执行 `report approve`，**不得再弹第二个确认面板**。若用户选择“需要修改”，把修改归入 `brief_updates` 且传 `"brief_confirmed":false`；runtime 重显更新后的完整 Brief，并只再次询问确认。
 
 最终确认页应按顺序包含研究目的、当前研究 hypo、正式 Evidence List、用户标记的高可信论据、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。若 `present_to_user` 缺少 Brief 内容，先执行 `report status --run "<run_id>"` 检查状态；仍缺失则报告协议错误，不要凭宿主记忆拼一份后直接批准。
 
@@ -167,10 +199,10 @@ python -m presentation_agent.cli \
 
 ### actor=human
 
-展示 `present_to_user`，等待用户决定。brief gate 严格遵守上面的 collection → persistence → confirmation 两段协议：填空轮最多 3 题且没有任何占位 option；最终确认轮必须把完整 Brief 和唯一确认题一起展示。不要询问 worker 选择或 review sub_agent 选择。
+展示 `present_to_user` 后立即检查 `interaction_required`。值为 `true` 时必须调用 `preferred_tool`；在 WorkBuddy 中就是把 `ask_user_question_payload` 透传给 `AskUserQuestion`。首次 Brief gate 必须在一个面板中完整呈现 4 题；不能因为草案已有研究目的而删题，也不能把 Brief 确认推迟到另一轮。不要询问 worker 选择或 review sub_agent 选择。
 
-- 仅当 `brief_stage=confirmation` 且用户选择“准确，继续”时：`report approve`
-- `brief_stage=collection` 的答案：`report feedback --text '{"research_purpose":"...","research_direction":"...","high_confidence_evidence":[...]}'`
+- 四题答案：`report feedback --text '{"research_purpose":"...","research_direction":"...","high_confidence_evidence":[...],"brief_confirmed":true}'`
+- feedback 返回 `report_approve_without_asking_again` 时：`report approve`
 - 最终确认页要求修改：`report feedback --text '{"brief_updates":{"topic":"...","report_length":"..."}}'`；待完整 Brief 重显后再确认
 - brief gate 默认 approve 不传 `--run-mode`，runtime 会在 analysis、storyline 后暂停确认；用户明确要求逐步看结果时才传 `--run-mode step_by_step`
 - brief 阶段不要主动询问 review sub_agent；只有用户明确要求严格质量审查、调试质量问题或最终验收时，才使用 `--review-mode independent`
