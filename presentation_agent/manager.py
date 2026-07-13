@@ -859,9 +859,33 @@ class ManagerOrchestrator:
                 and current_task.get("agent_id") == "format"
                 and not self._format_delivery_succeeded(worker_result)
             ):
+                render_result = (
+                    worker_result.get("render_result")
+                    or artifact.get("render_result")
+                    or {}
+                )
+                render_detail = ""
+                if isinstance(render_result, dict):
+                    render_detail = str(render_result.get("detail") or "").strip()
+                if not render_detail:
+                    deliverables = (artifact.get("artifact_manifest") or {}).get(
+                        "deliverables"
+                    ) or []
+                    render_detail = next(
+                        (
+                            str(item.get("blocking_reason") or "").strip()
+                            for item in deliverables
+                            if isinstance(item, dict)
+                            and str(item.get("blocking_reason") or "").strip()
+                        ),
+                        "",
+                    )
+                detail_suffix = (
+                    f" renderer detail: {render_detail}" if render_detail else ""
+                )
                 raise StepError(
                     "Format 不能 complete：runtime renderer 未产出可读取的正式交付文件。"
-                    "请修复渲染错误后重试。"
+                    f"请修复渲染错误后重试。{detail_suffix}"
                 )
         self._archive_decision(decision)
         self._append_decision(

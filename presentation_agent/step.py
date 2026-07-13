@@ -784,6 +784,11 @@ class StepRunner:
                 "warnings": list(
                     render_result.warnings if render_result is not None else []
                 ),
+                "detail": (
+                    str(render_result.detail)
+                    if render_result is not None and render_result.detail
+                    else ""
+                ),
             }
         )
         manifest = artifact.setdefault(

@@ -87,6 +87,20 @@ class FormattedDocumentV2Tests(unittest.TestCase):
             result = render_formatted_document_v2(formatted, load(REPORT), Path(temp_dir))
         self.assertEqual(result.status, "rendered", result.detail)
 
+    def test_renderer_accepts_qa_enhanced_report_v1(self) -> None:
+        report = load(REPORT)
+        report["agent_id"] = "qa_preparation"
+        report["report_markdown"] += (
+            "\n## 听众可能追问的问题\n\n"
+            "- 哪些反例会推翻当前判断？\n"
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = render_formatted_document_v2(
+                load(FORMATTED), report, Path(temp_dir)
+            )
+            self.assertEqual(result.status, "rendered", result.detail)
+            self.assertTrue(Path(str(result.output_path)).is_file())
+
     def test_empty_chart_falls_back_to_callout(self) -> None:
         formatted = load(FORMATTED)
         formatted["visuals"][0]["type"] = "chart"
@@ -192,6 +206,7 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 output_path=str(stage_dir / "report_formatted.docx"),
                 file_bytes=1,
                 unit_count=2,
+                detail="preset=standard_business_brief",
             )
 
             with patch("presentation_agent.renderers.render_material", return_value=result):
@@ -204,6 +219,10 @@ class FormattedDocumentV2Tests(unittest.TestCase):
             self.assertEqual(
                 artifact["evidence_asset_enrichment"][0]["ref"],
                 "E1:T1-usage",
+            )
+            self.assertEqual(
+                artifact["render_result"]["detail"],
+                "preset=standard_business_brief",
             )
 
     def test_line_chart_data_renders_as_document_visual(self) -> None:
