@@ -39,7 +39,7 @@
       "phase": ["generation", "review"],
       "level": "P0",
       "property": "style_token_contract",
-      "instruction": "style_tokens 必须落实：中文楷体/英文 Arial；一级标题 24pt 加粗、小标题 16pt 蓝色(#2972F4)加粗、正文 14pt 黑色；highlight 三级(深蓝#0070C0加粗>黑加粗>下划线)；全篇非黑白灰颜色≤3、主色蓝；正文 bullet 末尾不加句号、缩进≤3层。"
+      "instruction": "style_tokens 必须落实：中文楷体/英文 Arial；报告标题 24pt 加粗、章节标题 16pt 蓝色(#2972F4)加粗、正文 12pt 黑色；不生成独立封面页或目录，报告标题后直接进入 Executive Summary；highlight 三级(深蓝#0070C0加粗>黑加粗>下划线)；全篇非黑白灰颜色≤3、主色蓝；正文 bullet 末尾不加句号、缩进≤3层。"
     },
     {
       "id": "FMT-DOC-FM-G03",

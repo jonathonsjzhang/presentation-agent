@@ -62,7 +62,8 @@ description: Read a complete Markdown strategy report as a thoughtful audience w
 
 ## 输入边界
 
-- 上游 `report.v1.report_markdown` 是完整报告原稿。你必须保留原文顺序、标题、段落和措辞，只在末尾追加问题清单。
+- 上游 `report.v1.report_markdown` 是完整报告原稿。你必须保留原文顺序、标题、段落、措辞和 `[可视化论据：...]` 标记，只在末尾追加问题清单。
+- 上游 `visual_evidence_placements` 必须逐项原样复制到输出，不能删除、改名或重新排序。
 - `report_charter`、`raw_brief` 和 `upstream_signal` 用于理解汇报目的、听众和预期行动，不用于新增事实。
 - 不重读 Raw Materials，不补做 Analysis，不改变 Storyline，不新增图表或版式指令。
 - 如果报告已有同名问题清单，先判断它是否符合本轮要求；需要修订时整体替换该清单，但不要改动前面的报告正文。
@@ -106,7 +107,8 @@ description: Read a complete Markdown strategy report as a thoughtful audience w
 
 ```json
 {
-  "report_markdown": "# 报告标题\n\n## Executive Summary\n\n……\n\n## 附录\n\n……\n\n## 听众可能追问的问题\n\n1. ……？\n2. ……？"
+  "report_markdown": "# 报告标题\n\n## Executive Summary\n\n……\n\n## 附录\n\n……\n\n## 听众可能追问的问题\n\n1. ……？\n2. ……？",
+  "visual_evidence_placements": []
 }
 ```
 

@@ -1,6 +1,18 @@
 {
   "agent_id": "analysis",
   "schema": "analysis.v1",
+  "visual_evidence_candidates": [
+    {
+      "id": "VE-01",
+      "claim": "成果保存组的第 7 日回访率高于仅完成单轮问答的用户",
+      "purpose": "让读者直接看见 34% 与 18% 的组间差异，同时保留非因果边界",
+      "finding_refs": ["F-01"],
+      "evidence_refs": ["E-Q-01"],
+      "data_asset_refs": ["E-Q-01:retention_by_behavior"],
+      "data_type": "comparison",
+      "required": true
+    }
+  ],
   "topic": "AI 助手用户留存改善机会",
   "analysis_questions": [
     "首周哪些行为与第 7 日回访共同出现？",

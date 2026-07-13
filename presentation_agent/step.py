@@ -791,6 +791,18 @@ class StepRunner:
                 ),
             }
         )
+        metrics = (
+            dict(render_result.metrics)
+            if render_result is not None
+            and isinstance(getattr(render_result, "metrics", None), dict)
+            else {}
+        )
+        if metrics:
+            result["metrics"] = metrics
+            if isinstance(metrics.get("body_budget_audit"), dict):
+                artifact["body_budget_audit"] = dict(
+                    metrics["body_budget_audit"]
+                )
         manifest = artifact.setdefault(
             "artifact_manifest", {"target": target, "deliverables": []}
         )
@@ -845,7 +857,7 @@ class StepRunner:
                     raise ValueError("report.v1 report_markdown is empty")
                 output_path = self.run_dir / report_file
                 output_path.write_text(markdown.rstrip() + "\n", encoding="utf-8")
-                return RenderResult(
+                render_result = RenderResult(
                     status="rendered",
                     fmt="markdown",
                     fidelity="content",
@@ -854,6 +866,11 @@ class StepRunner:
                     unit_count=len(artifact.get("section_manifest") or []),
                     detail="canonical report manuscript",
                 )
+                if self.spec.id == "report":
+                    self._apply_report_body_budget_audit(
+                        artifact, render_result
+                    )
+                return render_result
             except Exception as exc:
                 from presentation_agent.renderers.base import RenderResult
 
@@ -866,10 +883,32 @@ class StepRunner:
         if self._uses_v03_format_renderer():
             try:
                 from presentation_agent.renderers import render_material
+                from presentation_agent.renderers.base import RenderResult
+                from presentation_agent.visual_evidence import (
+                    audit_required_visual_evidence,
+                    revision_requests_from_audit,
+                )
 
                 input_data = self._load_input(self._load_state())
                 source_report = self._source_report_from_input(input_data)
-                return render_material(
+                visual_audit = audit_required_visual_evidence(artifact, source_report)
+                artifact["visual_evidence_check"] = visual_audit
+                if visual_audit["passed"] is not True:
+                    artifact["upstream_revision_requests"] = (
+                        revision_requests_from_audit(visual_audit)
+                    )
+                    detail = "；".join(
+                        str(item.get("reason") or "可视化论据不完整")
+                        for item in visual_audit.get("issues") or []
+                    )
+                    return RenderResult(
+                        status="error",
+                        fmt=str(artifact.get("delivery_target") or "unknown"),
+                        fidelity="formatted",
+                        detail=f"可视化论据检查未通过：{detail}",
+                    )
+                artifact.pop("upstream_revision_requests", None)
+                render_result = render_material(
                     artifact,
                     self.run_dir,
                     fidelity="formatted",
@@ -878,6 +917,10 @@ class StepRunner:
                     selected_capabilities=self.skill_package.selected_capabilities,
                     source_report=source_report,
                 )
+                self._apply_format_body_budget_audit(
+                    artifact, source_report, render_result
+                )
+                return render_result
             except Exception as exc:
                 from presentation_agent.renderers.base import RenderResult
 
@@ -888,6 +931,124 @@ class StepRunner:
                     detail=str(exc),
                 )
         return None
+
+    def _delivery_budget(self) -> dict[str, Any]:
+        budget = self.full_global_state.get("delivery_budget")
+        if isinstance(budget, dict) and budget.get("body_page_limit"):
+            return dict(budget)
+        charter = self.full_global_state.get("report_charter")
+        if not isinstance(charter, dict):
+            return {}
+        from presentation_agent.page_budget import derive_delivery_budget
+
+        return derive_delivery_budget(charter)
+
+    @staticmethod
+    def _mark_body_budget_result(
+        render_result: Any, audit: dict[str, Any]
+    ) -> None:
+        render_result.metrics["body_budget_audit"] = audit
+        if audit.get("passed") is True:
+            return
+        detail = str(audit.get("detail") or "正文页数审计未通过")
+        render_result.status = "error"
+        render_result.detail = (
+            f"{render_result.detail}; {detail}"
+            if render_result.detail
+            else detail
+        )
+
+    def _apply_report_body_budget_audit(
+        self, report: dict[str, Any], render_result: Any
+    ) -> None:
+        budget = self._delivery_budget()
+        limit = budget.get("body_page_limit")
+        if not isinstance(limit, int) or limit <= 0:
+            return
+        from presentation_agent.page_budget import (
+            audit_document_body_pages,
+            executive_summary_character_count,
+        )
+
+        formatted = {
+            "agent_id": "format",
+            "schema": "formatted_material.v2",
+            "delivery_target": "document",
+            "visuals": [],
+        }
+        audit = audit_document_body_pages(
+            report=report,
+            formatted=formatted,
+            out_dir=self.run_dir,
+            body_page_limit=limit,
+            stage="report_preflight",
+        )
+        audit["body_char_min"] = budget.get("body_char_min")
+        audit["body_char_target"] = budget.get("body_char_target")
+        audit["body_char_warning"] = budget.get("body_char_warning")
+        audit["report_body_char_limit"] = budget.get("report_body_char_limit")
+        audit["executive_summary_chars"] = executive_summary_character_count(
+            str(report.get("report_markdown") or "")
+        )
+        audit["executive_summary_char_min"] = budget.get(
+            "executive_summary_char_min"
+        )
+        audit["executive_summary_char_max"] = budget.get(
+            "executive_summary_char_max"
+        )
+        audit["max_body_visuals"] = budget.get("max_body_visuals")
+        violations: list[str] = []
+        char_limit = budget.get("report_body_char_limit")
+        if isinstance(char_limit, int) and audit.get("body_chars", 0) > char_limit:
+            violations.append(
+                f"Report 正文 {audit['body_chars']} 字符，超过预留视觉空间后的硬上限 {char_limit} 字符"
+            )
+        es_chars = audit["executive_summary_chars"]
+        es_min = budget.get("executive_summary_char_min")
+        es_max = budget.get("executive_summary_char_max")
+        if (
+            isinstance(es_min, int)
+            and isinstance(es_max, int)
+            and not es_min <= es_chars <= es_max
+        ):
+            violations.append(
+                f"Executive Summary {es_chars} 字符，不在固定的 {es_min}–{es_max} 字符范围内"
+            )
+        if violations:
+            audit["passed"] = False
+            page_detail = str(audit.get("detail") or "").strip()
+            audit["detail"] = "；".join(
+                item for item in [page_detail, *violations] if item
+            )
+        self._mark_body_budget_result(render_result, audit)
+
+    def _apply_format_body_budget_audit(
+        self,
+        formatted: dict[str, Any],
+        source_report: dict[str, Any] | None,
+        render_result: Any,
+    ) -> None:
+        if (
+            render_result.status != "rendered"
+            or str(formatted.get("delivery_target") or "") != "document"
+            or not isinstance(source_report, dict)
+        ):
+            return
+        budget = self._delivery_budget()
+        limit = budget.get("body_page_limit")
+        if not isinstance(limit, int) or limit <= 0:
+            return
+        from presentation_agent.page_budget import audit_document_body_pages
+
+        audit = audit_document_body_pages(
+            report=source_report,
+            formatted=formatted,
+            out_dir=self.run_dir,
+            body_page_limit=limit,
+            stage="format_final",
+        )
+        audit["max_body_visuals"] = budget.get("max_body_visuals")
+        self._mark_body_budget_result(render_result, audit)
 
     @staticmethod
     def _source_report_from_input(input_data: dict[str, Any]) -> dict[str, Any] | None:
@@ -1056,6 +1217,12 @@ class StepRunner:
         if filename in {"output_gen.json", "output_revise.json"}:
             input_data = self._load_input(state)
             self._attach_runtime_evidence_fields(data, input_data)
+            if self.spec.id == "qa_preparation":
+                source_report = self._source_report_from_input(input_data) or {}
+                if "visual_evidence_placements" in source_report:
+                    data["visual_evidence_placements"] = source_report[
+                        "visual_evidence_placements"
+                    ]
             if self.spec.id == "format":
                 target = input_data.get("delivery_target")
                 if not target and isinstance(input_data.get("manager_task"), dict):

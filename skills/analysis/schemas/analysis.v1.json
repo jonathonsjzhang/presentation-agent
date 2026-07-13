@@ -4,7 +4,7 @@
   "title": "Analysis worker submission",
   "type": "object",
   "additionalProperties": true,
-  "required": ["findings", "thesis_options"],
+  "required": ["findings", "thesis_options", "visual_evidence_candidates"],
   "properties": {
     "findings": {
       "type": "array",
@@ -69,6 +69,43 @@
             "items": {"type": "string", "minLength": 1},
             "uniqueItems": true
           }
+        }
+      }
+    },
+    "visual_evidence_candidates": {
+      "type": "array",
+      "description": "Core claims whose evidence should be shown visually downstream. Empty is allowed only when no finding benefits from comparison, trend, distribution, relationship, process, or structured qualitative display.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "claim", "purpose", "finding_refs", "evidence_refs", "data_type", "required"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "claim": {"type": "string", "minLength": 1},
+          "purpose": {"type": "string", "minLength": 1},
+          "finding_refs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true
+          },
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true
+          },
+          "data_asset_refs": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true
+          },
+          "data_type": {
+            "type": "string",
+            "enum": ["time_series", "comparison", "distribution", "relationship", "process", "qualitative"]
+          },
+          "required": {"type": "boolean"},
+          "missing_data": {"type": "string"}
         }
       }
     },

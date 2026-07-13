@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
@@ -18,6 +19,7 @@ from presentation_agent.io import append_jsonl, read_json, write_json
 from presentation_agent.llm.schema import validate
 from presentation_agent.memory import MemoryStore
 from presentation_agent.models import AgentSpec, now_iso
+from presentation_agent.page_budget import derive_delivery_budget
 from presentation_agent.skill_package import load_skill_package
 from presentation_agent.spawn import SpawnRequest, build_spawn_adapter
 from presentation_agent.step import StepError, StepRunner
@@ -162,6 +164,8 @@ class ManagerAgentRuntime:
             "- PPT、HTML 只允许在默认五阶段完成后的 delivery options gate 追加。",
             "",
             "### acceptance_report（acceptance 阶段）",
+            "- acceptance 只需输出 action + acceptance_report；v0.3 runtime 自动生成/规范化 dispatch 或 revise 的 task_packet。",
+            "- 不要引用 handoff/output_*.json；正式上游路径由 runtime 绑定到当前 task 的 artifact.json。",
             "- verdict: accept / revise / blocked",
             "- reason: 一句话说明决定",
             "- revision_requirements: 仅在确需返工时填写",
@@ -218,6 +222,11 @@ class ManagerAgentRuntime:
             ):
                 errors.extend(self._v03_plan_errors(charter, packet))
         else:
+            state = read_json(
+                self.run_dir / "manager_state.json", default={}
+            )
+            if self.contract_profile == "v0_3":
+                self._normalize_v03_acceptance_packet(decision, state)
             report = decision.get("acceptance_report")
             if not isinstance(report, dict):
                 errors.append("$: acceptance decision missing object 'acceptance_report'")
@@ -234,9 +243,6 @@ class ManagerAgentRuntime:
                     errors.extend(validate(packet, self._schema(packet_schema), "$.task_packet"))
             if action == "complete" and phase != "acceptance":
                 errors.append("$.action: complete is only valid during acceptance")
-            state = read_json(
-                self.run_dir / "manager_state.json", default={}
-            )
             errors.extend(
                 self._v03_acceptance_route_errors(
                     action,
@@ -289,6 +295,152 @@ class ManagerAgentRuntime:
                 }
             )
         return decision
+
+    def _normalize_v03_acceptance_packet(
+        self,
+        decision: dict[str, Any],
+        state: dict[str, Any],
+    ) -> None:
+        """Keep fixed-chain routing and artifact bookkeeping out of model output.
+
+        The Manager still decides whether to accept, revise, or stop.  For v0.3,
+        however, the runtime already owns the worker order and knows the formal
+        artifact registered for the task under review.  Reconstructing those
+        fields here prevents a missing task packet or a handoff/output_gen.json
+        reference from stranding an otherwise valid acceptance decision.
+        """
+
+        action = decision.get("action")
+        if action not in ("dispatch", "revise"):
+            return
+        current = state.get("current_task") or {}
+        current_agent = str(current.get("agent_id") or "")
+        expected_next = {
+            "analysis": "storyline",
+            "storyline": "report",
+            "report": "qa_preparation",
+            "qa_preparation": "format",
+        }
+        upstream_requests: list[dict[str, Any]] = []
+        if action == "revise":
+            artifact = (state.get("worker_result") or {}).get("artifact") or {}
+            upstream_requests = [
+                item
+                for item in artifact.get("upstream_revision_requests") or []
+                if isinstance(item, dict)
+                and item.get("blocking_level") == "blocking"
+            ]
+        upstream_targets = [
+            "analysis"
+            if item.get("target_agent") == "evidence_harvester"
+            else str(item.get("target_agent") or "")
+            for item in upstream_requests
+        ]
+        upstream_target = next(
+            (
+                agent_id
+                for agent_id in ("analysis", "storyline", "report", "qa_preparation")
+                if agent_id in upstream_targets
+            ),
+            "",
+        )
+        target_agent = (
+            expected_next.get(current_agent, "")
+            if action == "dispatch"
+            else upstream_target or current_agent
+        )
+        if not target_agent:
+            return
+
+        submitted = decision.get("task_packet")
+        submitted_packet = submitted if isinstance(submitted, dict) else {}
+        if action == "revise":
+            upstream_task = next(
+                (
+                    item
+                    for item in reversed(state.get("tasks") or [])
+                    if isinstance(item, dict)
+                    and item.get("agent_id") == target_agent
+                    and isinstance(item.get("packet"), dict)
+                ),
+                None,
+            )
+            current_packet = (
+                upstream_task.get("packet")
+                if isinstance(upstream_task, dict)
+                else current.get("packet")
+            )
+            packet = copy.deepcopy(
+                current_packet if isinstance(current_packet, dict) else {}
+            )
+            packet.update(copy.deepcopy(submitted_packet))
+        else:
+            packet = copy.deepcopy(submitted_packet)
+
+        artifact_path = str(
+            current.get("artifact_path")
+            or (state.get("worker_result") or {}).get("artifact_path")
+            or ""
+        ).strip()
+        effective_inputs = list(packet.get("input_artifacts") or [])
+        if action == "dispatch" and artifact_path:
+            effective_inputs = [artifact_path]
+
+        objectives = {
+            "storyline": "基于已批准的 Analysis 产物收敛唯一故事线。",
+            "report": "基于已批准的 Storyline 写作完整报告。",
+            "qa_preparation": "基于完整报告追加听众深度追问清单。",
+            "format": "基于追加追问后的完整报告生成正式文档。",
+        }
+        packet["agent_id"] = target_agent
+        packet["input_artifacts"] = effective_inputs
+        packet.setdefault(
+            "objective",
+            objectives.get(target_agent, f"修订当前 {target_agent} 产物。"),
+        )
+        packet.setdefault("task_id", f"acceptance-{target_agent}")
+        if action == "revise" and not packet.get("revision_feedback"):
+            report = decision.get("acceptance_report") or {}
+            requirements = report.get("revision_requirements") or []
+            if requirements:
+                packet["revision_feedback"] = [
+                    str(item) for item in requirements if str(item).strip()
+                ]
+        if action == "revise" and upstream_requests:
+            reasons = [
+                str(item.get("reason") or "可视化论据不完整")
+                for item in upstream_requests
+                if (
+                    "analysis"
+                    if item.get("target_agent") == "evidence_harvester"
+                    else item.get("target_agent")
+                )
+                == target_agent
+            ]
+            if reasons:
+                packet["revision_feedback"] = reasons
+        decision["task_packet"] = packet
+
+        changes = []
+        if not isinstance(submitted, dict):
+            changes.append("missing task_packet synthesized by runtime")
+        if submitted_packet.get("agent_id") != target_agent:
+            changes.append(
+                f"agent_id normalized to canonical {target_agent}"
+            )
+        if action == "dispatch" and artifact_path and list(
+            submitted_packet.get("input_artifacts") or []
+        ) != [artifact_path]:
+            changes.append("input_artifacts bound to current artifact.json")
+        if changes:
+            decision.setdefault("runtime_normalizations", []).append(
+                {
+                    "field": "task_packet",
+                    "submitted": submitted if isinstance(submitted, dict) else None,
+                    "effective": copy.deepcopy(packet),
+                    "reason": "; ".join(changes),
+                }
+            )
 
     @staticmethod
     def _v03_plan_errors(
@@ -582,6 +734,13 @@ class WorkerExecutor:
             self.run_dir / "tasks" / candidate,
         ]
         for path in candidates:
+            # Older Manager outputs sometimes referenced the worker's transient
+            # handoff JSON.  Prefer the formal artifact registered at the task
+            # root when it is available.
+            if path.parent.name == "handoff" and path.name.startswith("output_"):
+                artifact_path = path.parent.parent / "artifact.json"
+                if artifact_path.is_file():
+                    return artifact_path.resolve()
             if path.exists() and path.is_file() and path.suffix.lower() == ".json":
                 return path.resolve()
         return None
@@ -791,6 +950,12 @@ class ManagerOrchestrator:
         state = self._load_state()
         if state.get("current_actor") != "manager" or state.get("manager_step") != "awaiting_output":
             raise StepError("当前没有等待提交的 Manager 输出")
+        state_before_commit = copy.deepcopy(state)
+        plan_before_commit = (
+            read_json(self.plan_path, default={})
+            if self.plan_path.is_file()
+            else None
+        )
         phase = str(state.get("manager_phase") or "planning")
         decision = self.agent.read_decision(phase)
         if phase == "acceptance":
@@ -810,6 +975,31 @@ class ManagerOrchestrator:
                 raise StepError("Manager action=revise 要求 acceptance verdict=revise")
             worker_result = state.get("worker_result") or {}
             artifact = worker_result.get("artifact") or {}
+            delivery_budget = (
+                state.get("project_state", {}).get("delivery_budget", {})
+                if isinstance(state.get("project_state"), dict)
+                else {}
+            )
+            budget_required = bool(delivery_budget.get("body_page_limit"))
+            budget_audit = self._body_budget_audit(worker_result)
+            requires_budget_pass = (
+                budget_required
+                and (
+                    action == "dispatch"
+                    and current_task.get("agent_id") == "report"
+                    or action == "complete"
+                    and current_task.get("agent_id") == "format"
+                )
+            )
+            if requires_budget_pass and budget_audit.get("passed") is not True:
+                detail = str(
+                    budget_audit.get("detail")
+                    or "runtime 未取得可验证的正文页数结果"
+                )
+                raise StepError(
+                    f"{current_task.get('agent_id')} 不能{action}：正文页数硬约束未通过。"
+                    f"{detail}。请提交 revise，并依据 body_budget_audit 压缩当前环节。"
+                )
             revision_requests = artifact.get("upstream_revision_requests", [])
             blocking_requests = [
                 item
@@ -905,9 +1095,34 @@ class ManagerOrchestrator:
         state["manager_step"] = "decision_committed"
         state["project_state"].update(decision.get("state_updates") or {})
 
-        if phase == "planning":
-            return self._commit_plan(state, decision)
-        return self._commit_acceptance(state, decision)
+        try:
+            if phase == "planning":
+                return self._commit_plan(state, decision)
+            return self._commit_acceptance(state, decision)
+        except Exception as exc:
+            # Applying a valid Manager decision can still fail at dispatch
+            # (for example, because an artifact reference cannot be resolved).
+            # Restore the pre-submit state so the same instruction can be
+            # corrected and submitted again without an out-of-band state hack.
+            restored = copy.deepcopy(state_before_commit)
+            restored["current_actor"] = "manager"
+            restored["manager_step"] = "awaiting_output"
+            restored["last_event"] = "manager_commit_failed"
+            restored["last_error"] = {
+                "at": now_iso(),
+                "phase": phase,
+                "message": str(exc),
+                "recovery": "rewrite current Manager output, then report next / report submit",
+            }
+            self._save_state(restored)
+            if isinstance(plan_before_commit, dict):
+                write_json(self.plan_path, plan_before_commit)
+            self._append_decision(
+                "manager_commit_failed",
+                "Manager decision application failed and state was rolled back",
+                {"phase": phase, "error": str(exc)},
+            )
+            raise
 
     def record_worker_completed(self, result: dict[str, Any]) -> dict[str, Any]:
         state = self._load_state()
@@ -1515,13 +1730,18 @@ class ManagerOrchestrator:
     def _commit_plan(self, state: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
         charter = decision["report_charter"]
         write_json(self.charter_path, charter)
+        delivery_budget = derive_delivery_budget(charter)
         global_state = dict(charter.get("global_state_seed") or {})
         global_state.update({
             "report_charter": charter,
             "updated_at": now_iso(),
         })
+        if delivery_budget:
+            global_state["delivery_budget"] = delivery_budget
         write_json(self.run_dir / "state.json", global_state)
         state["report_charter"] = charter
+        if delivery_budget:
+            state.setdefault("project_state", {})["delivery_budget"] = delivery_budget
         if decision.get("action") == "ask_human":
             state["current_actor"] = "human"
             state["human_gate"] = "decision"
@@ -1705,6 +1925,21 @@ class ManagerOrchestrator:
         if not isinstance(render_result, dict) or render_result.get("status") != "rendered":
             return False
         return bool(ManagerOrchestrator._format_rendered_files(worker_result))
+
+    @staticmethod
+    def _body_budget_audit(worker_result: dict[str, Any]) -> dict[str, Any]:
+        artifact = worker_result.get("artifact") or {}
+        direct = artifact.get("body_budget_audit")
+        if isinstance(direct, dict):
+            return direct
+        render_result = worker_result.get("render_result") or artifact.get(
+            "render_result"
+        ) or {}
+        if not isinstance(render_result, dict):
+            return {}
+        metrics = render_result.get("metrics") or {}
+        audit = metrics.get("body_budget_audit") if isinstance(metrics, dict) else None
+        return audit if isinstance(audit, dict) else {}
 
     @staticmethod
     def _format_rendered_files(worker_result: dict[str, Any]) -> list[str]:

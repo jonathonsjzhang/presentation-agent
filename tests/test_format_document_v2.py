@@ -55,8 +55,10 @@ class FormattedDocumentV2Tests(unittest.TestCase):
             with zipfile.ZipFile(output) as package:
                 self.assertIn("word/document.xml", package.namelist())
                 xml = package.read("word/document.xml").decode("utf-8")
-                self.assertIn("目录", xml)
+                self.assertNotIn(">目录<", xml)
                 self.assertIn("方法与边界", xml)
+                self.assertIn('w:ascii="Arial"', xml)
+                self.assertIn('w:eastAsia="Kaiti SC"', xml)
                 footer_xml = "".join(
                     package.read(name).decode("utf-8")
                     for name in package.namelist()
@@ -70,7 +72,6 @@ class FormattedDocumentV2Tests(unittest.TestCase):
             )
             for text in (
                 "AI 助手用户留存改善机会",
-                "目录",
                 "Executive Summary",
                 "34%",
                 "Section: 一、成果保存与回访共同出现，但因果仍待验证",
@@ -79,6 +80,9 @@ class FormattedDocumentV2Tests(unittest.TestCase):
             ):
                 self.assertIn(text, extracted)
             self.assertTrue(document.inline_shapes)
+            self.assertEqual(document.paragraphs[0].text, "AI 助手用户留存改善机会")
+            self.assertEqual(document.paragraphs[0].runs[0].font.size.pt, 24)
+            self.assertEqual(document.paragraphs[1].text, "Executive Summary")
 
     def test_renderer_does_not_require_worker_generated_caveat_register(self) -> None:
         formatted = load(FORMATTED)
@@ -100,6 +104,56 @@ class FormattedDocumentV2Tests(unittest.TestCase):
             )
             self.assertEqual(result.status, "rendered", result.detail)
             self.assertTrue(Path(str(result.output_path)).is_file())
+
+    def test_opening_visual_marker_is_replaced_in_place(self) -> None:
+        from docx import Document
+
+        report = load(REPORT)
+        report["report_markdown"] = (
+            "# 用户时长分析\n\n## Executive Summary\n\n"
+            "历史用户时长持续上升。\n\n[可视化论据：VE-OPEN]\n\n"
+            "## 一、增长判断\n\n变化并非单点波动。\n"
+        )
+        report["visual_evidence_placements"] = [
+            {
+                "id": "VE-OPEN",
+                "claim": "历史用户时长持续上升",
+                "purpose": "展示完整历史变化",
+                "evidence_refs": ["E-01"],
+                "data_type": "time_series",
+                "required": True,
+                "placement": "opening",
+                "section_heading": "Executive Summary",
+                "marker": "[可视化论据：VE-OPEN]",
+            }
+        ]
+        formatted = load(FORMATTED)
+        formatted["visuals"] = [
+            {
+                "visual_evidence_id": "VE-OPEN",
+                "section_heading": "Executive Summary",
+                "type": "chart",
+                "title": "历史用户时长变化",
+                "source_refs": ["E-01"],
+                "required": True,
+                "placement": "opening",
+                "data": {
+                    "chart_type": "line",
+                    "categories": ["1月", "2月", "3月"],
+                    "series": [{"name": "时长", "values": [8.3, 10.7, 15.0]}],
+                },
+            }
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = render_formatted_document_v2(formatted, report, Path(temp_dir))
+            self.assertEqual(result.status, "rendered", result.detail)
+            document = Document(result.output_path)
+            paragraphs = [paragraph.text for paragraph in document.paragraphs]
+            self.assertNotIn("[可视化论据：VE-OPEN]", "\n".join(paragraphs))
+            self.assertLess(
+                next(i for i, text in enumerate(paragraphs) if "历史用户时长变化" in text),
+                paragraphs.index("一、增长判断"),
+            )
 
     def test_empty_chart_falls_back_to_callout(self) -> None:
         formatted = load(FORMATTED)
@@ -190,10 +244,13 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 {
                     "visuals": [
                         {
+                            "visual_evidence_id": "VE-RUNTIME-01",
                             "section_heading": "一、成果保存与回访共同出现，但因果仍待验证",
                             "type": "chart",
                             "title": "DeepSeek 使用时长趋势",
                             "source_refs": ["E1"],
+                            "required": False,
+                            "placement": "section",
                         }
                     ]
                 },
@@ -240,7 +297,55 @@ class FormattedDocumentV2Tests(unittest.TestCase):
             result = render_formatted_document_v2(formatted, load(REPORT), Path(temp_dir))
             self.assertEqual(result.status, "rendered", result.detail)
             asset_dir = Path(temp_dir) / "report_formatted_assets"
-            self.assertTrue((asset_dir / "VIS-01.png").is_file())
+            self.assertTrue((asset_dir / "VE-01.png").is_file())
+
+    def test_real_case_chart_shapes_and_matrix_render_as_images(self) -> None:
+        formatted = load(FORMATTED)
+        formatted["visuals"] = [
+            {
+                "section_heading": "一、成果保存与回访共同出现，但因果仍待验证",
+                "type": "chart",
+                "title": "因子拆解",
+                "source_refs": ["E-Q-01"],
+                "data": {
+                    "metrics": ["人均使用时长", "人均使用次数", "人均单次使用时长"],
+                    "baseline_202505": [8, 4.65, 1.75],
+                    "observation_202605_value_range": ["15-25+", "7-8", "2.1+"],
+                    "change_range": ["~+100%", "+50-72%", "+20%"],
+                },
+            },
+            {
+                "section_heading": "二、可复用成果提供了值得优先验证的回访理由",
+                "type": "chart",
+                "title": "结构变化",
+                "source_refs": ["E-Q-01"],
+                "data": {
+                    "categories": ["30分钟以上", "10-30分钟", "低频用户"],
+                    "period_start_pct": [8.5, 15.0, 51.0],
+                    "period_end_pct": [12.5, 17.6, 42.0],
+                    "change_pp": ["+4", "+2.6", "-9"],
+                },
+            },
+            {
+                "section_heading": "二、可复用成果提供了值得优先验证的回访理由",
+                "type": "matrix",
+                "title": "四重结构性局限",
+                "source_refs": ["E-Q-01"],
+                "data": {
+                    "dimensions": ["有效vs低效使用", "产出质量", "产品形态内生差异", "DAU稀释效应"],
+                    "limitations": ["不能区分等待与有效交互", "不能衡量成功率", "跨品类基准有偏", "拉新改变分母"],
+                },
+            },
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = render_formatted_document_v2(formatted, load(REPORT), Path(temp_dir))
+            self.assertEqual(result.status, "rendered", result.detail)
+            asset_dir = Path(temp_dir) / "report_formatted_assets"
+            for asset_id in ("VIS-01", "VIS-02", "VIS-03"):
+                self.assertTrue((asset_dir / f"{asset_id}.png").is_file())
+            from docx import Document
+
+            self.assertEqual(len(Document(result.output_path).inline_shapes), 3)
 
 
 if __name__ == "__main__":

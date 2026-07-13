@@ -23,8 +23,8 @@
       "applies_to": ["format"],
       "severity": "P0",
       "dimension": "typography",
-      "criterion": "字体与字号符合规范：中文楷体、英文 Arial；一级标题 24pt、小标题 16pt 蓝色加粗、正文 14pt 黑色。",
-      "check": "run 是否同时设 eastAsia=楷体 与 ascii=Arial（中文未掉宋体）；标题/小标题/正文字号是否为 24/16/14；小标题是否蓝色(#2972F4)加粗。",
+      "criterion": "字体与字号符合规范：中文楷体、英文 Arial；报告标题 24pt、章节标题 16pt 蓝色加粗、正文 12pt 黑色；无独立封面和目录。",
+      "check": "run 是否同时设 eastAsia=Kaiti SC 与 ascii=Arial（中文未掉宋体或变成方框）；报告标题/章节标题/正文字号是否为 24/16/12；章节标题是否蓝色(#2972F4)加粗；标题后是否直接进入 Executive Summary。",
       "fix": "逐 run 补齐 eastAsia 楷体字体与对应字号、颜色，修正掉回宋体的中文。"
     },
     {

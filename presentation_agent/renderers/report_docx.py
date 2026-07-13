@@ -146,10 +146,10 @@ def _set_run_font(run: Any, *, size: float | None = None, color: str | None = No
     from docx.oxml.ns import qn
     from docx.shared import Pt, RGBColor
 
-    run.font.name = "Calibri"
-    run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:ascii"), "Calibri")
-    run._element.rPr.rFonts.set(qn("w:hAnsi"), "Calibri")
-    run._element.rPr.rFonts.set(qn("w:eastAsia"), "等线")
+    run.font.name = "Arial"
+    run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:ascii"), "Arial")
+    run._element.rPr.rFonts.set(qn("w:hAnsi"), "Arial")
+    run._element.rPr.rFonts.set(qn("w:eastAsia"), "Kaiti SC")
     if size is not None:
         run.font.size = Pt(size)
     if color is not None:
@@ -177,11 +177,11 @@ def _style_document(doc: Any) -> None:
     section.footer_distance = Inches(0.492)
 
     normal = doc.styles["Normal"]
-    normal.font.name = "Calibri"
-    normal._element.rPr.rFonts.set(qn("w:ascii"), "Calibri")
-    normal._element.rPr.rFonts.set(qn("w:hAnsi"), "Calibri")
-    normal._element.rPr.rFonts.set(qn("w:eastAsia"), "等线")
-    normal.font.size = Pt(11)
+    normal.font.name = "Arial"
+    normal._element.rPr.rFonts.set(qn("w:ascii"), "Arial")
+    normal._element.rPr.rFonts.set(qn("w:hAnsi"), "Arial")
+    normal._element.rPr.rFonts.set(qn("w:eastAsia"), "Kaiti SC")
+    normal.font.size = Pt(12)
     normal.font.color.rgb = RGBColor.from_string(_INK)
     normal.paragraph_format.space_before = Pt(0)
     normal.paragraph_format.space_after = Pt(6)
@@ -189,15 +189,15 @@ def _style_document(doc: Any) -> None:
 
     heading_tokens = {
         "Heading 1": (16, _BLUE, 16, 8),
-        "Heading 2": (13, _BLUE, 12, 6),
+        "Heading 2": (14, _BLUE, 12, 6),
         "Heading 3": (12, _DARK_BLUE, 8, 4),
     }
     for name, (size, color, before, after) in heading_tokens.items():
         style = doc.styles[name]
-        style.font.name = "Calibri"
-        style._element.rPr.rFonts.set(qn("w:ascii"), "Calibri")
-        style._element.rPr.rFonts.set(qn("w:hAnsi"), "Calibri")
-        style._element.rPr.rFonts.set(qn("w:eastAsia"), "等线")
+        style.font.name = "Arial"
+        style._element.rPr.rFonts.set(qn("w:ascii"), "Arial")
+        style._element.rPr.rFonts.set(qn("w:hAnsi"), "Arial")
+        style._element.rPr.rFonts.set(qn("w:eastAsia"), "Kaiti SC")
         style.font.size = Pt(size)
         style.font.bold = True
         style.font.color.rgb = RGBColor.from_string(color)
@@ -206,8 +206,11 @@ def _style_document(doc: Any) -> None:
         style.paragraph_format.keep_with_next = True
 
     bullet = doc.styles["List Bullet"]
-    bullet.font.name = "Calibri"
-    bullet._element.rPr.rFonts.set(qn("w:eastAsia"), "等线")
+    bullet.font.name = "Arial"
+    bullet._element.rPr.rFonts.set(qn("w:ascii"), "Arial")
+    bullet._element.rPr.rFonts.set(qn("w:hAnsi"), "Arial")
+    bullet._element.rPr.rFonts.set(qn("w:eastAsia"), "Kaiti SC")
+    bullet.font.size = Pt(12)
     bullet.paragraph_format.left_indent = Inches(0.5)
     bullet.paragraph_format.first_line_indent = Inches(-0.25)
     bullet.paragraph_format.space_after = Pt(8)
@@ -217,20 +220,29 @@ def _style_document(doc: Any) -> None:
         if name not in doc.styles:
             doc.styles.add_style(name, WD_STYLE_TYPE.PARAGRAPH)
     citation = doc.styles["Report Citation"]
-    citation.font.name = "Calibri"
+    citation.font.name = "Arial"
+    citation._element.rPr.rFonts.set(qn("w:ascii"), "Arial")
+    citation._element.rPr.rFonts.set(qn("w:hAnsi"), "Arial")
+    citation._element.rPr.rFonts.set(qn("w:eastAsia"), "Kaiti SC")
     citation.font.size = Pt(8)
     citation.font.color.rgb = RGBColor.from_string(_MUTED)
     citation.font.italic = True
     citation.paragraph_format.space_before = Pt(4)
     citation.paragraph_format.space_after = Pt(4)
     note = doc.styles["Report Note"]
-    note.font.name = "Calibri"
-    note.font.size = Pt(10)
+    note.font.name = "Arial"
+    note._element.rPr.rFonts.set(qn("w:ascii"), "Arial")
+    note._element.rPr.rFonts.set(qn("w:hAnsi"), "Arial")
+    note._element.rPr.rFonts.set(qn("w:eastAsia"), "Kaiti SC")
+    note.font.size = Pt(12)
     note.font.color.rgb = RGBColor.from_string(_INK)
     note.paragraph_format.space_after = Pt(6)
     callout = doc.styles["Report Callout"]
-    callout.font.name = "Calibri"
-    callout.font.size = Pt(11)
+    callout.font.name = "Arial"
+    callout._element.rPr.rFonts.set(qn("w:ascii"), "Arial")
+    callout._element.rPr.rFonts.set(qn("w:hAnsi"), "Arial")
+    callout._element.rPr.rFonts.set(qn("w:eastAsia"), "Kaiti SC")
+    callout.font.size = Pt(12)
     callout.font.bold = True
     callout.font.color.rgb = RGBColor.from_string(_DARK_BLUE)
     callout.paragraph_format.space_before = Pt(6)

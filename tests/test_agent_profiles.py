@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
+from unittest.mock import patch
 
 from presentation_agent.agent_profiles import load_agent_profile
 from presentation_agent.loop import LoopRunner
@@ -356,6 +357,158 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertIn("### task_packet.v2", text)
             self.assertIn('"objective"', text)
             self.assertIn("固定流程、ID 和状态由 runtime 生成", text)
+
+    def test_v03_acceptance_synthesizes_packet_and_binds_formal_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            task_dir = run_dir / "tasks" / "analysis-001_analysis"
+            artifact_path = task_dir / "artifact.json"
+            write_json_file(
+                artifact_path,
+                read_json(FIXTURES / "analysis.v1.valid.json"),
+            )
+            write_json_file(
+                run_dir / "manager_state.json",
+                {
+                    "current_task": {
+                        "task_id": "analysis-001",
+                        "agent_id": "analysis",
+                        "artifact_path": str(artifact_path),
+                    },
+                    "worker_result": {"artifact_path": str(artifact_path)},
+                },
+            )
+            runtime = ManagerAgentRuntime(
+                ROOT,
+                run_dir,
+                run_dir / "data",
+                contract_profile="v0_3",
+            )
+            write_json_file(
+                runtime.output_path("acceptance"),
+                {
+                    "action": "dispatch",
+                    "acceptance_report": {
+                        "verdict": "accept",
+                        "reason": "analysis accepted",
+                    },
+                },
+            )
+
+            decision = runtime.read_decision("acceptance")
+
+            self.assertEqual(decision["task_packet"]["agent_id"], "storyline")
+            self.assertEqual(
+                decision["task_packet"]["input_artifacts"],
+                [str(artifact_path)],
+            )
+            self.assertEqual(
+                decision["acceptance_report"]["task_id"],
+                "analysis-001",
+            )
+            self.assertTrue(decision.get("runtime_normalizations"))
+
+    def test_worker_artifact_resolver_prefers_artifact_over_handoff_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            task_dir = run_dir / "tasks" / "analysis-001_analysis"
+            artifact_path = task_dir / "artifact.json"
+            handoff_path = task_dir / "handoff" / "output_gen.json"
+            write_json_file(
+                artifact_path,
+                read_json(FIXTURES / "analysis.v1.valid.json"),
+            )
+            write_json_file(handoff_path, {"schema": "analysis.v1"})
+            executor = WorkerExecutor(
+                ROOT,
+                run_dir,
+                run_dir / "data",
+                contract_profile="v0_3",
+            )
+
+            self.assertEqual(
+                executor._resolve_artifact(str(handoff_path)),
+                artifact_path.resolve(),
+            )
+
+    def test_manager_commit_failure_rolls_back_to_retryable_output_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            task_dir = run_dir / "tasks" / "analysis-001_analysis"
+            artifact_path = task_dir / "artifact.json"
+            artifact = read_json(FIXTURES / "analysis.v1.valid.json")
+            write_json_file(artifact_path, artifact)
+            task = {
+                "task_id": "analysis-001",
+                "agent_id": "analysis",
+                "task_dir": str(task_dir),
+                "artifact_path": str(artifact_path),
+                "status": "worker_completed",
+            }
+            manager = ManagerOrchestrator(
+                ROOT,
+                run_dir,
+                contract_profile="v0_3",
+            )
+            manager._save_state(
+                {
+                    "version": "manager_state.v2",
+                    "run_id": "rollback-test",
+                    "contract_profile": "v0_3",
+                    "current_actor": "manager",
+                    "manager_phase": "acceptance",
+                    "manager_step": "awaiting_output",
+                    "human_gate": None,
+                    "current_task": task,
+                    "tasks": [task],
+                    "worker_result": {
+                        "artifact_path": str(artifact_path),
+                        "artifact": artifact,
+                    },
+                    "accepted_artifacts": [],
+                    "project_state": {},
+                    "run_mode": "full_auto",
+                    "report_charter": {},
+                    "review_subagents_enabled": False,
+                }
+            )
+            write_json_file(
+                run_dir / "manager_plan.json",
+                {
+                    "plan_id": "runtime-canonical-chain",
+                    "tasks": [
+                        {
+                            "task_id": "analysis-001",
+                            "agent_id": "analysis",
+                            "status": "completed",
+                        }
+                    ],
+                },
+            )
+            write_json_file(
+                manager.agent.output_path("acceptance"),
+                {
+                    "action": "dispatch",
+                    "acceptance_report": {
+                        "verdict": "accept",
+                        "reason": "analysis accepted",
+                    },
+                },
+            )
+
+            with patch.object(
+                manager,
+                "_dispatch",
+                side_effect=StepError("simulated dispatch failure"),
+            ), self.assertRaisesRegex(StepError, "simulated dispatch failure"):
+                manager.commit_manager()
+
+            restored = manager.status()["state"]
+            self.assertEqual(restored["current_actor"], "manager")
+            self.assertEqual(restored["manager_step"], "awaiting_output")
+            self.assertIsNone(restored["human_gate"])
+            self.assertEqual(restored["last_event"], "manager_commit_failed")
+            self.assertIn("report next", restored["last_error"]["recovery"])
 
     def test_delivery_gate_exposes_structured_choice_and_routes_selection(
         self,

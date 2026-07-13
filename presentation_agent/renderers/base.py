@@ -32,6 +32,7 @@ class RenderResult:
     detail: str = ""
     degraded: bool = False
     degraded_units: list[dict[str, Any]] = field(default_factory=list)
+    metrics: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -47,6 +48,8 @@ class RenderResult:
         if self.degraded:
             d["degraded"] = True
             d["degraded_units"] = self.degraded_units
+        if self.metrics:
+            d["metrics"] = self.metrics
         return d
 
     def present_line(self) -> str:
