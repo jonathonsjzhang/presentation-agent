@@ -175,7 +175,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertIn("当前研究 hypo", confirmation)
             question_headers = [item["header"] for item in prepared["questions"]]
             self.assertIn("研究目的", question_headers)
-            self.assertIn("研究hypo", question_headers)
+            self.assertIn("当前研究 hypo", question_headers)
             self.assertIn("高可信论据", question_headers)
             self.assertNotIn("Review模式", question_headers)
             self.assertNotIn("运行模式", question_headers)
@@ -184,7 +184,37 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 manager.status()["state"]["contract_profile"], "v0_3"
             )
             self.assertNotIn("review_mode_options", prepared)
+            self.assertEqual(len(prepared["questions"]), 3)
+            self.assertEqual(prepared["brief_stage"], "collection")
+            self.assertFalse(prepared["confirmation_ready"])
+            self.assertTrue(
+                all(question.get("options") == [] for question in prepared["questions"])
+            )
+            self.assertNotIn("用户提供", json.dumps(prepared, ensure_ascii=False))
+            self.assertNotIn("用户填写", json.dumps(prepared, ensure_ascii=False))
+            with self.assertRaises(StepError):
+                manager.approve()
 
+            prepared = manager.record_human_feedback(json.dumps({
+                "research_purpose": "回答测试主题为何值得优先研究",
+                "research_direction": "测试主题由价值提升驱动",
+                "high_confidence_evidence": [],
+            }, ensure_ascii=False))
+            self.assertEqual(prepared["brief_stage"], "confirmation")
+            self.assertTrue(prepared["confirmation_ready"])
+            self.assertEqual(prepared["next_action"], "report_approve")
+            self.assertEqual(len(prepared["questions"]), 1)
+            self.assertEqual(prepared["questions"][0]["header"], "Brief确认")
+            self.assertIn("Brief 最终确认", prepared["present_to_user"])
+            self.assertIn("回答测试主题为何值得优先研究", prepared["present_to_user"])
+            self.assertIn("用户标记的高可信论据", prepared["present_to_user"])
+
+            prepared = manager.record_human_feedback(json.dumps({
+                "brief_updates": {"topic": "修改后的测试主题"},
+            }, ensure_ascii=False))
+            self.assertEqual(prepared["brief_stage"], "confirmation")
+            self.assertIn("修改后的测试主题", prepared["present_to_user"])
+            self.assertEqual(prepared["questions"][0]["header"], "Brief确认")
             manager.approve()
             approved_state = manager.status()["state"]
             self.assertEqual(approved_state["run_mode"], ["analysis", "storyline"])
@@ -231,6 +261,8 @@ class AgentProfileLoaderTests(unittest.TestCase):
             "保存成果用户的回访率更高",
         )
         self.assertIn("保存成果组 D7 回访率", prepared["present_to_user"])
+        self.assertEqual(prepared["brief_stage"], "collection")
+        self.assertEqual(len(prepared["questions"]), 1)
 
     def test_v03_manager_uses_profile_specific_skill_without_legacy_workers(
         self,
@@ -1265,6 +1297,49 @@ class AgentProfileLoaderTests(unittest.TestCase):
             )
             self.assertTrue(result["raw_materials"])
             self.assertIn(expected_key, result["raw_materials"][0])
+
+    def test_v03_large_catalog_is_ready_when_canonical_input_is_full(self) -> None:
+        assembler = ContextAssembler(ROOT, contract_profile="v0_3")
+        charter = read_json(FIXTURES / "report_charter.v2.valid.json")
+        catalog = {
+            "schema": "evidence_catalog.v1",
+            "items": [
+                {
+                    "id": f"EV-{index:03d}",
+                    "source_ref": f"source-{index}",
+                    "content": "完整论据内容" * 300,
+                }
+                for index in range(1, 39)
+            ],
+            "unresolved": [],
+        }
+
+        result = assembler.assemble(
+            worker_id="analysis",
+            report_charter=charter,
+            manager_task={"acceptance_criteria": ["traceable"]},
+            raw_brief={
+                "schema": "raw_brief.v1",
+                "evidence_catalog": catalog,
+                "evidence_catalog_ref": "artifacts/evidence_catalog.json",
+            },
+            raw_brief_path=Path("artifacts/raw_brief.json"),
+            artifacts=[],
+        )
+
+        self.assertEqual(
+            result["raw_brief"]["evidence_catalog"]["_projection"],
+            "object_index",
+        )
+        self.assertEqual(result["evidence_catalog"], catalog)
+        self.assertEqual(result["input_readiness"]["status"], "ready")
+        self.assertEqual(result["input_readiness"]["blocking_issues"], [])
+        self.assertTrue(
+            any(
+                "evidence_catalog" in row.get("projected_fields", [])
+                for row in result["material_refs"]
+            )
+        )
 
     def test_v03_golden_cases_run_evidence_intake_before_brief_when_needed(self) -> None:
         cases_root = FIXTURES / "golden_cases"

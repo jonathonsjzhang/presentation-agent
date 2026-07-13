@@ -143,7 +143,15 @@ python -m presentation_agent.cli \
 
 尖括号内容不是字面值：宿主必须替换成上表中与自身对应的 adapter。若当前宿主无法使用 sub-agent，应先向用户说明无法保证 Worker 上下文隔离，再显式传入 `--spawn-adapter "inline"`；不要在失败后静默改用主对话代写。
 
-有文件、目录或原始数据时，第一轮先返回 Evidence Harvester worker instruction；宿主按正常 spawn/submit 协议完成后，runtime 才进入 brief human gate。没有待处理原始材料或已有可复用 Catalog 时，第一轮直接进入 brief human gate。进入 brief human gate 后，必须先把 CLI 返回的 `instruction.present_to_user` 原样展示给用户，它里面应按顺序包含研究目的、当前研究 hypo、正式 Evidence List、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”；不要只发结构化问题，也不要只说“请确认 brief”。如果返回的 `instruction.questions` 存在，宿主应在展示完 Brief 后按 WorkBuddy/AskUserQuestion 风格发起结构化提问：两个文本题分别收集“项目研究目的是什么（如为了回答XX问题，或XX研究的延伸）”和“当前的研究hypo是什么（如当前结论判断，或预期引导的讨论方向）”，一个文本填空题让用户填写高可信论据编号、名称或原文片段。高可信论据不要做成多选题，也不要把 evidence list 截断成少量可选项。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。用户回答、修改或补充后用 `report feedback --text '<用户原话或结构化答案摘要>'` 回传；用户确认继续后再 approve。若 `present_to_user` 缺少 brief 摘要，先执行 `report status --run "<run_id>"` 检查状态，仍缺失时把 `raw_brief.json` 的主要内容整理给用户看，再请用户确认。
+有文件、目录或原始数据时，第一轮先返回 Evidence Harvester worker instruction；宿主按正常 spawn/submit 协议完成后，runtime 才进入 brief human gate。没有待处理原始材料或已有可复用 Catalog 时，第一轮直接进入 brief human gate。
+
+Brief gate 必须严格按 runtime 返回的 `brief_stage` 执行两段式协议，不得合并、跳步或自行增删问题：
+
+1. `brief_stage=collection`：先原样展示 `present_to_user` 的 Brief 草案，再逐项发起 `questions` 中最多 3 个纯文本填空。每题必须原样保留 `inputType=text` 与 `options=[]`；**禁止**添加“用户提供”“用户填写”“自定义”等占位选项。宿主工具若会为自造选项再附加一个自由输入框，就不要传任何自造选项，只保留自由输入框。不要在这一轮追加第四个确认题。
+2. 将答案汇总为 JSON 对象回传，例如 `{"research_purpose":"...","research_direction":"...","high_confidence_evidence":["EV-003","EV-008"]}`；没有特别优先的论据也必须显式传 `"high_confidence_evidence":[]`。执行 `report feedback --text '<上述 JSON>'` 后，runtime 会把答案写回 `raw_brief.json`。
+3. `brief_stage=confirmation`：原样展示更新后的 `present_to_user`（标题为“Brief 最终确认”），此时 `questions` 只能有一个“准确，继续 / 需要修改”确认题。只有用户选择“准确，继续”才执行 `report approve`。选择“需要修改”时，把修改归入 `brief_updates` 后再次执行 `report feedback`，等待 runtime 重显完整 Brief；不得直接 approve。
+
+最终确认页应按顺序包含研究目的、当前研究 hypo、正式 Evidence List、用户标记的高可信论据、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。若 `present_to_user` 缺少 Brief 内容，先执行 `report status --run "<run_id>"` 检查状态；仍缺失则报告协议错误，不要凭宿主记忆拼一份后直接批准。
 
 ## 3. 推进 report loop
 
@@ -159,10 +167,11 @@ python -m presentation_agent.cli \
 
 ### actor=human
 
-展示 `present_to_user`，等待用户决定。brief gate 时必须先展示 brief 摘要；若 `questions` 存在，展示后再用结构化提问收集研究目的、当前研究 hypo 和高可信论据填空，再问是否继续。不要询问 worker 选择或 review sub_agent 选择，不要把确认问题和 brief 内容拆开。
+展示 `present_to_user`，等待用户决定。brief gate 严格遵守上面的 collection → persistence → confirmation 两段协议：填空轮最多 3 题且没有任何占位 option；最终确认轮必须把完整 Brief 和唯一确认题一起展示。不要询问 worker 选择或 review sub_agent 选择。
 
-- 用户确认继续：`report approve`
-- 用户回答研究目的/当前研究 hypo、填写高可信论据，或要求修改补充信息：`report feedback --text '<用户原话或结构化答案摘要>'`
+- 仅当 `brief_stage=confirmation` 且用户选择“准确，继续”时：`report approve`
+- `brief_stage=collection` 的答案：`report feedback --text '{"research_purpose":"...","research_direction":"...","high_confidence_evidence":[...]}'`
+- 最终确认页要求修改：`report feedback --text '{"brief_updates":{"topic":"...","report_length":"..."}}'`；待完整 Brief 重显后再确认
 - brief gate 默认 approve 不传 `--run-mode`，runtime 会在 analysis、storyline 后暂停确认；用户明确要求逐步看结果时才传 `--run-mode step_by_step`
 - brief 阶段不要主动询问 review sub_agent；只有用户明确要求严格质量审查、调试质量问题或最终验收时，才使用 `--review-mode independent`
 

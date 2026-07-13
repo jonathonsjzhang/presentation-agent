@@ -24,6 +24,15 @@ ARTIFACTS = {
 
 
 class DefaultManagerChainTests(unittest.TestCase):
+    @staticmethod
+    def _confirm_brief(manager: ManagerOrchestrator) -> None:
+        manager.record_human_feedback(
+            '{"research_purpose":"判断留存改善优先级",'
+            '"research_direction":"价值确认优先于单纯提醒",'
+            '"high_confidence_evidence":[]}'
+        )
+        manager.approve(run_mode="full_auto", review_mode="schema_only")
+
     def _packet(
         self,
         index: int,
@@ -86,7 +95,7 @@ class DefaultManagerChainTests(unittest.TestCase):
                 contract_profile="v0_3",
             )
             manager.initialize_run(brief_path)
-            manager.approve(run_mode="full_auto", review_mode="schema_only")
+            self._confirm_brief(manager)
             planning = manager.prepare()
             write_json(
                 Path(planning["output_path"]),
@@ -247,7 +256,7 @@ class DefaultManagerChainTests(unittest.TestCase):
                 contract_profile="v0_3",
             )
             manager.initialize_run(brief_path)
-            manager.approve(run_mode="full_auto", review_mode="schema_only")
+            self._confirm_brief(manager)
             planning = manager.prepare()
             write_json(
                 Path(planning["output_path"]),

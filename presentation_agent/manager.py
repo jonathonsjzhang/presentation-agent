@@ -856,22 +856,22 @@ class ManagerOrchestrator:
         # --- brief confirmation: show the brief and ask user to confirm ---
         if phase == "brief_confirmation":
             brief = read_json(self.raw_brief_path, default={})
-            missing = []
-            if not self._first_brief_text(brief, "research_purpose"):
-                missing.append("研究目的")
-            if not self._first_brief_text(
+            collection_questions = self._brief_collection_questions(brief)
+            missing = [item["header"] for item in collection_questions]
+            confirmation_ready = not collection_questions
+            user_message = self._format_brief_confirmation(
                 brief,
-                "research_direction",
-                "hypothesis",
-                "hypo",
-            ):
-                missing.append("当前研究 hypo")
-            user_message = self._format_brief_confirmation(brief)
+                confirmation_ready=confirmation_ready,
+            )
             state["current_actor"] = "human"
             state["human_gate"] = "brief"
             state["pending_decision"] = {
                 "brief": brief,
                 "missing_fields": missing,
+                "brief_stage": (
+                    "confirmation" if confirmation_ready else "collection"
+                ),
+                "confirmation_ready": confirmation_ready,
                 "user_message": user_message,
             }
             state["status"] = "awaiting_brief_confirmation"
@@ -1186,6 +1186,16 @@ class ManagerOrchestrator:
         decision = state.get("pending_decision") or {}
         if gate == "brief":
             brief_data = decision.get("brief", {})
+            confirmation_ready = bool(decision.get("confirmation_ready"))
+            if not confirmation_ready:
+                remaining = self._brief_collection_questions(
+                    brief_data if isinstance(brief_data, dict) else {}
+                )
+                if remaining:
+                    fields = "、".join(item["header"] for item in remaining)
+                    raise StepError(
+                        f"Brief 尚未进入最终确认阶段，请先填写：{fields}"
+                    )
             # run_mode: "full_auto" | "step_by_step" | ["agent_id", ...]
             raw_run_mode = (
                 run_mode
@@ -1338,6 +1348,8 @@ class ManagerOrchestrator:
             return self._record_analysis_thesis_feedback(state, feedback)
         if gate == "worker_result" and self._is_storyline_confirmation_gate(state):
             return self._record_storyline_confirmation_feedback(state, feedback)
+        if gate == "brief":
+            return self._record_brief_feedback(state, feedback)
         state["current_actor"] = "manager"
         _phase_after_feedback = {
             "brief": "brief_confirmation",
@@ -2188,6 +2200,182 @@ class ManagerOrchestrator:
                 return value.strip()
         return ""
 
+    @classmethod
+    def _brief_collection_questions(
+        cls, brief: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Return only unresolved free-text fields, capped at three.
+
+        WorkBuddy's question panel reliably renders at most three questions.
+        Final Brief confirmation is therefore a separate gate after these
+        fields have been persisted, rather than a fourth question that may be
+        silently dropped by the host.
+        """
+
+        questions: list[dict[str, Any]] = []
+        if not cls._first_brief_text(brief, "research_purpose"):
+            questions.append({
+                "header": "研究目的",
+                "question": "项目研究目的是什么（如为了回答XX问题，或XX研究的延伸）？",
+                "inputType": "text",
+                "multiSelect": False,
+                "options": [],
+            })
+        if not cls._first_brief_text(
+            brief,
+            "research_direction",
+            "hypothesis",
+            "hypo",
+        ):
+            questions.append({
+                "header": "当前研究 hypo",
+                "question": "当前的研究hypo是什么（如当前结论判断，或预期引导的讨论方向）？",
+                "inputType": "text",
+                "multiSelect": False,
+                "options": [],
+            })
+        if "high_confidence_evidence" not in brief:
+            questions.append({
+                "header": "高可信论据",
+                "question": (
+                    "请填写你认为高可信或重要的论据（可写 evidence list 的编号、"
+                    "证据名称或原文片段）；如无特别优先项，请填写“无”。"
+                ),
+                "inputType": "text",
+                "multiSelect": False,
+                "options": [],
+            })
+        return questions[:3]
+
+    @staticmethod
+    def _brief_confirmation_question() -> dict[str, Any]:
+        return {
+            "header": "Brief确认",
+            "question": "以上完整 Brief 是否准确？",
+            "multiSelect": False,
+            "options": [
+                {
+                    "label": "准确，继续",
+                    "description": "确认后进入 Manager 规划阶段",
+                },
+                {
+                    "label": "需要修改",
+                    "description": "补充修改内容后重新展示完整 Brief",
+                },
+            ],
+        }
+
+    @classmethod
+    def _parse_brief_feedback(cls, feedback: str) -> dict[str, Any]:
+        """Parse the host's deterministic Brief answer payload.
+
+        The preferred protocol is a JSON object. Labelled text remains
+        accepted for compatibility with older host adapters.
+        """
+
+        aliases = {
+            "research_purpose": "research_purpose",
+            "研究目的": "research_purpose",
+            "research_direction": "research_direction",
+            "hypothesis": "research_direction",
+            "hypo": "research_direction",
+            "当前研究hypo": "research_direction",
+            "当前研究 hypo": "research_direction",
+            "高可信论据": "high_confidence_evidence",
+            "high_confidence_evidence": "high_confidence_evidence",
+        }
+        allowed_updates = {
+            "topic",
+            "audience",
+            "project_type",
+            "report_type",
+            "delivery_format",
+            "delivery_targets",
+            "output_format",
+            "report_length",
+            "constraints",
+            "research_purpose",
+            "research_direction",
+            "high_confidence_evidence",
+        }
+        try:
+            payload = json.loads(feedback)
+        except json.JSONDecodeError:
+            payload = None
+
+        updates: dict[str, Any] = {}
+        if isinstance(payload, dict):
+            for key, value in payload.items():
+                canonical = aliases.get(str(key))
+                if canonical:
+                    updates[canonical] = value
+            brief_updates = payload.get("brief_updates")
+            if isinstance(brief_updates, dict):
+                for key, value in brief_updates.items():
+                    if str(key) in allowed_updates:
+                        updates[str(key)] = value
+            return updates
+
+        label_pattern = re.compile(
+            r"(?m)^\s*(研究目的|当前研究\s*hypo|高可信论据)\s*[：:]\s*(.+?)\s*$",
+            re.IGNORECASE,
+        )
+        for match in label_pattern.finditer(feedback):
+            label = re.sub(r"\s+", " ", match.group(1)).strip()
+            canonical = aliases.get(label) or aliases.get(label.replace(" ", ""))
+            if canonical:
+                updates[canonical] = match.group(2).strip()
+        return updates
+
+    def _record_brief_feedback(
+        self, state: dict[str, Any], feedback: str
+    ) -> dict[str, Any]:
+        updates = self._parse_brief_feedback(feedback)
+        if not updates:
+            state["brief_feedback_error"] = (
+                "未识别到可写回 Brief 的字段。请按结构化答案提交研究目的、"
+                "当前研究 hypo、高可信论据或 brief_updates。"
+            )
+            self._save_state(state)
+            return self._human_gate_result(state)
+
+        brief = read_json(self.raw_brief_path, default={})
+        if not isinstance(brief, dict):
+            brief = {}
+        for key, value in updates.items():
+            if key in {"research_purpose", "research_direction"}:
+                text = str(value or "").strip()
+                if text:
+                    brief[key] = text
+            elif key == "high_confidence_evidence":
+                if isinstance(value, list):
+                    brief[key] = [
+                        str(item).strip() for item in value if str(item).strip()
+                    ]
+                else:
+                    text = str(value or "").strip()
+                    brief[key] = [] if text in {"无", "没有", "暂无"} else [text]
+            else:
+                brief[key] = value
+        write_json(self.raw_brief_path, brief)
+
+        state.pop("brief_feedback_error", None)
+        state["current_actor"] = "manager"
+        state["manager_phase"] = "brief_confirmation"
+        state["manager_step"] = "init"
+        state["last_event"] = "brief_fields_updated"
+        state["human_gate"] = None
+        state["status"] = "running"
+        state["previous_pending_decision"] = state.get("pending_decision")
+        state["pending_decision"] = None
+        self._save_state(state)
+        self._append_decision(
+            "brief_fields_updated",
+            "Brief answers persisted before final confirmation",
+            {"updated_fields": sorted(updates)},
+        )
+        return self.prepare()
+
     @staticmethod
     def _brief_evidence_options(brief: dict[str, Any]) -> list[dict[str, str]]:
         options: list[dict[str, str]] = []
@@ -2340,7 +2528,9 @@ class ManagerOrchestrator:
         return "10页PPT" if "PPT" in delivery else "3页"
 
     @staticmethod
-    def _format_brief_confirmation(brief: dict[str, Any]) -> str:
+    def _format_brief_confirmation(
+        brief: dict[str, Any], *, confirmation_ready: bool = False
+    ) -> str:
         """Build a structured Markdown brief confirmation for the user.
 
         The host agent simply echo this string to the user verbatim.
@@ -2369,7 +2559,7 @@ class ManagerOrchestrator:
         materials = brief.get("materials") or []
 
         lines = [
-            "## Brief 确认",
+            "## Brief 最终确认" if confirmation_ready else "## Brief 草案",
             "",
             "### 1. 项目需求",
             "",
@@ -2400,6 +2590,16 @@ class ManagerOrchestrator:
         else:
             lines.append("当前还没有正式提取的可引用论据；如已有材料或证据，请在回复中补充。")
 
+        if "high_confidence_evidence" in brief:
+            selected = brief.get("high_confidence_evidence")
+            if isinstance(selected, list):
+                selected_text = "；".join(
+                    str(item) for item in selected if str(item).strip()
+                ) or "无特别优先项"
+            else:
+                selected_text = str(selected or "无特别优先项")
+            lines.extend(["", f"**用户标记的高可信论据**：{selected_text}"])
+
         lines.extend([
             "",
             "### 3-7. 报告设定",
@@ -2428,10 +2628,17 @@ class ManagerOrchestrator:
         lines.append("")
         lines.append("---")
         lines.append("")
-        lines.append(
-            "请先回答研究目的、当前研究 hypo，并填写高可信论据；若报告设定无误，再确认继续。"
-            "默认会在 analysis 和 storyline 完成后各暂停确认一次，之后自动走到最终报告。"
-        )
+        if confirmation_ready:
+            lines.append(
+                "请核对以上完整 Brief。选择“准确，继续”后才会进入规划；"
+                "选择“需要修改”则写回修改内容并再次展示完整 Brief。"
+                "默认会在 analysis 和 storyline 完成后各暂停确认一次，之后自动走到最终报告。"
+            )
+        else:
+            lines.append(
+                "请先完成下方纯文本填空。答案写回后，系统会重新展示一份完整 Brief，"
+                "再单独请你确认是否准确。"
+            )
 
         return "\n".join(lines)
 
@@ -2442,6 +2649,7 @@ class ManagerOrchestrator:
         if gate == "brief" and not decision.get("user_message"):
             present_to_user = self._format_brief_confirmation(
                 decision.get("brief", {}) if isinstance(decision.get("brief"), dict) else {},
+                confirmation_ready=bool(decision.get("confirmation_ready")),
             )
         else:
             present_to_user = decision.get("user_message") or {
@@ -2469,6 +2677,10 @@ class ManagerOrchestrator:
                 brief_payload = {}
             result["brief"] = brief_payload
             result["missing_fields"] = decision.get("missing_fields", [])
+            result["brief_stage"] = decision.get("brief_stage", "collection")
+            result["confirmation_ready"] = bool(
+                decision.get("confirmation_ready")
+            )
             evidence_options = self._brief_evidence_options(brief_payload)
             result["evidence_options"] = evidence_options
             result["brief_defaults"] = {
@@ -2483,40 +2695,19 @@ class ManagerOrchestrator:
                 "project_type": self._display_project_type(brief_payload),
                 "delivery": self._display_delivery(brief_payload),
             }
-            result["next_action"] = "human_feedback"
-            # Structured questions for host AskUserQuestion
-            result["questions"] = [
-                {
-                    "header": "研究目的",
-                    "question": "项目研究目的是什么（如为了回答XX问题，或XX研究的延伸），越详细则 agent 更能理解需求。",
-                    "inputType": "text",
-                    "multiSelect": False,
-                    "options": [],
-                },
-                {
-                    "header": "研究hypo",
-                    "question": "当前的研究hypo是什么（如当前结论判断，或预期引导的讨论方向），越详细则 agent 更能理解需求。",
-                    "inputType": "text",
-                    "multiSelect": False,
-                    "options": [],
-                },
-                {
-                    "header": "高可信论据",
-                    "question": "请填写你认为高可信或重要的论据（可直接写上方 evidence list 的编号、证据名称或原文片段）；汇报助手会根据 evidence list 判断子论点可信度和引用优先级。",
-                    "inputType": "text",
-                    "multiSelect": False,
-                    "options": [],
-                },
-                {
-                    "header": "Brief确认",
-                    "question": "报告主题、听众、项目类型、交付形式和报告篇幅是否准确？有无需要补充或修改的地方？",
-                    "multiSelect": False,
-                    "options": [
-                        {"label": "准确，继续", "description": "信息完整，直接进入 Manager 规划阶段"},
-                        {"label": "需要修改", "description": "稍后通过 report feedback 提交修改意见"},
-                    ],
-                },
-            ]
+            if result["confirmation_ready"]:
+                result["next_action"] = "report_approve"
+                result["questions"] = [self._brief_confirmation_question()]
+            else:
+                result["next_action"] = "human_feedback"
+                # Pure free-text fields only. Hosts must preserve the empty
+                # options list and must not synthesize placeholder choices such
+                # as “用户提供” or “用户填写”.
+                result["questions"] = self._brief_collection_questions(
+                    brief_payload
+                )
+            if state.get("brief_feedback_error"):
+                result["feedback_error"] = state["brief_feedback_error"]
 
         elif gate == "plan":
             result["report_charter"] = state.get("report_charter")
