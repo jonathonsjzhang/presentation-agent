@@ -5,7 +5,7 @@
       "severity": "P0",
       "dimension": "主链",
       "check": "初始计划是否严格为 analysis → storyline → report → qa_preparation → format。",
-      "fix": "恢复固定五阶段。Evidence Harvester 可作为 analysis 的前置条件运行，但不放入主链任务列表。"
+      "fix": "恢复固定五阶段。Evidence Harvester 可作为 Brief 前的输入处理任务运行，但不放入主链任务列表。"
     },
     {
       "id": "MGR03-P0-002",
@@ -46,7 +46,7 @@
       "id": "MGR03-P1-001",
       "severity": "P1",
       "dimension": "evidence readiness",
-      "check": "planning 阶段是否检查 evidence readiness：有 Raw Materials 无 Catalog 时由 Analysis 触发 evidence_harvester；完全无素材时 ask_human。",
+      "check": "planning 阶段是否检查 evidence readiness：Brief 应复用 run-level Evidence Catalog；完全无素材时 ask_human。",
       "improvement": "不要在完全没有材料时 dispatch Analysis。"
     },
     {

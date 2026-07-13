@@ -159,6 +159,104 @@ def prepare_evidence_subtask(
     return prepared
 
 
+def prepare_evidence_intake(
+    *,
+    root: Path,
+    run_dir: Path,
+    data_root: Path,
+    raw_materials: list[Any],
+    brief: dict[str, Any],
+) -> dict[str, Any]:
+    """Create the run-level Evidence worker before Brief confirmation."""
+
+    from presentation_agent.models import now_iso
+    from presentation_agent.step import StepRunner
+    from presentation_agent.agent_profiles import load_agent_profile
+    from presentation_agent.material_resolver import (
+        evidence_index_from_materials,
+        resolve_raw_materials,
+        source_manifest_from_materials,
+    )
+
+    evidence_dir = run_dir / "evidence"
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    input_path = evidence_dir / "input.json"
+    if not input_path.exists():
+        profile = load_agent_profile(root, "v0_3")
+        spec = profile.support_specs["evidence_harvester"]
+        resolved_materials, resolution_summary = resolve_raw_materials(
+            raw_materials,
+            spec=spec,
+            base_dirs=_evidence_material_base_dirs(
+                root=root,
+                analysis_dir=run_dir,
+                analysis_input=brief,
+            ),
+            artifact_dir=evidence_dir / "resolved_materials",
+        )
+        write_json(
+            input_path,
+            {
+                "schema": "manager_task.v1",
+                "raw_materials": resolved_materials,
+                "evidence_index": evidence_index_from_materials(resolved_materials),
+                "source_manifest": source_manifest_from_materials(resolved_materials),
+                "material_resolution": resolution_summary,
+                "report_charter": brief,
+                "evidence_scope": brief.get("analysis_objective", ""),
+            },
+        )
+    run_state_path = evidence_dir / "run_state.json"
+    if not run_state_path.exists():
+        write_json(
+            run_state_path,
+            {
+                "run_id": f"evidence-{now_iso().replace(':', '')}",
+                "contract_profile": "v0_3",
+                "agent_id": "evidence_harvester",
+                "agent_name": "证据完整盘点",
+                "stage": 0,
+                "status": "init",
+                "current_step": "init",
+                "round_index": 0,
+                "input_path": str(input_path),
+                "output_dir": str(evidence_dir),
+                "p0_open": [],
+                "p1_open": [],
+                "produced_artifacts": [],
+                "history": [],
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+                "review_subagents_enabled": False,
+            },
+        )
+    runner = StepRunner(
+        root, evidence_dir, data_root=data_root, contract_profile="v0_3"
+    )
+    state = read_json(run_state_path, default={})
+    if state.get("current_step") == "init":
+        prepared = runner.prepare()
+    elif str(state.get("current_step", "")).startswith("awaiting_"):
+        prepared = {
+            "step": state.get("current_step"),
+            "instruction_path": runner.status().get("instruction_path"),
+            "output_path": runner.status().get("output_path"),
+        }
+    else:
+        raise StepError(
+            f"Evidence Intake 处于不可恢复状态: {state.get('current_step')}"
+        )
+    prepared.update(
+        {
+            "agent_id": "evidence_harvester",
+            "evidence_intake": True,
+            "input_path": str(input_path),
+            "task_dir": str(evidence_dir),
+        }
+    )
+    return prepared
+
+
 def _evidence_material_base_dirs(
     *,
     root: Path,

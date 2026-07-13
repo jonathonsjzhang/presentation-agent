@@ -277,7 +277,23 @@ def _normalize_materials(materials: Any) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for item in materials:
         if isinstance(item, str):
-            out.append({"claim": item, "evidence": [], "so_what": ""})
+            text = item.strip()
+            candidate = Path(text).expanduser()
+            looks_like_path = (
+                candidate.exists()
+                or text.startswith(("/", "./", "../", "~/", "\\"))
+                or text.endswith(("/", "\\"))
+                or (len(text) > 2 and text[1] == ":" and text[2] in ("/", "\\"))
+                or candidate.suffix.lower()
+                in {
+                    ".csv", ".doc", ".docx", ".jpg", ".jpeg", ".json",
+                    ".md", ".pdf", ".png", ".txt", ".xlsx",
+                }
+            )
+            if looks_like_path:
+                out.append({"path": text})
+            else:
+                out.append({"claim": text, "evidence": [], "so_what": ""})
         elif isinstance(item, dict):
             normalized_item = dict(item)
             if "claim" in item:

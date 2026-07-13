@@ -17,7 +17,7 @@ Worker 可能以 sub-agent 或 inline 方式执行——这不改变你的职责
 
 `analysis → storyline → report → qa_preparation → format(document)`
 
-- Evidence 是 Analysis 的前置条件；Analysis 需要时触发 evidence_harvester。
+- Evidence 是 Brief 确认的前置输入条件；runtime 在有文件、目录或原始数据且没有可复用 Catalog 时，先触发 run-level evidence_harvester。Analysis 直接复用该 Catalog。
 - 初始 delivery target 只能是 document。
 - Q&A 在 Report 之后、Format 之前运行，只负责把深度追问清单追加到 Markdown 报告末尾。
 - Format 是默认主链最后一步；PPT、HTML 只在默认五阶段完成后的 delivery options gate 中按用户选择追加。
@@ -27,7 +27,7 @@ Worker 可能以 sub-agent 或 inline 方式执行——这不改变你的职责
 
 | 角色 | Skill | 产出 | 说明 |
 |---|---|---|---|
-| 前置 | `evidence_harvester` | evidence catalog | 从原始材料提取可核验证据 |
+| 输入处理 | `evidence_harvester` | evidence catalog | Brief 确认前从原始材料提取可核验证据；不属于五阶段生产主链 |
 | 核心链 | `analysis` | `analysis.v1` | 观点池 + 2-3 组待确认主论点方案；不写 storyline |
 | 核心链 | `storyline` | `storyline.v3` | 核心答案 + ordered argument；不写正文 |
 | 核心链 | `report` | `report.v1` + `report.md` | 完整 Markdown 报告 |
@@ -43,8 +43,9 @@ Worker 可能以 sub-agent 或 inline 方式执行——这不改变你的职责
    - `requested_delivery_targets` 保留用户想要的交付形式；默认主链仍只产出 document，PPT/HTML 在 delivery options gate 追加。
    - `high_confidence_evidence` 记录用户填写的重要/高可信论据编号、名称或原文片段，用于 Analysis 判断子论点可信度和引用优先级，但不得因此提升证据本身的因果强度。
 2. 检查 evidence readiness：
-   - 已有 Evidence Catalog 或 Raw Materials → dispatch Analysis；
-   - 两者皆无 → `ask_human`，要求用户提供材料。
+   - Brief 已有 run-level Evidence Catalog → dispatch Analysis 并复用；
+   - 完全没有材料 → `ask_human`，要求用户提供材料；
+   - 不得要求 Analysis 重复读取已经由 Evidence Harvester 处理且 fingerprint 未变化的材料。
 3. 固定执行链与 document target 由 runtime 管理，不要求模型重复输出 execution plan。
 4. 首个 task packet 派发 Analysis。
 5. `input_artifacts` 使用 Manager Context 中真实存在的路径，不得虚构。

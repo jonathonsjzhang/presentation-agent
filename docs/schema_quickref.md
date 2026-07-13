@@ -90,7 +90,7 @@
 | 4 | `format` | |
 | 5 | `qa_preparation` | |
 
-- 不允许加 `evidence_harvester`（它是 analysis 的内部子任务）
+- 不允许把 `evidence_harvester` 加入五阶段 production tasks（它是 Brief 前按需运行的 run-level 输入处理任务）
 - 每个 task 的 `status` 初始值：第一个 `"planned"`，其余 `"pending"`
 
 ---

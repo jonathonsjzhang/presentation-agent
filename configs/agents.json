@@ -479,9 +479,9 @@
       "name": "证据完整盘点",
       "stage": 0,
       "skill": "evidence_harvester",
-      "description": "对原始材料做完整、原子化、可追溯的证据盘点，产出 Evidence Catalog，不形成战略结论。",
-      "previous_agent_id": "analysis",
-      "next_agent_id": "analysis",
+      "description": "在 Brief 确认前对原始材料做完整、原子化、可追溯的证据盘点，产出可供用户确认且由 Analysis 复用的 Evidence Catalog，不形成战略结论。",
+      "previous_agent_id": "manager",
+      "next_agent_id": "manager",
       "input_schema": "manager_task.v1",
       "output_schema": "evidence_catalog.v1",
       "input_contract": {
@@ -498,6 +498,7 @@
         "accepted_material_formats": [
           "json",
           "text",
+          "md",
           "doc",
           "docx",
           "pdf",
@@ -531,11 +532,11 @@
       ],
       "max_revision_rounds": 2,
       "loop": {
-        "trigger": "manager_dispatch_for_deep_dive_or_complex_materials",
+        "trigger": "before_brief_when_raw_materials_exist_without_reusable_catalog",
         "workflow_owner": "skill",
         "reviewer": "clean_context_review_sub_agent",
         "stop_checker": "schema_and_p0_gate",
-        "human_review_required": true,
+        "human_review_required": false,
         "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
       },
       "state": {
@@ -561,6 +562,8 @@
           "pdf_reader",
           "xlsx_reader",
           "csv_reader",
+          "json_reader",
+          "text_reader",
           "image_reader"
         ],
         "implementation_status": "implemented"

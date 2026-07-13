@@ -23,7 +23,8 @@
 #### v0.3（2026-07-02）
 
 - **五阶段默认主链**：`analysis → storyline → report → qa_preparation → format`。
-- **Evidence 内部化**：由 Analysis 按确定性三路径调用，不再占用顶层 execution plan。
+- **Evidence 前置输入处理**：有文件、目录或原始数据时，Manager 在 Brief 确认前按需调用 run-level Evidence Harvester；Analysis 复用 Catalog，不占用五阶段 execution plan。
+- **材料格式**：Evidence Intake 可递归处理目录，并读取 DOC/DOCX、PDF、XLSX、CSV、JSON、TXT、Markdown 和 PNG/JPG/JPEG。
 - **完整 Markdown 原稿层**：Report 基于已批准 Storyline 写出 canonical `report.md`；Worker 只提交 `report_markdown`。
 - **三载体格式化**：Format Worker 只选择必要视觉；runtime 在不重写、不删减、不调序原稿的前提下排版为 DOCX、PPT 或 HTML。
 - **单一活动契约**：v0.3 是唯一运行 profile，run state 会校验契约版本，避免错误恢复。
@@ -58,7 +59,7 @@
 | 类型 | Agent | 主要职责 | 核心产物 |
 |---|---|---|---|
 | 控制面 | Manager | 定义任务、派发 Worker、验收、返工和完结；固定 execution plan 由 runtime 生成 | Report charter、task packet、acceptance decision |
-| 内部子任务 | Evidence Harvester | 读取、拆分、提取和索引材料；不形成战略判断 | Evidence Catalog |
+| 输入处理任务 | Evidence Harvester | Brief 确认前读取、拆分、提取和索引材料；不形成战略判断 | Evidence Catalog |
 | Worker | Analysis（观点发现与收敛） | 通读参考材料，发散可能的发现、解释与假设，经过比较、追问和证据检验后，收敛成一组重要且站得住的发现与观点；负责把材料想明白，但不决定汇报的唯一主线 | `analysis.v1` |
 | Worker | Storyline（故事线设计） | 面向汇报目标和受众，从 Analysis 的观点中选择核心主张，取舍信息并组织成一条递进、可说服的论证链；负责把观点讲成故事，但不重新分析材料或撰写完整正文 | `storyline.v3` |
 | Worker | Report（正式写作） | 基于已批准 Storyline，把论证骨架写成一篇完整、有开头、有推进、有收束、可以从头读到尾的 Markdown 报告 | `report.v1`、`report.md` |
@@ -75,7 +76,7 @@
 - review policy；
 - harness 状态与可选能力，如 multi-candidate。
 
-v0.3 的默认依赖固定为 `analysis → storyline → report → qa_preparation → format`。Manager 可以派发返工，但不能把 Evidence 插入顶层主链；Evidence 只作为 Analysis 的内部子任务运行。逐字稿 worker 已删除，不再出现在默认链路、扩展 gate 或 task packet 枚举中。
+v0.3 的默认生产依赖固定为 `analysis → storyline → report → qa_preparation → format`。Manager 可以派发返工，但不能把 Evidence 插入五阶段生产主链；Evidence 在有原始材料时作为 Brief 前的 run-level 输入处理任务运行，生成的 Catalog 由 Brief Gate 和 Analysis 共同复用。Analysis 内原触发仅保留为旧 run 或直接调用的兼容兜底。逐字稿 worker 已删除，不再出现在默认链路、扩展 gate 或 task packet 枚举中。
 
 ## 四、双层 Loop
 
@@ -576,7 +577,7 @@ memory / runs / artifacts / 用户配置
 ├── repo/                           # 官方 GitHub 仓库 clone
 │   ├── presentation_agent/         # Python harness
 │   ├── configs/                    # Agent 定义与状态策略
-│   ├── skills/                     # Manager + core workers + internal Evidence Harvester
+│   ├── skills/                     # Manager + core workers + run-level Evidence Harvester
 │   ├── templates/                  # 各平台 host adapter 模板
 │   └── docs/                       # 用户指南与设计文档
 └── workspaces/

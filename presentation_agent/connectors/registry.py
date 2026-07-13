@@ -7,7 +7,9 @@ from presentation_agent.connectors.csv import CsvConnector
 from presentation_agent.connectors.doc import DocConnector
 from presentation_agent.connectors.docx import DocxConnector
 from presentation_agent.connectors.image import ImageConnector
+from presentation_agent.connectors.json import JsonConnector
 from presentation_agent.connectors.pdf import PdfConnector
+from presentation_agent.connectors.text import TextConnector
 from presentation_agent.connectors.xlsx import XlsxConnector
 from presentation_agent.connectors.source_units import attach_source_units
 from presentation_agent.models import AgentSpec
@@ -17,6 +19,8 @@ _CONNECTORS: tuple[Connector, ...] = (
     DocConnector(),
     DocxConnector(),
     CsvConnector(),
+    JsonConnector(),
+    TextConnector(),
     ImageConnector(),
     PdfConnector(),
     XlsxConnector(),

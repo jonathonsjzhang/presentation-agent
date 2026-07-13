@@ -28,6 +28,7 @@ description: >-
 - 有 `spawn.detail` 时按 detail 派真实 sub-agent；不要为了省事在主对话代写 worker/reviewer 输出
 - 写入 `output_path` 时只写一个合法 JSON 对象，不加 Markdown 前后文
 - 不在命令中放 token、API key，也不执行会删除、reset 或覆盖 workspace 的命令
+- 用户提供文件或目录时，宿主只把路径登记进 `materials[].path`。禁止在 `report start` 前自行派 Explore/Research sub-agent 完整读取或总结材料；正式读取统一由 Manager 的 run-level Evidence Intake 完成
 
 ## 默认位置
 
@@ -106,7 +107,7 @@ python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces
 | `project_type` | 可空 | 默认“分析类”；可填“分析类/梳理类” |
 | `delivery_targets` / `output_format` | 可空 | 默认文档；如用户要 PPT，则 brief 预设篇幅为 10 页 PPT |
 | `report_length` | 可空 | 默认 3 页；PPT 默认 10 页 PPT |
-| `materials` | 可空 | 文件路径、素材、已知结论或证据 |
+| `materials` | 可空 | 文件或目录使用 `{"path": "..."}`；已知结论可作为结构化 claim。宿主不预读文件内容 |
 | `constraints` | 可空 | 页数、保密、口径、格式限制 |
 | `user_intent` | 可空 | 用一句自然语言记录用户真实意图 |
 
@@ -141,7 +142,7 @@ python -m presentation_agent.cli \
 
 尖括号内容不是字面值：宿主必须替换成上表中与自身对应的 adapter。若当前宿主无法使用 sub-agent，应先向用户说明无法保证 Worker 上下文隔离，再显式传入 `--spawn-adapter "inline"`；不要在失败后静默改用主对话代写。
 
-第一轮通常会进入 brief human gate。必须先把 CLI 返回的 `instruction.present_to_user` 原样展示给用户，它里面应按顺序包含研究目的、当前研究 hypo、论据列表、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”；不要只发结构化问题，也不要只说“请确认 brief”。如果返回的 `instruction.questions` 存在，宿主应在展示完 Brief 后按 WorkBuddy/AskUserQuestion 风格发起结构化提问：两个文本题分别收集“项目研究目的是什么（如为了回答XX问题，或XX研究的延伸）”和“当前的研究hypo是什么（如当前结论判断，或预期引导的讨论方向）”，一个文本填空题让用户填写高可信论据编号、名称或原文片段。高可信论据不要做成多选题，也不要把 evidence list 截断成少量可选项。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。用户回答、修改或补充后用 `report feedback --text '<用户原话或结构化答案摘要>'` 回传；用户确认继续后再 approve。若 `present_to_user` 缺少 brief 摘要，先执行 `report status --run "<run_id>"` 检查状态，仍缺失时把 `raw_brief.json` 的主要内容整理给用户看，再请用户确认。
+有文件、目录或原始数据时，第一轮先返回 Evidence Harvester worker instruction；宿主按正常 spawn/submit 协议完成后，runtime 才进入 brief human gate。没有待处理原始材料或已有可复用 Catalog 时，第一轮直接进入 brief human gate。进入 brief human gate 后，必须先把 CLI 返回的 `instruction.present_to_user` 原样展示给用户，它里面应按顺序包含研究目的、当前研究 hypo、正式 Evidence List、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”；不要只发结构化问题，也不要只说“请确认 brief”。如果返回的 `instruction.questions` 存在，宿主应在展示完 Brief 后按 WorkBuddy/AskUserQuestion 风格发起结构化提问：两个文本题分别收集“项目研究目的是什么（如为了回答XX问题，或XX研究的延伸）”和“当前的研究hypo是什么（如当前结论判断，或预期引导的讨论方向）”，一个文本填空题让用户填写高可信论据编号、名称或原文片段。高可信论据不要做成多选题，也不要把 evidence list 截断成少量可选项。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。用户回答、修改或补充后用 `report feedback --text '<用户原话或结构化答案摘要>'` 回传；用户确认继续后再 approve。若 `present_to_user` 缺少 brief 摘要，先执行 `report status --run "<run_id>"` 检查状态，仍缺失时把 `raw_brief.json` 的主要内容整理给用户看，再请用户确认。
 
 ## 3. 推进 report loop
 

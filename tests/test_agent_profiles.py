@@ -1113,7 +1113,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertTrue(result["raw_materials"])
             self.assertIn(expected_key, result["raw_materials"][0])
 
-    def test_all_v03_golden_cases_reach_document_first_brief_gate(self) -> None:
+    def test_v03_golden_cases_run_evidence_intake_before_brief_when_needed(self) -> None:
         cases_root = FIXTURES / "golden_cases"
         manifest = read_json(cases_root / "manifest.json")
         for case in manifest["cases"]:
@@ -1128,6 +1128,14 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 prepared = ManagerOrchestrator(
                     ROOT, run_dir, contract_profile="v0_3"
                 ).initialize_run(brief_path)
+                if case["case_id"] in {
+                    "qualitative_interviews",
+                    "quantitative_usage",
+                }:
+                    self.assertEqual(prepared["actor"], "worker")
+                    self.assertTrue(prepared["evidence_intake"])
+                    self.assertEqual(prepared["agent_id"], "evidence_harvester")
+                    continue
                 self.assertEqual(prepared["gate"], "brief")
                 self.assertIn("研究目的", prepared["missing_fields"])
                 self.assertIn("当前研究 hypo", prepared["missing_fields"])
