@@ -37,7 +37,8 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 ### 四、证据纪律
 
 - **引用真实，定性保留原话。** 每个 finding 追溯至具体的 evidence ref，不得编造。访谈证据保留原话和身份标签，不泛化改写。
-- **使用 Evidence 资产索引。** 若输入含 `evidence_index`/`evidence_assets`，用 E-id 和必要的 `E-id:data_asset_id` 定位证据；这些资产可提示趋势、竞品对比和可视化候选，但 Analysis 仍只产出观点卡，不写图表计划。
+- **使用 Evidence 资产索引。** 若输入含 `evidence_index`/`evidence_assets`，用 E-id 和必要的 `E-id:data_asset_id` 定位证据。不要把完整时间序列压缩成起点和终点；需要展现变化过程时，必须保留对应的数据资产引用。
+- **提出核心可视化论据。** Analysis 不决定颜色、版式和具体图表样式，但必须判断哪些核心结论仅靠文字不够清楚。时间变化、组间对比、结构分布、变量关系和流程机制应进入 `visual_evidence_candidates`。其中缺失会明显削弱核心结论的项目标为 `required: true`。
 - **区分观察与推断。** 相关性、分群差异、访谈不能单独证明因果——没有识别设计时不写“导致”“驱动”。
 - **反证、异常值、替代解释必须记录。** 趋势异常点必须识别并解释。优先检查自选择、口径变化、第三变量、反向因果、访谈偏差、外部事件六类竞争性解释。
 - **置信度匹配证据。** High = 多源一致、反证已削弱；Medium = 有方法限制或替代解释未排除；Low = 单一来源或弱指标。影响核心判断的 unresolved evidence 不得给 high。
@@ -106,7 +107,7 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 
 边界检查：是否已形成观点池但未越界形成唯一故事线？未选择 apex？未设计论证顺序？未决定正文与附录？未写 ES 或章节？
 
-严格按 `analysis.v1` schema 输出单个 JSON 对象。不使用 Markdown code fence，不添加解释性前后文。
+严格按 `analysis.v1` schema 输出单个 JSON 对象。不使用 Markdown code fence，不添加解释性前后文。除 `findings` 和 `thesis_options` 外，必须输出 `visual_evidence_candidates`；确实没有合适项目时输出空数组，并在分析中确认核心结论不依赖趋势、比较、分布、关系或流程展示。
 
 ---
 
@@ -120,4 +121,4 @@ description: Analyze raw internet-strategy materials or an existing Evidence Cat
 
 不要重复提交 topic、材料准备度、Evidence 执行过程、讨论点、数据缺口清单或 quality checks。除 `thesis_options` 外，不要再输出观点的第二份结构化副本。`agent_id`、`schema`、路径、状态和 coverage 由 runtime 或 reviewer 管理。
 
-禁止输出 Executive Summary、message pyramid、section outline、pages、slides 或 visual brief。
+禁止输出 Executive Summary、message pyramid、section outline、pages、slides 或具体图表设计。`visual_evidence_candidates` 只说明要让读者看见什么论据、为何重要、来自哪里，不指定配色和布局。

@@ -80,7 +80,7 @@ formatted material 的语义权威永远属于 `report_markdown`：
 - 不重读 Raw Materials，不补做 Analysis，不新增观点、数字或结论方向。
 - 可以使用 runtime 提供的 `evidence_assets`/`evidence_index` 做图表数据来源；这些资产来自 Evidence 阶段的 E-id 和 `parsed_artifact_path`，只用于把报告正文已引用或明确对应的证据视觉化。
 - visual `source_refs` 只能引用报告正文中明确出现的可读来源、证据标识，或 runtime 提供的 E-id / `E-id:data_asset_id`。
-- 上游缺数据时不创建需要数据的视觉，不自行模拟或补造。
+- 对 `visual_evidence_placements` 中 `required: true` 的项目，必须生成同 ID 的 visual。若缺少可绘制数据，不得静默跳过，也不得模拟数据；输出该 visual 的来源引用，runtime 会停止交付并明确要求 Evidence 或 Analysis 补数据。
 - 载体专属规则只服从本轮 active format capability。
 
 ---
@@ -97,7 +97,7 @@ formatted material 的语义权威永远属于 `report_markdown`：
 
 ### 3. 为关键证据选择表格、统计图或 quote 样式
 
-逐节判断哪些证据值得视觉化：趋势和对比优先 chart，精确多列信息优先 table，分层关系优先 matrix，访谈原话和关键提醒优先 callout / quote 样式。没有必要就不创建。
+先逐项处理 `visual_evidence_placements`，保持 `visual_evidence_id`、`required`、`placement` 和 `section_heading` 一致。时间序列优先折线图，组间比较优先柱状图，精确多列信息优先 table，分层关系优先 matrix，访谈原话和关键提醒优先 callout / quote 样式。完成必需项目后，再判断是否需要增加非必需视觉。
 
 若输入中存在 `evidence_assets`，优先引用其中与正文证据匹配的 E-id 或 `E-id:data_asset_id`。可以把 visual `data` 留空让 runtime 按 source_refs 自动补齐 chart-ready 数据；不要手工抄写或改写 sidecar 中不存在的数据。
 
@@ -116,9 +116,12 @@ formatted material 的语义权威永远属于 `report_markdown`：
 只提交 `visuals[]`：
 
 - `section_heading`：视觉所属的 Markdown 二级标题
+- `visual_evidence_id`：与 Report 位置清单一致的 ID
+- `required`：与 Report 一致，不得自行降级
+- `placement`：与 Report 一致；`opening` 表示放在 Executive Summary 中相应标记处
 - `type`：chart / table / matrix / callout
 - `title`：视觉要表达的判断
 - `source_refs`：原稿中的真实来源或证据引用
 - `data`：仅在原稿提供了可核对数据时填写
 
-没有合适视觉时输出 `{"visuals": []}`。不要输出正文副本、delivery units、compression decisions、omission register、caveat register、artifact manifest、render plan 或 quality checks。
+只有当上游 `visual_evidence_placements` 为空时，才可以输出 `{"visuals": []}`。不要输出正文副本、delivery units、compression decisions、omission register、caveat register、artifact manifest、render plan 或 quality checks。

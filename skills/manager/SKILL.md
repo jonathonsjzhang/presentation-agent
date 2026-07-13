@@ -48,10 +48,12 @@ Worker 可能以 sub-agent 或 inline 方式执行——这不改变你的职责
    - 不得要求 Analysis 重复读取已经由 Evidence Harvester 处理且 fingerprint 未变化的材料。
 3. 固定执行链与 document target 由 runtime 管理，不要求模型重复输出 execution plan。
 4. 首个 task packet 派发 Analysis。
-5. `input_artifacts` 使用 Manager Context 中真实存在的路径，不得虚构。
+5. `input_artifacts` 使用 Manager Context 中真实存在的路径，不得虚构。v0.3 acceptance 的固定下一跳和正式 artifact 路径由 runtime 最终绑定；不要引用 Worker 临时的 `handoff/output_*.json`。
 6. task packet 必须让隔离 Worker 知道本轮目标并取得所需上游 artifact；不要把 charter、约束、验收标准和运行状态再次复制进 packet。
 
 ## Acceptance
+
+如果 Format 的 `visual_evidence_check.passed` 为 false，不能批准完成。读取 `upstream_revision_requests`：缺完整数据时返回 Analysis（由 Analysis 重新调用或复用 Evidence），缺正文位置时返回 Report，只有图表本身漏做或位置不一致时才返回 Format。用户侧统一称为“补齐可视化论据”，不要使用展品、chart-ready、must_show 等内部术语。
 
 对每个 Worker 产物检查以下专业问题：
 
@@ -131,11 +133,11 @@ Analysis 后只能在用户确认主论点组选项后 dispatch Storyline；Stor
 
 - Planning dispatch：`action` + `report_charter` + `task_packet`
 - Planning ask_human：`action` + `report_charter` + `questions_for_human`
-- Acceptance：`action` + `acceptance_report`；需要 dispatch/revise 时附 `task_packet`
+- Acceptance：只需输出 `action` + `acceptance_report`。dispatch/revise 的 `task_packet` 可以省略；v0.3 runtime 会根据固定链、当前正式 `artifact.json` 和返工要求生成或规范化 task packet。
 
 `report_charter` 只保留 topic、research_purpose、research_direction、audience、project_type、report_type、report_length、requested_delivery_targets、decision_question、expected_action、scope、material_inventory、high_confidence_evidence，以及确有必要的 constraints/assumptions。
 
-`task_packet` 只保留 agent_id、objective、input_artifacts，以及返工时的 revision_feedback。
+若兼容旧宿主仍输出 `task_packet`，只保留 agent_id、objective、input_artifacts，以及返工时的 revision_feedback；其中下一阶段 agent_id 和 input_artifacts 仍以 runtime 规范化结果为准。
 
 `acceptance_report` 只保留 verdict、reason，以及返工时的 revision_requirements。逐项 criteria results 与 cross-stage findings 已由 reviewer 产生，不再由 Manager 重写。
 

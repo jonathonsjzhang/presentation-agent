@@ -47,7 +47,8 @@
           "output_schema": "analysis.v1",
           "output_contract": {
             "required_handoff_fields": [
-              "findings"
+              "findings",
+              "visual_evidence_candidates"
             ],
             "downstream": "storyline"
           },
@@ -117,7 +118,8 @@
           "output_contract": {
             "required_handoff_fields": [
               "core_answer",
-              "sections"
+              "sections",
+              "visual_evidence_plan"
             ],
             "forbidden_handoff_fields": [
               "pages"
@@ -143,7 +145,8 @@
           "state": {
             "global_reads": [
               "audience_profile",
-              "target_action"
+              "target_action",
+              "delivery_budget"
             ],
             "global_writes": [],
             "agent_memory_scope": "storyline_v0_3_only",
@@ -181,7 +184,8 @@
           "output_schema": "report.v1",
           "output_contract": {
             "required_handoff_fields": [
-              "report_markdown"
+              "report_markdown",
+              "visual_evidence_placements"
             ],
             "downstream": "qa_preparation"
           },
@@ -205,7 +209,8 @@
           "state": {
             "global_reads": [
               "audience_profile",
-              "target_action"
+              "target_action",
+              "delivery_budget"
             ],
             "global_writes": [],
             "agent_memory_scope": "report_v0_3_only",
@@ -268,7 +273,8 @@
           "state": {
             "global_reads": [
               "audience_profile",
-              "target_action"
+              "target_action",
+              "delivery_budget"
             ],
             "global_writes": [],
             "agent_memory_scope": "format_v0_3_only",
@@ -321,7 +327,8 @@
           "output_contract": {
             "primary_artifact": "report.v1 with appended question list",
             "required_handoff_fields": [
-              "report_markdown"
+              "report_markdown",
+              "visual_evidence_placements"
             ],
             "downstream": "format",
             "downstream_use": "作为 Format 的唯一内容真相源，确保最终 DOCX/PPT/HTML 在附录之后包含深度追问清单"

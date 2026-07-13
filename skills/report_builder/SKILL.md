@@ -29,6 +29,7 @@ description: >-
 - 写入 `output_path` 时只写一个合法 JSON 对象，不加 Markdown 前后文
 - 不在命令中放 token、API key，也不执行会删除、reset 或覆盖 workspace 的命令
 - 用户提供文件或目录时，宿主只把路径登记进 `materials[].path`。禁止在 `report start` 前自行派 Explore/Research sub-agent 完整读取或总结材料；正式读取统一由 Manager 的 run-level Evidence Intake 完成
+- 二进制表格硬规则：`.xlsx` 不交给宿主通用 Read，也不在宿主层运行 openpyxl 后打印整表。把路径原样写入 brief；runtime connector 会解析为受控预览、`data_profile`/`data_assets` 和完整 JSON sidecar，Worker 只按需读取 sidecar 切片，避免大输出截断
 
 ## 默认位置
 
@@ -216,6 +217,10 @@ python -m presentation_agent.cli \
 
 提示 sub-agent：只依据指令包和输入文件工作；worker 只写 `output_path` 一个合法 JSON；reviewer 只返回 `{"objections": [...]}` 或 `{"objections": []}`。
 
+输入文件若包含 `parsed_artifact_path` / `raw_access` / `table_data_access`，说明原始 XLSX/CSV 已由 runtime connector 处理。sub-agent 不要重新直接读取二进制文件，也不要把完整 sidecar 一次性打印到对话；先用内联画像和 source units，只有具体论据需要时才读取对应字段或 sheet。
+
+Manager acceptance 在 v0.3 只需要判断 action 与 acceptance_report。固定下一 Worker、task_id 和正式 `artifact.json` 路径由 runtime 自动生成或规范化；宿主不要自行拼接 `handoff/output_gen.json`。
+
 sub-agent 完成且 `output_path` 存在后：
 
 ```bash
@@ -252,6 +257,8 @@ WorkBuddy 的 subagent 调度失败时，最重要的是不要假装已经执行
 2. 确认 `instruction.spawn.detail` 存在，并优先照 detail 重新派发
 3. 如果 sub-agent 返回了内容但没写入 `output_path`，用 `report submit --output-file "<output_json>"` 提交该 JSON
 4. 如果没有可信 JSON 产物，不要手写补齐；运行 `report status`，把错误和当前 gate 告诉用户
+
+Manager `report submit` 在应用决策时失败后，runtime 会自动回滚到同一轮 `awaiting_output`。此时执行 `report next` 取回原 instruction，修正 `output_path` 后再次 `report submit`；不要用 `approve` 强推，也不需要手改 state。
 
 常用补交命令：
 

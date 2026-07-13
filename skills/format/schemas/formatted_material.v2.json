@@ -11,8 +11,9 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["section_heading", "type", "title", "source_refs"],
+        "required": ["visual_evidence_id", "section_heading", "type", "title", "source_refs", "required", "placement"],
         "properties": {
+          "visual_evidence_id": {"type": "string", "minLength": 1},
           "section_heading": {"type": "string", "minLength": 1},
           "type": {"type": "string", "enum": ["chart", "table", "matrix", "callout"]},
           "title": {"type": "string", "minLength": 1},
@@ -22,6 +23,8 @@
             "items": {"type": "string", "minLength": 1},
             "uniqueItems": true
           },
+          "required": {"type": "boolean"},
+          "placement": {"type": "string", "enum": ["opening", "section"]},
           "data": {"type": "object"}
         }
       }

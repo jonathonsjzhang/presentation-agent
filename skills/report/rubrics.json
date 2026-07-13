@@ -63,6 +63,14 @@
       "criterion": "报告不得新增无支持事实、KPI、owner、预算、路线图，或把上游低置信判断升级为确定结论。",
       "check": "对照 Storyline 与 Analysis 检查是否存在实质越界；不要因标题改写或表达压缩判 P0。",
       "fix": "删除越界内容，恢复证据允许的表述。"
+    },
+    {
+      "id": "REPORT-BUDGET-001",
+      "severity": "P1",
+      "dimension": "正文篇幅",
+      "criterion": "正文应服从 delivery_budget；Report统一按每页800-900中文字符规划，以每页850字符为目标、900字符为硬上限；Executive Summary固定为300-350字符，不随总页数变化。",
+      "check": "只统计标题、Executive Summary和主体章节；排除方法与边界及QA。Report字符硬上限与Format最终实际渲染页数均须通过。",
+      "fix": "合并相邻判断，删除摘要、标题、段首和段尾之间的重复，减少次级证据与普通caveat。"
     }
   ]
 }

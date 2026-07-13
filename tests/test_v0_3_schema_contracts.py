@@ -85,6 +85,21 @@ class V03SchemaContractTests(unittest.TestCase):
             ref for section in storyline["sections"] for ref in section["finding_refs"]
         }
         self.assertLessEqual(storyline_findings, analysis_findings)
+        analysis_visual_ids = {
+            item["id"] for item in analysis["visual_evidence_candidates"]
+        }
+        storyline_visual_ids = {
+            item["id"] for item in storyline["visual_evidence_plan"]
+        }
+        report_visual_ids = {
+            item["id"] for item in report["visual_evidence_placements"]
+        }
+        format_visual_ids = {
+            item["visual_evidence_id"] for item in formatted["visuals"]
+        }
+        self.assertLessEqual(storyline_visual_ids, analysis_visual_ids)
+        self.assertLessEqual(report_visual_ids, storyline_visual_ids)
+        self.assertLessEqual(report_visual_ids, format_visual_ids)
         markdown = report["report_markdown"]
         markdown_sections = [
             line[3:].strip()
@@ -299,7 +314,16 @@ class FormatCoreCompilationTests(unittest.TestCase):
         visual = self.formatted["visuals"][0]
         self.assertEqual(
             set(visual),
-            {"section_heading", "type", "title", "source_refs", "data"},
+            {
+                "visual_evidence_id",
+                "section_heading",
+                "type",
+                "title",
+                "source_refs",
+                "required",
+                "placement",
+                "data",
+            },
         )
 
     def test_v2_schema_only_requires_visuals(self) -> None:

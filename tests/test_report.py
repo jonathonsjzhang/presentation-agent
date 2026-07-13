@@ -44,7 +44,10 @@ class ReportCoreTests(unittest.TestCase):
 
     def test_frozen_report_strictly_validates_as_report_v1(self) -> None:
         self.assertEqual(validate(self.report, self.schema), [])
-        self.assertEqual(self.schema["required"], ["report_markdown"])
+        self.assertEqual(
+            self.schema["required"],
+            ["report_markdown", "visual_evidence_placements"],
+        )
         self.assertEqual(self.report["agent_id"], "report")
         self.assertEqual(self.report["schema"], "report.v1")
         self.assertEqual(self.report["report_file"], "report.md")

@@ -76,6 +76,13 @@
       "dimension": "管线完整",
       "check": "是否严格按 analysis → storyline → report → qa_preparation → format 顺序执行，未跳过任何阶段。最终产物（DOCX/PPT/HTML）是否只由 Format worker 产出，追问清单是否只由 QA worker 追加，不存在管线外生成的最终材料。",
       "fix": "拒绝接受非管线产物。遇到阻塞时通过 revise 或 ask_human 解决，不得绕过管线。"
+    },
+    {
+      "id": "MGR-BODY-PAGE-001",
+      "severity": "P0",
+      "dimension": "正文篇幅",
+      "check": "Report dispatch前和Format complete前，runtime生成的body_budget_audit是否通过；正文只包含标题、Executive Summary和主体论证，不含方法与边界及QA。",
+      "fix": "不得根据字符数主观判断合规。Report预检失败时revise Report；Format终检失败时revise Format，直至实际渲染正文页数不超过上限。"
     }
   ]
 }

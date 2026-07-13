@@ -20,7 +20,8 @@
         "storyline": {
           "upstream_schema": "analysis.v1",
           "required_fields": [
-            "findings"
+            "findings",
+            "visual_evidence_candidates"
           ],
           "excluded_fields": [
             "raw_materials"
@@ -31,14 +32,16 @@
           "upstream_schema": "storyline.v3",
           "required_fields": [
             "core_answer",
-            "sections"
+            "sections",
+            "visual_evidence_plan"
           ],
           "output_schema": "report.v1"
         },
         "format": {
           "upstream_schema": "report.v1",
           "required_fields": [
-            "report_markdown"
+            "report_markdown",
+            "visual_evidence_placements"
           ],
           "task_fields": [
             "delivery_target"
@@ -53,7 +56,8 @@
         "qa_preparation": {
           "upstream_schema": "report.v1",
           "required_fields": [
-            "report_markdown"
+            "report_markdown",
+            "visual_evidence_placements"
           ],
           "output_schema": "report.v1"
         }

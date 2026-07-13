@@ -39,6 +39,14 @@
       "criterion": "主线围绕 core_answer，有重点与记忆点；未使用 finding 可以主动舍弃。",
       "check": "检查不能汇聚回核心答案的分支。",
       "fix": "移至附录或舍弃，不追求全量覆盖。"
+    },
+    {
+      "id": "STORYLINE-BUDGET-001",
+      "severity": "P1",
+      "dimension": "正文篇幅",
+      "criterion": "Storyline 应服从 delivery_budget；Report正文统一按每页800-900中文字符规划；Executive Summary固定为300-350字符，不随总页数变化，并为关键视觉预留空间。",
+      "check": "检查Executive Summary是否能在固定篇幅内覆盖核心判断、关键证据、决策含义和主要边界；是否为次要 finding 单独开章，或用4个以上并列主体章节消耗正文预算；方法与边界和QA不计入正文。",
+      "fix": "合并承担相近论证作用的章节，降层次要发现，只保留使核心答案成立的最短充分主线。"
     }
   ]
 }

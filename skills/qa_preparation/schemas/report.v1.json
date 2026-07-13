@@ -4,7 +4,7 @@
   "title": "Q&A-augmented report submission",
   "type": "object",
   "additionalProperties": true,
-  "required": ["report_markdown"],
+  "required": ["report_markdown", "visual_evidence_placements"],
   "properties": {
     "schema": {"const": "report.v1"},
     "report_markdown": {
@@ -18,6 +18,10 @@
         "type": "string",
         "minLength": 1
       }
+    },
+    "visual_evidence_placements": {
+      "type": "array",
+      "items": {"type": "object"}
     }
   }
 }
