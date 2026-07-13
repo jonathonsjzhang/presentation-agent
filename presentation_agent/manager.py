@@ -2757,6 +2757,20 @@ class ManagerOrchestrator:
             result["interaction_required"] = bool(result["questions"])
             result["preferred_tool"] = "AskUserQuestion"
             result["must_call_tool_before_next_cli"] = bool(result["questions"])
+            result["presentation_required_before_tool"] = bool(
+                result["questions"]
+            )
+            result["presentation_text"] = present_to_user
+            result["presentation_delivery_mode"] = (
+                "separate_user_visible_message_before_tool"
+                if result["questions"]
+                else "none"
+            )
+            result["host_action_sequence"] = (
+                ["send_present_to_user_message", "call_AskUserQuestion"]
+                if result["questions"]
+                else []
+            )
             result["ask_user_question_payload"] = {
                 "questions": [
                     {
