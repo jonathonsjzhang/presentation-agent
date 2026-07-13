@@ -219,10 +219,11 @@ python -m presentation_agent.cli \
 
 Analysis 论点组确认 gate：
 
-- 如果 `present_to_user` 是“Analysis 论点组确认”且 `questions` 包含“论点组选择”，先把 2-3 组主论点/分论点完整展示给用户，并用结构化提问让用户选择。
-- 用户选择某个方案编号（如 `TG-01`）：先执行 `report feedback --text '<选择 TG-01 + 用户说明>'`，CLI 会记录到 `selected_analysis_thesis`；随后在用户明确表示可以后再执行 `report approve` 进入 Storyline。
-- 用户选择“都不好，重新写”：必须让用户说明原因，再执行 `report feedback --text '<都不好 + 原因>'`。不要直接 approve；runtime 会复用当前 Analysis task 进入 revise，修订后会再次回到同一个确认 gate。
-- 用户选择“我自己修改”：把用户的非结构化修改意见原样放进 `report feedback --text`。不要替用户整理成最终 JSON；当前 Analysis agent 会根据反馈重新整理结构化论点组，并再次请求确认。
+- 如果 `present_to_user` 是“Analysis 论点组确认”，先把 2-3 组主论点/分论点完整展示给用户，然后只发起 **1 个自由输入问题**（`inputType=text, options=[]`），不得再追加“选择说明/其他补充”第二题。
+- 这一个输入框同时承载确认和修改：用户填写方案编号（如 `TG-01`，理由可选）即确认；填写“都不好 + 原因”即要求重写；直接填写修改意见即表示“我自己修改”。
+- 用户填写某个方案编号：先执行 `report feedback --text '<选择 TG-01 + 可选理由>'`，CLI 会记录到 `selected_analysis_thesis`；随后执行 `report approve` 进入 Storyline。
+- 用户填写“都不好 + 原因”：执行 `report feedback --text '<都不好 + 原因>'`。不要直接 approve；runtime 会复用当前 Analysis task 进入 revise，修订后会再次回到同一个确认 gate。
+- 用户直接填写修改意见：把非结构化修改意见原样放进 `report feedback --text`。不要替用户整理成最终 JSON；当前 Analysis agent 会根据反馈重新整理结构化论点组，并再次请求确认。
 
 Storyline 确认 gate：
 

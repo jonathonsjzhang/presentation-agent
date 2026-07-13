@@ -812,10 +812,11 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertIn("Analysis 论点组确认", gate["present_to_user"])
             self.assertIn("TG-01", gate["present_to_user"])
             self.assertIn("论点组", gate["questions"][0]["header"])
-            values = [option["value"] for option in gate["questions"][0]["options"]]
-            self.assertIn("TG-01", values)
-            self.assertIn("rewrite", values)
-            self.assertIn("custom", values)
+            self.assertEqual(len(gate["questions"]), 1)
+            self.assertEqual(gate["questions"][0]["inputType"], "text")
+            self.assertEqual(gate["questions"][0]["options"], [])
+            self.assertIn("TG-01 / TG-02", gate["questions"][0]["question"])
+            self.assertIn("一个输入框", gate["questions"][0]["question"])
 
     def test_analysis_thesis_selection_is_stored_for_storyline(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
