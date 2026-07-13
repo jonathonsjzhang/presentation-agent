@@ -828,6 +828,8 @@ class ManagerOrchestrator:
             "tasks": [],
             "accepted_artifacts": [],
             "project_state": {},
+            "brief_interaction_stage": "collection_and_confirmation",
+            "brief_explicitly_confirmed": False,
             "run_mode": None,  # set during brief confirmation; default pauses after analysis/storyline
             "review_mode": "schema_only",
             "review_subagents_enabled": False,
@@ -856,9 +858,23 @@ class ManagerOrchestrator:
         # --- brief confirmation: show the brief and ask user to confirm ---
         if phase == "brief_confirmation":
             brief = read_json(self.raw_brief_path, default={})
-            collection_questions = self._brief_collection_questions(brief)
-            missing = [item["header"] for item in collection_questions]
-            confirmation_ready = not collection_questions
+            brief_stage = str(
+                state.get("brief_interaction_stage")
+                or "collection_and_confirmation"
+            )
+            confirmation_ready = bool(
+                state.get("brief_explicitly_confirmed")
+            )
+            if brief_stage == "collection_and_confirmation":
+                questions = [
+                    *self._brief_collection_questions(brief, always_ask=True),
+                    self._brief_confirmation_question(),
+                ]
+            elif confirmation_ready:
+                questions = []
+            else:
+                questions = [self._brief_confirmation_question()]
+            missing = [item["header"] for item in questions]
             user_message = self._format_brief_confirmation(
                 brief,
                 confirmation_ready=confirmation_ready,
@@ -868,10 +884,9 @@ class ManagerOrchestrator:
             state["pending_decision"] = {
                 "brief": brief,
                 "missing_fields": missing,
-                "brief_stage": (
-                    "confirmation" if confirmation_ready else "collection"
-                ),
+                "brief_stage": brief_stage,
                 "confirmation_ready": confirmation_ready,
+                "questions": questions,
                 "user_message": user_message,
             }
             state["status"] = "awaiting_brief_confirmation"
@@ -1188,14 +1203,16 @@ class ManagerOrchestrator:
             brief_data = decision.get("brief", {})
             confirmation_ready = bool(decision.get("confirmation_ready"))
             if not confirmation_ready:
-                remaining = self._brief_collection_questions(
-                    brief_data if isinstance(brief_data, dict) else {}
+                questions = decision.get("questions")
+                fields = "、".join(
+                    str(item.get("header") or "").strip()
+                    for item in questions
+                    if isinstance(item, dict) and item.get("header")
+                ) if isinstance(questions, list) else ""
+                raise StepError(
+                    "Brief 尚未获得用户明确确认，请先完成结构化提问"
+                    + (f"：{fields}" if fields else "")
                 )
-                if remaining:
-                    fields = "、".join(item["header"] for item in remaining)
-                    raise StepError(
-                        f"Brief 尚未进入最终确认阶段，请先填写：{fields}"
-                    )
             # run_mode: "full_auto" | "step_by_step" | ["agent_id", ...]
             raw_run_mode = (
                 run_mode
@@ -2202,18 +2219,17 @@ class ManagerOrchestrator:
 
     @classmethod
     def _brief_collection_questions(
-        cls, brief: dict[str, Any]
+        cls, brief: dict[str, Any], *, always_ask: bool = False
     ) -> list[dict[str, Any]]:
-        """Return only unresolved free-text fields, capped at three.
+        """Return the three user-owned free-text Brief questions.
 
-        WorkBuddy's question panel reliably renders at most three questions.
-        Final Brief confirmation is therefore a separate gate after these
-        fields have been persisted, rather than a fourth question that may be
-        silently dropped by the host.
+        The opening WorkBuddy interaction passes ``always_ask=True`` so
+        inferred draft values never suppress explicit user ownership. The
+        caller appends Brief confirmation as question four in the same panel.
         """
 
         questions: list[dict[str, Any]] = []
-        if not cls._first_brief_text(brief, "research_purpose"):
+        if always_ask or not cls._first_brief_text(brief, "research_purpose"):
             questions.append({
                 "header": "研究目的",
                 "question": "项目研究目的是什么（如为了回答XX问题，或XX研究的延伸）？",
@@ -2221,7 +2237,7 @@ class ManagerOrchestrator:
                 "multiSelect": False,
                 "options": [],
             })
-        if not cls._first_brief_text(
+        if always_ask or not cls._first_brief_text(
             brief,
             "research_direction",
             "hypothesis",
@@ -2234,7 +2250,7 @@ class ManagerOrchestrator:
                 "multiSelect": False,
                 "options": [],
             })
-        if "high_confidence_evidence" not in brief:
+        if always_ask or "high_confidence_evidence" not in brief:
             questions.append({
                 "header": "高可信论据",
                 "question": (
@@ -2283,6 +2299,8 @@ class ManagerOrchestrator:
             "当前研究 hypo": "research_direction",
             "高可信论据": "high_confidence_evidence",
             "high_confidence_evidence": "high_confidence_evidence",
+            "brief_confirmed": "brief_confirmed",
+            "Brief确认": "brief_confirmed",
         }
         allowed_updates = {
             "topic",
@@ -2297,6 +2315,7 @@ class ManagerOrchestrator:
             "research_purpose",
             "research_direction",
             "high_confidence_evidence",
+            "brief_confirmed",
         }
         try:
             payload = json.loads(feedback)
@@ -2339,6 +2358,23 @@ class ManagerOrchestrator:
             self._save_state(state)
             return self._human_gate_result(state)
 
+        if state.get("brief_interaction_stage") == "collection_and_confirmation":
+            required = {
+                "research_purpose",
+                "research_direction",
+                "high_confidence_evidence",
+                "brief_confirmed",
+            }
+            missing = sorted(required - set(updates))
+            if missing:
+                state["brief_feedback_error"] = (
+                    "首次 Brief 交互必须回传四题答案，缺少字段："
+                    + "、".join(missing)
+                )
+                self._save_state(state)
+                return self._human_gate_result(state)
+
+        explicit_confirmation = updates.pop("brief_confirmed", None)
         brief = read_json(self.raw_brief_path, default={})
         if not isinstance(brief, dict):
             brief = {}
@@ -2360,6 +2396,19 @@ class ManagerOrchestrator:
         write_json(self.raw_brief_path, brief)
 
         state.pop("brief_feedback_error", None)
+        if explicit_confirmation is not None:
+            confirmed = (
+                explicit_confirmation
+                if isinstance(explicit_confirmation, bool)
+                else str(explicit_confirmation).strip().lower()
+                in {"true", "yes", "1", "准确", "准确，继续", "继续"}
+            )
+            state["brief_explicitly_confirmed"] = confirmed
+            state["brief_interaction_stage"] = (
+                "confirmed" if confirmed else "confirmation"
+            )
+        elif state.get("brief_interaction_stage") == "collection_and_confirmation":
+            state["brief_interaction_stage"] = "confirmation"
         state["current_actor"] = "manager"
         state["manager_phase"] = "brief_confirmation"
         state["manager_step"] = "init"
@@ -2636,8 +2685,8 @@ class ManagerOrchestrator:
             )
         else:
             lines.append(
-                "请先完成下方纯文本填空。答案写回后，系统会重新展示一份完整 Brief，"
-                "再单独请你确认是否准确。"
+                "请在同一个结构化提问面板中完成研究目的、当前研究 hypo、"
+                "高可信论据三项填空，并确认其余 Brief 设定是否准确。"
             )
 
         return "\n".join(lines)
@@ -2695,17 +2744,30 @@ class ManagerOrchestrator:
                 "project_type": self._display_project_type(brief_payload),
                 "delivery": self._display_delivery(brief_payload),
             }
+            decision_questions = decision.get("questions")
+            if not isinstance(decision_questions, list):
+                decision_questions = []
+            result["questions"] = decision_questions
             if result["confirmation_ready"]:
-                result["next_action"] = "report_approve"
-                result["questions"] = [self._brief_confirmation_question()]
+                result["next_action"] = "report_approve_without_asking_again"
             else:
-                result["next_action"] = "human_feedback"
-                # Pure free-text fields only. Hosts must preserve the empty
-                # options list and must not synthesize placeholder choices such
-                # as “用户提供” or “用户填写”.
-                result["questions"] = self._brief_collection_questions(
-                    brief_payload
+                result["next_action"] = (
+                    "host_call_AskUserQuestion_then_report_feedback"
                 )
+            result["interaction_required"] = bool(result["questions"])
+            result["preferred_tool"] = "AskUserQuestion"
+            result["must_call_tool_before_next_cli"] = bool(result["questions"])
+            result["ask_user_question_payload"] = {
+                "questions": [
+                    {
+                        "question": question["question"],
+                        "header": question["header"],
+                        "options": question.get("options", []),
+                        "multiSelect": bool(question.get("multiSelect", False)),
+                    }
+                    for question in result["questions"]
+                ]
+            }
             if state.get("brief_feedback_error"):
                 result["feedback_error"] = state["brief_feedback_error"]
 

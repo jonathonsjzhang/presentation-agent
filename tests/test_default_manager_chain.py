@@ -29,7 +29,7 @@ class DefaultManagerChainTests(unittest.TestCase):
         manager.record_human_feedback(
             '{"research_purpose":"判断留存改善优先级",'
             '"research_direction":"价值确认优先于单纯提醒",'
-            '"high_confidence_evidence":[]}'
+            '"high_confidence_evidence":[],"brief_confirmed":true}'
         )
         manager.approve(run_mode="full_auto", review_mode="schema_only")
 

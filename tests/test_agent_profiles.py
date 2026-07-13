@@ -39,6 +39,16 @@ def write_json_file(path: Path, data: dict) -> None:
 
 
 class AgentProfileLoaderTests(unittest.TestCase):
+    def test_report_builder_requires_workbuddy_question_tool_call(self) -> None:
+        instructions = (ROOT / "skills" / "report_builder" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("下一步唯一合法动作是实际调用 `AskUserQuestion` 工具", instructions)
+        self.assertIn("ask_user_question_payload", instructions)
+        self.assertIn("禁止只把问题写成普通文本", instructions)
+        self.assertIn('"options": []', instructions)
+        self.assertIn("同一个工具调用中原样传入 4 个问题", instructions)
+
     def test_user_facing_report_start_defaults_to_v03(self) -> None:
         args = build_parser().parse_args(
             [
@@ -184,37 +194,76 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 manager.status()["state"]["contract_profile"], "v0_3"
             )
             self.assertNotIn("review_mode_options", prepared)
-            self.assertEqual(len(prepared["questions"]), 3)
-            self.assertEqual(prepared["brief_stage"], "collection")
+            self.assertEqual(len(prepared["questions"]), 4)
+            self.assertEqual(
+                prepared["brief_stage"], "collection_and_confirmation"
+            )
             self.assertFalse(prepared["confirmation_ready"])
+            self.assertTrue(prepared["interaction_required"])
+            self.assertEqual(prepared["preferred_tool"], "AskUserQuestion")
+            self.assertTrue(prepared["must_call_tool_before_next_cli"])
+            self.assertEqual(
+                prepared["next_action"],
+                "host_call_AskUserQuestion_then_report_feedback",
+            )
             self.assertTrue(
-                all(question.get("options") == [] for question in prepared["questions"])
+                all(
+                    question.get("options") == []
+                    for question in prepared["questions"][:3]
+                )
+            )
+            self.assertEqual(prepared["questions"][3]["header"], "Brief确认")
+            self.assertEqual(
+                prepared["ask_user_question_payload"]["questions"],
+                [
+                    {
+                        "question": question["question"],
+                        "header": question["header"],
+                        "options": question.get("options", []),
+                        "multiSelect": False,
+                    }
+                    for question in prepared["questions"]
+                ],
             )
             self.assertNotIn("用户提供", json.dumps(prepared, ensure_ascii=False))
             self.assertNotIn("用户填写", json.dumps(prepared, ensure_ascii=False))
             with self.assertRaises(StepError):
                 manager.approve()
 
+            incomplete = manager.record_human_feedback(json.dumps({
+                "brief_confirmed": True,
+            }))
+            self.assertTrue(incomplete["interaction_required"])
+            self.assertIn("缺少字段", incomplete["feedback_error"])
+
             prepared = manager.record_human_feedback(json.dumps({
                 "research_purpose": "回答测试主题为何值得优先研究",
                 "research_direction": "测试主题由价值提升驱动",
                 "high_confidence_evidence": [],
+                "brief_confirmed": True,
             }, ensure_ascii=False))
-            self.assertEqual(prepared["brief_stage"], "confirmation")
+            self.assertEqual(prepared["brief_stage"], "confirmed")
             self.assertTrue(prepared["confirmation_ready"])
-            self.assertEqual(prepared["next_action"], "report_approve")
-            self.assertEqual(len(prepared["questions"]), 1)
-            self.assertEqual(prepared["questions"][0]["header"], "Brief确认")
+            self.assertEqual(
+                prepared["next_action"],
+                "report_approve_without_asking_again",
+            )
+            self.assertFalse(prepared["interaction_required"])
+            self.assertEqual(prepared["questions"], [])
             self.assertIn("Brief 最终确认", prepared["present_to_user"])
             self.assertIn("回答测试主题为何值得优先研究", prepared["present_to_user"])
             self.assertIn("用户标记的高可信论据", prepared["present_to_user"])
 
             prepared = manager.record_human_feedback(json.dumps({
                 "brief_updates": {"topic": "修改后的测试主题"},
+                "brief_confirmed": False,
             }, ensure_ascii=False))
             self.assertEqual(prepared["brief_stage"], "confirmation")
             self.assertIn("修改后的测试主题", prepared["present_to_user"])
             self.assertEqual(prepared["questions"][0]["header"], "Brief确认")
+            prepared = manager.record_human_feedback(json.dumps({
+                "brief_confirmed": True,
+            }, ensure_ascii=False))
             manager.approve()
             approved_state = manager.status()["state"]
             self.assertEqual(approved_state["run_mode"], ["analysis", "storyline"])
@@ -261,8 +310,14 @@ class AgentProfileLoaderTests(unittest.TestCase):
             "保存成果用户的回访率更高",
         )
         self.assertIn("保存成果组 D7 回访率", prepared["present_to_user"])
-        self.assertEqual(prepared["brief_stage"], "collection")
-        self.assertEqual(len(prepared["questions"]), 1)
+        self.assertEqual(
+            prepared["brief_stage"], "collection_and_confirmation"
+        )
+        self.assertEqual(len(prepared["questions"]), 4)
+        self.assertEqual(
+            [question["header"] for question in prepared["questions"]],
+            ["研究目的", "当前研究 hypo", "高可信论据", "Brief确认"],
+        )
 
     def test_v03_manager_uses_profile_specific_skill_without_legacy_workers(
         self,
