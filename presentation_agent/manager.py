@@ -156,7 +156,7 @@ class ManagerAgentRuntime:
             "- report_charter 只定义任务，不重复固定流程、质量检查或运行状态。",
             "- runtime 固定执行 analysis → storyline → report → qa_preparation → format，不输出 execution_plan。",
             "- 首个 task_packet 派发 analysis，只写目标、输入引用和必要返工意见。",
-            "- evidence_harvester 是 Analysis 的内部子任务。",
+            "- evidence_harvester 在 Brief 确认前作为 run-level 输入处理任务运行；Analysis 复用其 Catalog。",
             "- 如 material_inventory 中无任何素材 → 使用 ask_human，不要 dispatch。",
             "- high_confidence_evidence 表示用户填写的重要/高可信论据，只影响分析优先级，不提升证据因果强度。",
             "- PPT、HTML 只允许在默认五阶段完成后的 delivery options gate 追加。",
@@ -660,7 +660,7 @@ class ManagerOrchestrator:
             "contract_profile": self.contract_profile,
             "status": "running",
             "current_actor": "manager",
-            "manager_phase": "brief_confirmation",
+            "manager_phase": "evidence_intake",
             "manager_step": "init",
             "last_event": "start",
             "spawn_adapter": self.workers.spawn_adapter.kind,
@@ -685,6 +685,14 @@ class ManagerOrchestrator:
         if actor == "human":
             return self._human_gate_result(state)
         phase = str(state.get("manager_phase") or "planning")
+
+        if phase == "evidence_intake" and actor == "manager":
+            evidence_instruction = self._prepare_evidence_intake(state)
+            if evidence_instruction is not None:
+                return evidence_instruction
+            state = self._load_state()
+            actor = state.get("current_actor")
+            phase = str(state.get("manager_phase") or "brief_confirmation")
 
         # --- brief confirmation: show the brief and ask user to confirm ---
         if phase == "brief_confirmation":
@@ -906,6 +914,10 @@ class ManagerOrchestrator:
         task = state.get("current_task")
         if state.get("current_actor") != "worker" or not isinstance(task, dict):
             raise StepError("当前没有可交给 Manager 验收的 Worker")
+        if task.get("agent_id") == "evidence_harvester" and task.get(
+            "task_kind"
+        ) == "evidence_intake":
+            return self._record_evidence_intake_completed(state, result)
         task["status"] = "worker_completed"
         task["artifact_path"] = result.get("artifact_path")
         task["review_summary"] = result.get("review_summary")
@@ -1159,6 +1171,207 @@ class ManagerOrchestrator:
         if not isinstance(current, dict) or not current.get("task_dir"):
             return None
         return Path(str(current["task_dir"]))
+
+    def _prepare_evidence_intake(
+        self, state: dict[str, Any]
+    ) -> Optional[dict[str, Any]]:
+        """Run Evidence once at run scope before the user confirms the Brief."""
+
+        brief = read_json(self.raw_brief_path, default={})
+        if not isinstance(brief, dict):
+            brief = {}
+        if isinstance(brief.get("evidence_catalog"), dict) and self._evidence_catalog_reusable(
+            brief
+        ):
+            state["manager_phase"] = "brief_confirmation"
+            state["evidence_intake"] = {
+                "status": "reused",
+                "catalog_ref": brief.get("evidence_catalog_ref", "raw_brief:evidence_catalog"),
+            }
+            self._save_state(state)
+            return None
+        if isinstance(brief.get("evidence_catalog"), dict):
+            brief.pop("evidence_catalog", None)
+            brief.pop("evidence_catalog_ref", None)
+            brief.pop("evidence_index", None)
+            brief.pop("source_manifest", None)
+            brief.pop("material_resolution", None)
+            write_json(self.raw_brief_path, brief)
+            state["evidence_intake"] = {
+                "status": "invalidated",
+                "reason": "source_manifest_changed",
+            }
+
+        raw_materials = self._evidence_intake_materials(brief)
+        if not raw_materials:
+            state["manager_phase"] = "brief_confirmation"
+            state["evidence_intake"] = {
+                "status": "not_required",
+                "reason": "no_file_or_raw_material_inputs",
+            }
+            self._save_state(state)
+            return None
+
+        from presentation_agent.spawn import prepare_evidence_intake
+
+        prepared = prepare_evidence_intake(
+            root=self.root,
+            run_dir=self.run_dir,
+            data_root=self.data_root,
+            raw_materials=raw_materials,
+            brief=brief,
+        )
+        evidence_dir = Path(str(prepared["task_dir"]))
+        task = {
+            "task_id": "evidence-intake",
+            "agent_id": "evidence_harvester",
+            "agent_name": "证据完整盘点",
+            "task_kind": "evidence_intake",
+            "task_dir": str(evidence_dir),
+            "input_path": str(prepared["input_path"]),
+            "status": "dispatched",
+            "created_at": now_iso(),
+        }
+        state["current_task"] = task
+        state["current_actor"] = "worker"
+        state["status"] = "running_evidence_intake"
+        state["evidence_intake"] = {
+            "status": "running",
+            "task_dir": str(evidence_dir),
+        }
+        instruction = dict(prepared)
+        instruction["actor"] = "worker"
+        instruction["evidence_intake"] = True
+        self._save_state(state)
+        self._annotate_spawn(evidence_dir, instruction)
+        instruction["next_action"] = (
+            "host_spawn_then_submit"
+            if instruction.get("spawn")
+            else "host_write_output_then_report_submit"
+        )
+        state["last_instruction"] = instruction
+        self._save_state(state)
+        self._append_decision(
+            "evidence_intake_dispatched",
+            "Run-level Evidence Harvester dispatched before Brief confirmation",
+            {"task_dir": str(evidence_dir)},
+        )
+        return instruction
+
+    @staticmethod
+    def _evidence_intake_materials(brief: dict[str, Any]) -> list[Any]:
+        raw = brief.get("raw_materials")
+        if isinstance(raw, list) and raw:
+            return raw
+        materials = brief.get("materials")
+        if isinstance(materials, list):
+            path_keys = {"path", "source_path", "file_path", "filepath", "artifact_path"}
+            raw_keys = {"text", "source_units", "rows", "raw_content"}
+            candidates = [
+                item
+                for item in materials
+                if isinstance(item, dict)
+                and (path_keys.intersection(item) or raw_keys.intersection(item))
+            ]
+            if candidates:
+                return candidates
+        if isinstance(brief.get("source_units"), list) and brief["source_units"]:
+            return [{"material_type": "source_units", "source_units": brief["source_units"]}]
+        if isinstance(brief.get("rows"), list) and brief["rows"]:
+            return [{"material_type": "table", "rows": brief["rows"]}]
+        return []
+
+    @staticmethod
+    def _evidence_catalog_reusable(brief: dict[str, Any]) -> bool:
+        catalog = brief.get("evidence_catalog")
+        if not isinstance(catalog, dict):
+            return False
+        manifest = catalog.get("source_manifest") or brief.get("source_manifest")
+        if not isinstance(manifest, list) or not manifest:
+            return True
+        for record in manifest:
+            if not isinstance(record, dict):
+                continue
+            path = Path(str(record.get("path") or ""))
+            if not path.is_file():
+                return False
+            stat = path.stat()
+            if record.get("size_bytes") not in (None, stat.st_size):
+                return False
+            if record.get("modified_at_ns") not in (None, stat.st_mtime_ns):
+                return False
+            expected_hash = str(record.get("content_hash") or "")
+            if expected_hash and ManagerOrchestrator._source_file_sha256(path) != expected_hash:
+                return False
+        return True
+
+    @staticmethod
+    def _source_file_sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def _record_evidence_intake_completed(
+        self, state: dict[str, Any], result: dict[str, Any]
+    ) -> dict[str, Any]:
+        artifact_path = Path(str(result.get("artifact_path") or ""))
+        if not artifact_path.is_file():
+            raise StepError(f"Evidence Intake artifact 不存在: {artifact_path}")
+        catalog = read_json(artifact_path, default={})
+        if not isinstance(catalog, dict) or not isinstance(catalog.get("items"), list):
+            raise StepError("Evidence Intake 必须产出含 items array 的 Evidence Catalog")
+
+        evidence_dir = artifact_path.parent
+        evidence_input = read_json(evidence_dir / "input.json", default={})
+        for key in (
+            "evidence_index",
+            "source_manifest",
+            "material_resolution",
+        ):
+            value = evidence_input.get(key)
+            if value not in (None, "", [], {}):
+                catalog[key] = value
+        manifest = catalog.get("source_manifest") or []
+        catalog["catalog_fingerprint"] = hashlib.sha256(
+            json.dumps(manifest, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        catalog["generated_at"] = now_iso()
+        canonical_path = evidence_dir / "evidence_catalog.json"
+        write_json(canonical_path, catalog)
+
+        brief = read_json(self.raw_brief_path, default={})
+        if not isinstance(brief, dict):
+            brief = {}
+        brief["evidence_catalog"] = catalog
+        brief["evidence_catalog_ref"] = str(canonical_path)
+        for key in ("evidence_index", "source_manifest", "material_resolution"):
+            if catalog.get(key) not in (None, "", [], {}):
+                brief[key] = catalog[key]
+        write_json(self.raw_brief_path, brief)
+
+        state["evidence_intake"] = {
+            "status": "completed",
+            "catalog_ref": str(canonical_path),
+            "catalog_fingerprint": catalog["catalog_fingerprint"],
+            "item_count": len(catalog["items"]),
+            "unresolved_count": len(catalog.get("unresolved") or []),
+        }
+        state["current_task"] = None
+        state["current_actor"] = "manager"
+        state["manager_phase"] = "brief_confirmation"
+        state["manager_step"] = "init"
+        state["status"] = "running"
+        state["last_event"] = "evidence_intake_completed"
+        state["last_instruction"] = None
+        self._save_state(state)
+        self._append_decision(
+            "evidence_intake_completed",
+            "Evidence Catalog generated and injected into the Brief",
+            state["evidence_intake"],
+        )
+        return self.prepare()
 
     def _annotate_spawn(self, task_dir: Path, instruction: dict[str, Any]) -> None:
         """Emit a spawn_request for an awaiting_* sub-step and annotate the
@@ -1658,7 +1871,10 @@ class ManagerOrchestrator:
                 "format(ppt)",
                 "format(html)",
             ],
-            "internal_subagents": {"analysis": ["evidence_harvester"]},
+            "input_preparation": ["evidence_harvester"],
+            "internal_subagents": {
+                "analysis": ["evidence_harvester (legacy/direct-run fallback only)"]
+            },
         }
 
     @staticmethod
@@ -1780,7 +1996,11 @@ class ManagerOrchestrator:
         catalog = brief.get("evidence_catalog")
         catalog_items: list[Any] = []
         if isinstance(catalog, dict):
-            raw_items = catalog.get("evidence_items") or catalog.get("evidence_index")
+            raw_items = (
+                catalog.get("items")
+                or catalog.get("evidence_items")
+                or catalog.get("evidence_index")
+            )
             if isinstance(raw_items, list):
                 catalog_items = raw_items
         for index, item in enumerate(catalog_items, 1):
@@ -1792,13 +2012,14 @@ class ManagerOrchestrator:
             label = str(
                 item.get("claim")
                 or item.get("summary")
+                or item.get("content")
                 or item.get("source_name")
                 or evidence_id
             )
             add_option(evidence_id, label, evidence_description(item))
 
         evidence_index = brief.get("evidence_index")
-        if isinstance(evidence_index, list):
+        if not catalog_items and isinstance(evidence_index, list):
             for index, item in enumerate(evidence_index, 1):
                 if not isinstance(item, dict):
                     continue
@@ -1815,7 +2036,7 @@ class ManagerOrchestrator:
                 add_option(evidence_id, label, evidence_description(item))
 
         materials = brief.get("materials") or []
-        if isinstance(materials, list):
+        if not catalog_items and isinstance(materials, list):
             for index, material in enumerate(materials, 1):
                 if isinstance(material, dict):
                     value = str(
@@ -1836,7 +2057,7 @@ class ManagerOrchestrator:
                     add_option(value, label, evidence_description(material))
                 else:
                     add_option(f"M{index}", str(material))
-        return options[:24]
+        return options
 
     @staticmethod
     def _display_audience(value: Any) -> str:
@@ -1929,15 +2150,20 @@ class ManagerOrchestrator:
             "",
         ])
         if evidence_options:
-            lines.append(
-                "以下是 agent 根据当前输入整理的论据列表，请在提问中填写你认为高可信的论据编号、名称或原文片段："
-            )
+            if isinstance(brief.get("evidence_catalog"), dict):
+                lines.append(
+                    "以下是 Evidence Harvester 从原始材料提取的可追溯论据，请填写你认为高可信的论据编号、名称或原文片段："
+                )
+            else:
+                lines.append(
+                    "以下是当前 Brief 已登记的结构化论据，请填写你认为高可信的论据编号、名称或原文片段："
+                )
             for index, item in enumerate(evidence_options, 1):
                 description = item.get("description", "")
                 suffix = f"：{description}" if description else ""
                 lines.append(f"{index}. **{item['label']}**{suffix}")
         else:
-            lines.append("当前还没有可引用的论据；如已有材料或证据，请在回复中补充。")
+            lines.append("当前还没有正式提取的可引用论据；如已有材料或证据，请在回复中补充。")
 
         lines.extend([
             "",

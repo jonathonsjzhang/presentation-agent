@@ -10,9 +10,12 @@ from presentation_agent.analysis import (
     EvidenceAction,
     decide_evidence,
 )
-from presentation_agent.connectors.registry import list_connectors
+from presentation_agent.agent_profiles import load_agent_profile
+from presentation_agent.connectors.registry import list_connectors, load_with_connector
 from presentation_agent.connectors.table_profiler import profile_xlsx_sheets
 from presentation_agent.io import read_json, write_json
+from presentation_agent.launch import normalize_brief
+from presentation_agent.manager import ManagerOrchestrator
 from presentation_agent.spawn import SpawnRequest
 from presentation_agent.step import StepRunner
 
@@ -110,6 +113,100 @@ class AnalysisEvidenceDecisionTests(unittest.TestCase):
             decide_evidence(
                 evidence_catalog=None,
                 raw_materials="not-a-material-list",
+            )
+
+
+class ManagerEvidenceIntakeTests(unittest.TestCase):
+    def test_file_material_is_harvested_before_brief_and_reused_by_analysis(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source = temp / "usage.csv"
+            source.write_text(
+                "date,app,hours\n2026-01-01,DS,12\n2026-01-02,DS,16\n",
+                encoding="utf-8",
+            )
+            run_dir = temp / "run"
+            run_dir.mkdir()
+            brief = normalize_brief(
+                {"topic": "DS 时长", "materials": [str(source)]}, ROOT, "v0_3"
+            )
+            brief_path = run_dir / "raw_brief.json"
+            write_json(brief_path, brief)
+            manager = ManagerOrchestrator(
+                ROOT,
+                run_dir,
+                data_root=temp / "data",
+                spawn_adapter="inline",
+                contract_profile="v0_3",
+            )
+
+            intake = manager.initialize_run(brief_path)
+            self.assertEqual(intake["actor"], "worker")
+            self.assertTrue(intake["evidence_intake"])
+            write_json(
+                Path(intake["output_path"]),
+                {
+                    "items": [
+                        {
+                            "id": "EV-001",
+                            "source_ref": "E1/usage/rows:1-2",
+                            "content": "DS 时长从 12 增至 16。",
+                        }
+                    ],
+                    "unresolved": [],
+                },
+            )
+            intake_result = StepRunner(
+                ROOT,
+                run_dir / "evidence",
+                data_root=temp / "data",
+                contract_profile="v0_3",
+            ).commit()
+            self.assertEqual(intake_result["step"], "done")
+
+            brief_gate = manager.record_worker_completed(intake_result)
+            self.assertEqual(brief_gate["actor"], "human")
+            self.assertEqual(brief_gate["gate"], "brief")
+            self.assertEqual(brief_gate["evidence_options"][0]["value"], "EV-001")
+            updated_brief = read_json(run_dir / "raw_brief.json")
+            self.assertEqual(
+                updated_brief["evidence_catalog"]["items"][0]["id"], "EV-001"
+            )
+            self.assertTrue(updated_brief["evidence_catalog"]["catalog_fingerprint"])
+            self.assertEqual(
+                updated_brief["source_manifest"][0]["content_hash"],
+                updated_brief["evidence_catalog"]["source_manifest"][0]["content_hash"],
+            )
+            self.assertTrue(manager._evidence_catalog_reusable(updated_brief))
+            source.write_text(
+                "date,app,hours\n2026-01-01,DS,12\n2026-01-02,DS,18\n",
+                encoding="utf-8",
+            )
+            self.assertFalse(manager._evidence_catalog_reusable(updated_brief))
+
+            charter = read_json(FIXTURES / "report_charter.v2.valid.json")
+            task = manager.workers.create_task(
+                {
+                    "task_id": "analysis-reuse",
+                    "agent_id": "analysis",
+                    "objective": "分析 DS 时长",
+                    "input_artifacts": [str(run_dir / "raw_brief.json")],
+                },
+                charter,
+                run_dir / "raw_brief.json",
+                review_subagents_enabled=False,
+            )
+            StepRunner(
+                ROOT,
+                Path(task["task_dir"]),
+                data_root=temp / "data",
+                contract_profile="v0_3",
+            ).prepare()
+            analysis_state = read_json(Path(task["task_dir"]) / "run_state.json")
+            self.assertEqual(analysis_state.get("evidence_spawn_count", 0), 0)
+            self.assertEqual(
+                analysis_state["evidence_decision"]["action"],
+                "reuse_existing_catalog",
             )
 
 
@@ -412,6 +509,39 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
             item for item in connectors if item["name"] == "doc_reader"
         )
         self.assertIn(".doc", doc_connector["suffixes"])
+
+    def test_json_txt_and_markdown_connectors_are_registered_and_readable(self) -> None:
+        connectors = {item["name"]: item for item in list_connectors()}
+        self.assertEqual(connectors["json_reader"]["suffixes"], [".json"])
+        self.assertEqual(connectors["text_reader"]["suffixes"], [".txt", ".md"])
+        spec = load_agent_profile(ROOT, "v0_3").support_specs["evidence_harvester"]
+
+        json_path = self.tmp / "usage.json"
+        write_json(
+            json_path,
+            {
+                "rows": [
+                    {"date": "2026-01-01", "app": "DS", "hours": 12},
+                    {"date": "2026-01-02", "app": "DS", "hours": 16},
+                ]
+            },
+        )
+        loaded_json = load_with_connector(json_path, spec)
+        self.assertEqual(loaded_json["source_type"], "json")
+        self.assertEqual(len(loaded_json["source_units"]), 2)
+        self.assertEqual(loaded_json["data_profile"]["tables"][0]["row_count"], 2)
+
+        txt_path = self.tmp / "notes.txt"
+        txt_path.write_text("第一条访谈。\n\n第二条访谈。", encoding="utf-8")
+        loaded_txt = load_with_connector(txt_path, spec)
+        self.assertEqual(loaded_txt["source_type"], "txt")
+        self.assertEqual(len(loaded_txt["source_units"]), 2)
+
+        md_path = self.tmp / "brief.md"
+        md_path.write_text("# 研究摘要\n\n关键发现。", encoding="utf-8")
+        loaded_md = load_with_connector(md_path, spec)
+        self.assertEqual(loaded_md["topic"], "研究摘要")
+        self.assertEqual(len(loaded_md["source_units"]), 2)
 
     def test_table_profiler_detects_wide_time_series(self) -> None:
         profile = profile_xlsx_sheets(

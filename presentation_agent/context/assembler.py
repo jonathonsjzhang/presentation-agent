@@ -203,6 +203,12 @@ class ContextAssembler:
             if alias:
                 result[alias] = data
         if worker_id == "analysis":
+            catalog = raw_brief.get("evidence_catalog")
+            if isinstance(catalog, dict):
+                result["evidence_catalog"] = catalog
+                result["evidence_catalog_ref"] = raw_brief.get(
+                    "evidence_catalog_ref", "raw_brief:evidence_catalog"
+                )
             materials = (
                 raw_brief.get("raw_materials")
                 or raw_brief.get("materials")

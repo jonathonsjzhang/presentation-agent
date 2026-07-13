@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Any, Iterable
@@ -16,8 +17,11 @@ SUPPORTED_SUFFIXES = {
     ".docx",
     ".jpg",
     ".jpeg",
+    ".json",
+    ".md",
     ".pdf",
     ".png",
+    ".txt",
     ".xlsx",
 }
 TABLE_SOURCE_TYPES = {"csv", "xlsx"}
@@ -116,6 +120,44 @@ def evidence_index_from_materials(materials: list[Any]) -> list[dict[str, Any]]:
         for material in materials
         if isinstance(material, dict) and isinstance(material.get("evidence_record"), dict)
     ]
+
+
+def source_manifest_from_materials(materials: list[Any]) -> list[dict[str, Any]]:
+    """Build a stable cache/invalidation manifest for resolved file inputs."""
+
+    manifest: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for material in materials:
+        if not isinstance(material, dict):
+            continue
+        source_path = str(material.get("source_path") or "").strip()
+        if not source_path or source_path in seen:
+            continue
+        seen.add(source_path)
+        path = Path(source_path)
+        record: dict[str, Any] = {
+            "path": source_path,
+            "parse_status": material.get("parse_status", "unknown"),
+        }
+        if path.is_file():
+            stat = path.stat()
+            record.update(
+                {
+                    "size_bytes": stat.st_size,
+                    "modified_at_ns": stat.st_mtime_ns,
+                    "content_hash": _file_sha256(path),
+                }
+            )
+        manifest.append(record)
+    return manifest
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def attach_evidence_records(materials: list[Any]) -> list[dict[str, Any]]:
@@ -351,6 +393,7 @@ def _raw_access_fields(loaded: dict[str, Any]) -> list[str]:
         "paragraphs",
         "raw_text",
         "images",
+        "json_data",
         "data_profile",
         "data_assets",
         "materials",
