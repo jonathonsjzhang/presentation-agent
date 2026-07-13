@@ -179,7 +179,33 @@ class ContextAssembler:
                 artifacts=artifact_rows,
                 manager_task=manager_task,
             )
+            # A large field may be projected inside its namespaced source while
+            # still being supplied in full as the v0.3 canonical input.  The
+            # readiness gate protects the Worker from preview-only material; it
+            # must not reject an input merely because an additional projected
+            # view of the same field also exists.
+            blocking_issues = [
+                issue
+                for issue in blocking_issues
+                if not self._has_full_canonical_input(result, issue["field"])
+            ]
+            result["input_readiness"]["status"] = (
+                "blocked" if blocking_issues else "ready"
+            )
+            result["input_readiness"]["blocking_issues"] = blocking_issues
         return result
+
+    @staticmethod
+    def _has_full_canonical_input(result: dict[str, Any], field: str) -> bool:
+        value = result.get(field)
+        if value in (None, "", [], {}):
+            return False
+        return not (
+            isinstance(value, dict)
+            and str(value.get("_projection") or "").endswith("preview")
+        ) and not (
+            isinstance(value, dict) and value.get("_projection") == "object_index"
+        )
 
     @staticmethod
     def _add_v03_canonical_inputs(
