@@ -1127,6 +1127,11 @@ class AgentProfileLoaderTests(unittest.TestCase):
             )
             values = [option["value"] for option in gate["questions"][0]["options"]]
             self.assertEqual(values, ["approve", "rewrite", "custom"])
+            self.assertEqual(len(gate["questions"]), 1)
+            self.assertEqual(gate["questions"][0]["header"], "Storyline确认")
+            self.assertNotIn(
+                "修改说明", [question["header"] for question in gate["questions"]]
+            )
             self.assertTrue(gate["interaction_required"])
             self.assertEqual(gate["preferred_tool"], "AskUserQuestion")
             self.assertEqual(
@@ -1224,9 +1229,39 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertEqual(result["actor"], "human")
             self.assertEqual(result["next_action"], "report_approve_or_feedback")
             self.assertIn("需要说明原因", result["present_to_user"])
+            self.assertEqual(len(result["questions"]), 1)
+            self.assertEqual(result["questions"][0]["header"], "修改说明")
+            self.assertEqual(result["questions"][0]["options"], [])
             updated = manager.status()["state"]
             self.assertEqual(updated["current_actor"], "human")
             self.assertIn("storyline_feedback_error", updated)
+            self.assertEqual(
+                updated["project_state"]["storyline_pending_feedback_intent"],
+                "rewrite",
+            )
+
+    def test_storyline_rewrite_detail_followup_reuses_pending_intent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = self._storyline_gate_manager(
+                Path(temp_dir),
+                with_task_files=True,
+            )
+            manager.record_human_feedback("不好")
+
+            result = manager.record_human_feedback(
+                "章节顺序缺少从现象到机制的递进关系"
+            )
+
+            self.assertEqual(result["actor"], "worker")
+            self.assertEqual(result["step"], "revise")
+            run_state = read_json(
+                Path(manager.status()["state"]["current_task"]["task_dir"])
+                / "run_state.json"
+            )
+            self.assertIn(
+                "不好，原因：章节顺序缺少从现象到机制的递进关系",
+                run_state["p0_open"][0]["evidence"],
+            )
 
     def test_v03_defers_requested_ppt_until_after_document(self) -> None:
         brief = normalize_brief(
