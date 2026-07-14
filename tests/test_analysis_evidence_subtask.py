@@ -400,7 +400,51 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         self.assertTrue(Path(material["parsed_artifact_path"]).exists())
         self.assertEqual(evidence_input["evidence_index"][0]["id"], "E1")
         self.assertEqual(evidence_input["evidence_index"][0]["source_type"], "csv")
+        self.assertEqual(
+            evidence_input["evidence_index"][0]["evidence_grain"]["rule"],
+            "one_item_per_file",
+        )
+        self.assertEqual(
+            evidence_input["evidence_index"][0]["evidence_grain"]["max_items"],
+            1,
+        )
         self.assertTrue(evidence_input["evidence_index"][0]["data_assets"])
+
+    def test_interview_workbook_uses_one_item_per_interview_grain(self) -> None:
+        source_dir = self.tmp / "brief-source"
+        source_dir.mkdir()
+        interview_path = source_dir / "用户访谈记录.csv"
+        interview_path.write_text(
+            "问题,用户1,用户2\n使用场景,工作助理,学习问答\n主要痛点,引用不准,回答太长\n",
+            encoding="utf-8",
+        )
+        raw_brief_path = source_dir / "brief.json"
+        raw_brief_path.write_text("{}", encoding="utf-8")
+        runner, _ = self._runner(
+            {
+                "raw_materials": [{"path": str(interview_path)}],
+                "material_refs": [
+                    {"source_id": "raw_brief", "artifact_path": str(raw_brief_path)}
+                ],
+            }
+        )
+
+        first = runner.prepare()
+
+        evidence_input = read_json(Path(first["input_path"]))
+        grain = evidence_input["evidence_index"][0]["evidence_grain"]
+        self.assertEqual(grain["unit"], "interview")
+        self.assertEqual(grain["rule"], "one_item_per_interview")
+        self.assertNotIn("max_items", grain)
+
+    def test_evidence_skill_keeps_source_units_out_of_catalog_grain(self) -> None:
+        instructions = (ROOT / "skills" / "evidence_harvester" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("source unit 是读取与 coverage 粒度", instructions)
+        self.assertIn("一个文件恰好一条 evidence", instructions)
+        self.assertIn("一次独立访谈/一位受访者恰好一条 evidence", instructions)
+        self.assertIn("应输出 **13 条** evidence", instructions)
 
     def test_evidence_subtask_profiles_large_csv_without_inlining_all_rows(self) -> None:
         source_dir = self.tmp / "brief-source"

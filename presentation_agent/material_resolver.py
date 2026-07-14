@@ -25,6 +25,13 @@ SUPPORTED_SUFFIXES = {
     ".xlsx",
 }
 TABLE_SOURCE_TYPES = {"csv", "xlsx"}
+INTERVIEW_HINTS = (
+    "访谈",
+    "受访者",
+    "interview",
+    "interviews",
+    "respondent transcript",
+)
 INLINE_SOURCE_UNIT_LIMIT = 80
 INLINE_SOURCE_UNIT_HEAD = 40
 INLINE_SOURCE_UNIT_TAIL = 10
@@ -414,6 +421,7 @@ def _evidence_record(evidence_id: str, material: dict[str, Any]) -> dict[str, An
         ),
         "source_name": str(material.get("source_name") or material.get("path") or ""),
         "source_type": str(material.get("source_type") or ""),
+        "evidence_grain": _evidence_grain(material),
         "parse_status": str(material.get("parse_status") or "inline"),
         "summary": _material_summary(material),
         "key_findings": _material_key_findings(material),
@@ -433,6 +441,50 @@ def _evidence_record(evidence_id: str, material: dict[str, Any]) -> dict[str, An
     if material.get("parse_error"):
         record["limitations"] = [str(material["parse_error"])]
     return record
+
+
+def _evidence_grain(material: dict[str, Any]) -> dict[str, Any]:
+    """Tell the Evidence worker which catalog grain to use.
+
+    Connectors intentionally keep rows, paragraphs, questions, and quotes as
+    source units for coverage and traceability.  Those parsing units are not
+    automatically evidence items.  Tabular datasets are catalogued once per
+    file, while interview collections are catalogued once per independent
+    interview/respondent even when several interviews share one workbook or
+    document.
+    """
+
+    hint_text = " ".join(
+        str(material.get(key) or "")
+        for key in (
+            "material_id",
+            "source_name",
+            "description_hint",
+            "description",
+            "notes",
+            "topic",
+        )
+    ).lower()
+    if any(hint in hint_text for hint in INTERVIEW_HINTS):
+        return {
+            "unit": "interview",
+            "rule": "one_item_per_interview",
+            "source_units_role": "coverage_and_traceability_only",
+            "semantic_override": "split by independent respondent/interview, not by question or quote",
+        }
+    if str(material.get("source_type") or "") in TABLE_SOURCE_TYPES:
+        return {
+            "unit": "file",
+            "rule": "one_item_per_file",
+            "max_items": 1,
+            "source_units_role": "coverage_and_traceability_only",
+        }
+    return {
+        "unit": "coherent_source",
+        "rule": "keep the fewest independently traceable catalog items",
+        "source_units_role": "coverage_and_traceability_only",
+        "semantic_override": "if the source contains multiple independent interviews, use one_item_per_interview",
+    }
 
 
 def _material_summary(material: dict[str, Any]) -> str:
