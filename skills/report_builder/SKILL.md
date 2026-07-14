@@ -95,14 +95,14 @@ python -m presentation_agent.cli --workspace "$HOME/PresentationAgent/workspaces
 
 ## 2. 发起汇报
 
-用户提出汇报需求时，只做输入归集，不在宿主层替 Manager 完成任务定位。只要有可启动的需求线索，就先启动 Manager，让 Manager 在 brief gate 里补问研究目的、当前研究 hypo 和高可信论据。
+用户提出汇报需求时，只做输入归集，不在宿主层替 Manager 完成任务定位。只要有可启动的需求线索，就先启动 Manager，让 Manager 在 brief gate 里补问研究背景、当前研究 hypo 和高可信论据。
 
 最小 brief 只需要能表达用户想做什么；其余字段可留空，由 brief gate 汇总默认值并让用户确认：
 
 | 字段 | 建议 | 说明 |
 |---|---|---|
 | `topic` | 可空 | 报告主题；可由 Manager 根据输入信息和论据总结 |
-| `research_purpose` / `decision_goal` | 可空 | `research_purpose` 仅在用户明确提供时填写；brief gate 会主动问“项目研究目的是什么（如为了回答XX问题，或XX研究的延伸）” |
+| `research_purpose` / `decision_goal` | 可空 | `research_purpose` 是兼容字段，仅在用户明确提供时填写；brief gate 对用户主动问“项目研究背景是什么（如业务现状、问题由来或发起本次研究的上下文）” |
 | `research_direction` / `expected_action` / `hypothesis` | 可空 | `research_direction` 仅在用户明确提供研究 hypo 时填写；brief gate 会主动问“当前的研究hypo是什么（如当前结论判断，或预期引导的讨论方向）” |
 | `audience` | 可空 | 默认总办（`exec_office`） |
 | `project_type` | 可空 | 默认“分析类”；可填“分析类/梳理类” |
@@ -189,11 +189,11 @@ runtime 会返回 `presentation_required_before_tool=true`、独立的 `presenta
 
 把 Brief 写在一个同时含有 `tool_calls` 的 assistant completion 的 `content` 前缀中，不算完成展示。禁止只说“现在进入 Brief 确认”或自行缩写 Brief 后就调用工具；禁止把 Brief 塞进某一道题的 `question` 文本；禁止先调用工具再补 Brief。
 
-1. `brief_stage=collection_and_confirmation`：严格先完整输出 `presentation_text`，然后**调用一次 `AskUserQuestion`**，在同一个工具调用中原样传入 4 个问题：研究目的、当前研究 hypo、高可信论据、Brief 确认。前三题即使草案已有推断值也必须再次询问，不能因“已有内容”而删除；前三题保持 `options=[]`，第四题保持“准确，继续 / 需要修改”。
+1. `brief_stage=collection_and_confirmation`：严格先完整输出 `presentation_text`，然后**调用一次 `AskUserQuestion`**，在同一个工具调用中原样传入 4 个问题：研究背景、当前研究 hypo、高可信论据、Brief 确认。前三题即使草案已有推断值也必须再次询问，不能因“已有内容”而删除；前三题保持 `options=[]`，第四题保持“准确，继续 / 需要修改”。
 2. 将四题答案汇总为 JSON 回传，例如 `{"research_purpose":"...","research_direction":"...","high_confidence_evidence":["EV-003","EV-008"],"brief_confirmed":true}`；没有特别优先的论据也必须显式传 `"high_confidence_evidence":[]`。执行 `report feedback --text '<上述 JSON>'` 后，runtime 会把答案写回 `raw_brief.json` 并记录本次明确确认。
 3. 若用户选择“准确，继续”，feedback 返回 `next_action=report_approve_without_asking_again`，直接执行 `report approve`，**不得再弹第二个确认面板**。若用户选择“需要修改”，把修改归入 `brief_updates` 且传 `"brief_confirmed":false`；runtime 重显更新后的完整 Brief，并只再次询问确认。
 
-最终确认页应按顺序包含研究目的、当前研究 hypo、正式 Evidence List、用户标记的高可信论据、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。若 `present_to_user` 缺少 Brief 内容，先执行 `report next --run "<run_id>"` 重新取得 `current_instruction`，并用 `report status` 核对 actor/gate；仍缺失则报告协议错误，不要凭宿主记忆拼一份后直接批准。
+最终确认页应按顺序包含研究背景、当前研究 hypo、正式 Evidence List、用户标记的高可信论据、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。若 `present_to_user` 缺少 Brief 内容，先执行 `report next --run "<run_id>"` 重新取得 `current_instruction`，并用 `report status` 核对 actor/gate；仍缺失则报告协议错误，不要凭宿主记忆拼一份后直接批准。
 
 ## 3. 推进 report loop
 
@@ -215,7 +215,7 @@ python -m presentation_agent.cli \
 
 ### actor=human
 
-展示 `present_to_user` 后立即检查 `interaction_required`。值为 `true` 时必须调用 `preferred_tool`；在 WorkBuddy 中就是把 `ask_user_question_payload` 透传给 `AskUserQuestion`。首次 Brief gate 必须在一个面板中完整呈现 4 题；不能因为草案已有研究目的而删题，也不能把 Brief 确认推迟到另一轮。不要询问 worker 选择或 review sub_agent 选择。
+展示 `present_to_user` 后立即检查 `interaction_required`。值为 `true` 时必须调用 `preferred_tool`；在 WorkBuddy 中就是把 `ask_user_question_payload` 透传给 `AskUserQuestion`。首次 Brief gate 必须在一个面板中完整呈现 4 题；不能因为草案已有研究背景而删题，也不能把 Brief 确认推迟到另一轮。不要询问 worker 选择或 review sub_agent 选择。
 
 - 四题答案：`report feedback --text '{"research_purpose":"...","research_direction":"...","high_confidence_evidence":[...],"brief_confirmed":true}'`
 - feedback 返回 `report_approve_without_asking_again` 时：`report approve`

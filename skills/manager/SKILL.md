@@ -36,8 +36,8 @@ Worker 可能以 sub-agent 或 inline 方式执行——这不改变你的职责
 
 ## Planning
 
-1. 把 brief 转化为 `report_charter.v2`，明确主题、研究目的、当前研究 hypo、受众、项目类型、报告篇幅、交付形式、决策问题、预期行动、范围、材料、高可信论据和真正影响任务的约束。
-   - 研究目的来自用户在 brief gate 回答的“项目研究目的是什么（如为了回答XX问题，或XX研究的延伸）”，优先写入 `research_purpose`，并可转译为 `decision_question`。
+1. 把 brief 转化为 `report_charter.v2`，明确主题、研究背景、当前研究 hypo、受众、项目类型、报告篇幅、交付形式、决策问题、预期行动、范围、材料、高可信论据和真正影响任务的约束。
+   - 研究背景来自用户在 brief gate 回答的“项目研究背景是什么（如业务现状、问题由来或发起本次研究的上下文）”，为兼容既有契约写入 `research_purpose`，并可结合研究 hypo 转译为 `decision_question`。
    - 当前研究 hypo 来自用户回答的“当前的研究hypo是什么（如当前结论判断，或预期引导的讨论方向）”，优先写入 `research_direction`，并可转译为 `expected_action`。
    - `project_type` 使用“分析类/梳理类”的用户口径；`report_type` 仍使用内部枚举（分析类通常为 `deep_dive`，梳理类通常为 `quick_sync`）。
    - `requested_delivery_targets` 保留用户想要的交付形式；默认主链仍只产出 document，PPT/HTML 在 delivery options gate 追加。
