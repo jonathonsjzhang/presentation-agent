@@ -405,6 +405,28 @@ class StepRunner:
         state.setdefault("prompt_budget", {})[f"generation_round_{round_idx}"] = dict(
             self.skill.last_prompt_budget
         )
+        input_path = Path(str(state.get("input_path") or (self.run_dir / "input.json")))
+        if input_path.is_file():
+            input_text = input_path.read_text(encoding="utf-8")
+            external_tokens = estimate_tokens(input_text)
+            prompt_row = state["prompt_budget"][f"generation_round_{round_idx}"]
+            total_delivery_tokens = int(
+                prompt_row.get("total_tokens_estimate", 0)
+            ) + external_tokens
+            prompt_row.update(
+                {
+                    "external_input_path": str(input_path),
+                    "external_input_bytes": input_path.stat().st_size,
+                    "external_input_tokens_estimate": external_tokens,
+                    "total_delivery_tokens_estimate": total_delivery_tokens,
+                    "budget_warning": (
+                        "large_external_input_use_index_then_targeted_reads"
+                        if total_delivery_tokens > 100_000
+                        else None
+                    ),
+                    "payload_delivery": "file_reference",
+                }
+            )
 
         instruction_path = self.handoff_dir / "instruction_gen.md"
         output_path = self.handoff_dir / "output_gen.json"
@@ -1114,6 +1136,7 @@ class StepRunner:
             global_state=scoped,
             style_guidance=[],
             skill_package=self.skill_package.to_dict(),
+            external_input_path=str(self.run_dir / "input.json"),
         )
 
     def _apply_memory_routing(
