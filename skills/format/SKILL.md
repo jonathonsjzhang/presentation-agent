@@ -99,7 +99,7 @@ formatted material 的语义权威永远属于 `report_markdown`：
 
 先逐项处理 `visual_evidence_placements`，保持 `visual_evidence_id`、`required`、`placement` 和 `section_heading` 一致。时间序列优先折线图，组间比较优先柱状图，精确多列信息优先 table，分层关系优先 matrix，访谈原话和关键提醒优先 callout / quote 样式。完成必需项目后，再判断是否需要增加非必需视觉。
 
-若输入中存在 `evidence_assets`，优先引用其中与正文证据匹配的 E-id 或 `E-id:data_asset_id`。可以把 visual `data` 留空让 runtime 按 source_refs 自动补齐 chart-ready 数据；不要手工抄写或改写 sidecar 中不存在的数据。
+若输入中存在 `evidence_assets`，优先引用其中与正文证据匹配的 E-id 或 `E-id:data_asset_id`。可以把 visual `data` 留空让 runtime 按 source_refs 自动补齐 chart-ready 数据；若引用表结构不适合安全推断图表，runtime 会保真降级为受控行列数的表格；若引用已登记的图片证据，runtime 会直接复用原图。不要手工抄写或改写 sidecar 中不存在的数据。
 
 ### 4. 做忠实性和来源检查
 

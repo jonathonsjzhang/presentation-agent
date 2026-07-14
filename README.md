@@ -191,7 +191,7 @@ Renderers 是 skill 可调用的材料生成能力，位于 `presentation_agent/
 - `html.py`：把 Format delivery units 渲染为 HTML。
 - `base.py`：定义统一 `RenderResult` 和渲染入口。
 
-Report 先物化内容正确的 `report.md`；Q&A 只在末尾追加深度追问清单；Format Worker 完成自身 schema/review loop 后，runtime 立即把增强后的同一原稿排版为 DOCX、PPT 或 HTML，再把 `render_result` 与 `rendered_files` 一并交给 Manager 验收。Manager complete 的硬条件是正式文件真实存在，而不是所有语义检查都零告警。项目中还包含 `presentation_agent/vendor/mck_ppt/`，用于提供 PPT 布局、风格常量、deck builder 和视觉 QA 能力。
+Report 先物化内容正确的 `report.md`；Q&A 只在末尾追加深度追问清单；Format Worker 完成自身 schema/review loop 后，runtime 先按 evidence asset 引用补齐图表数据、投影非规则表格或复用已登记图片，再把增强后的同一原稿排版为 DOCX、PPT 或 HTML，并执行最终页数审计。即使必需视觉仍缺数据，runtime 也会生成可诊断的草稿和页数结果，再以 visual evidence error 阻止正式完成，避免把上游数据问题误报为页数失败。`render_result` 与 `rendered_files` 随后交给 Manager 验收；Manager complete 的硬条件是正式文件真实存在，而不是所有语义检查都零告警。项目中还包含 `presentation_agent/vendor/mck_ppt/`，用于提供 PPT 布局、风格常量、deck builder 和视觉 QA 能力。
 
 这一层是系统从“结构化中间产物”走向“可交付材料”的关键。
 

@@ -10,6 +10,9 @@ from presentation_agent.io import read_json
 
 MAX_CHART_POINTS = 60
 MAX_SERIES = 6
+MAX_TABLE_ROWS = 12
+MAX_TABLE_COLUMNS = 8
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 def build_evidence_assets(
@@ -41,6 +44,7 @@ def build_evidence_assets(
                 if data_asset.get("chart_ready")
                 else {}
             )
+            table_data = _table_data_from_sidecar(sidecar, data_asset)
             assets.append(
                 {
                     "evidence_id": evidence_id,
@@ -60,6 +64,7 @@ def build_evidence_assets(
                     },
                     "data_asset": data_asset,
                     "chart_data": chart_data,
+                    "table_data": table_data,
                 }
             )
     return assets
@@ -96,38 +101,105 @@ def enrich_format_visuals_with_evidence_assets(
     input_data: dict[str, Any],
 ) -> dict[str, Any]:
     fields = evidence_runtime_fields(input_data)
+    evidence_index = _as_dict_list(fields.get("evidence_index"))
     assets = _as_dict_list(fields.get("evidence_assets"))
-    if not assets:
+    if evidence_index:
+        # Older catalogs may carry evidence_assets created before table
+        # projections were introduced. Rebuild from the immutable sidecar refs
+        # and merge the deterministic projections into the carried metadata.
+        assets = _merge_asset_projections(assets, build_evidence_assets(evidence_index))
+    if not assets and not evidence_index:
         return formatted
 
-    formatted.setdefault("evidence_assets", assets)
+    if assets:
+        formatted["evidence_assets"] = assets
     enriched: list[dict[str, Any]] = []
     for visual in formatted.get("visuals") or []:
         if not isinstance(visual, dict):
             continue
-        if visual.get("type") != "chart" or _has_chart_data(visual.get("data")):
+        visual_type = str(visual.get("type") or "")
+        data = visual.get("data")
+        if visual_type == "chart" and (
+            _has_chart_data(data) or _has_source_image(data)
+        ):
             continue
-        asset = _match_chart_asset(visual, assets)
+        if visual_type == "table" and _has_table_data(data):
+            continue
+
+        asset = _match_evidence_asset(visual, assets)
         chart_data = asset.get("chart_data") if asset else None
-        if not isinstance(chart_data, dict) or not chart_data:
+        table_data = asset.get("table_data") if asset else None
+        enrichment_kind = ""
+        if visual_type == "chart" and isinstance(chart_data, dict) and chart_data:
+            visual["data"] = chart_data
+            enrichment_kind = "chart_data"
+        elif visual_type in {"chart", "table"} and _has_table_data(table_data):
+            # A referenced workbook table is still valid renderable evidence
+            # when its layout is too irregular for deterministic chart
+            # inference. Preserve the data as a bounded table instead of
+            # inventing a chart or returning an empty visual.
+            visual["type"] = "table"
+            visual["data"] = table_data
+            visual["runtime_projection"] = {
+                "from": visual_type,
+                "to": "table",
+                "reason": (
+                    "referenced evidence table is not safely chart-ready"
+                    if visual_type == "chart"
+                    else "bounded referenced evidence table for deterministic rendering"
+                ),
+            }
+            enrichment_kind = "table_fallback"
+        else:
+            image_path = _match_source_image(visual, evidence_index)
+            if image_path:
+                visual["data"] = {"image_path": image_path}
+                enrichment_kind = "source_image"
+
+        if not enrichment_kind:
             continue
-        visual["data"] = chart_data
         refs = [str(item) for item in visual.get("source_refs") or [] if str(item)]
-        for ref in (asset.get("evidence_id"), asset.get("ref")):
+        for ref in (
+            asset.get("evidence_id") if asset else "",
+            asset.get("ref") if asset else "",
+        ):
             if ref and str(ref) not in refs:
                 refs.append(str(ref))
         visual["source_refs"] = refs
         enriched.append(
             {
                 "visual_title": visual.get("title", ""),
-                "evidence_id": asset.get("evidence_id", ""),
-                "asset_id": asset.get("asset_id", ""),
-                "ref": asset.get("ref", ""),
+                "kind": enrichment_kind,
+                "evidence_id": asset.get("evidence_id", "") if asset else "",
+                "asset_id": asset.get("asset_id", "") if asset else "",
+                "ref": asset.get("ref", "") if asset else "",
             }
         )
     if enriched:
         formatted["evidence_asset_enrichment"] = enriched
     return formatted
+
+
+def _merge_asset_projections(
+    carried: list[dict[str, Any]], rebuilt: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    rebuilt_by_ref = {
+        str(item.get("ref") or ""): item
+        for item in rebuilt
+        if isinstance(item, dict) and item.get("ref")
+    }
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in carried:
+        if not isinstance(item, dict):
+            continue
+        ref = str(item.get("ref") or "")
+        fresh = rebuilt_by_ref.get(ref, {})
+        merged.append({**item, **{k: v for k, v in fresh.items() if v not in (None, "", [], {})}})
+        if ref:
+            seen.add(ref)
+    merged.extend(item for item in rebuilt if str(item.get("ref") or "") not in seen)
+    return merged
 
 
 def _chart_data_from_sidecar(
@@ -173,6 +245,56 @@ def _table_for_asset(sidecar: dict[str, Any], asset: dict[str, Any]) -> dict[str
         "columns": columns,
         "rows": rows[header_index + 1 :],
         "row_format": "list",
+    }
+
+
+def _table_data_from_sidecar(
+    sidecar: dict[str, Any], asset: dict[str, Any]
+) -> dict[str, Any]:
+    table = _table_for_asset(sidecar, asset)
+    columns = [str(item) for item in table.get("columns") or []]
+    if not columns:
+        return {}
+    rows = list(table.get("rows") or [])
+    row_lists: list[list[Any]] = []
+    if table.get("row_format") == "dict":
+        row_lists = [
+            [row.get(column, "") for column in columns]
+            for row in rows
+            if isinstance(row, dict)
+        ]
+    else:
+        row_lists = [list(row) for row in rows if isinstance(row, list)]
+
+    useful_indices = [
+        index
+        for index, column in enumerate(columns)
+        if str(column).strip()
+        or any(index < len(row) and str(row[index]).strip() for row in row_lists)
+    ][:MAX_TABLE_COLUMNS]
+    if not useful_indices:
+        return {}
+    selected_columns = _unique_columns(
+        [columns[index] or f"列{index + 1}" for index in useful_indices]
+    )
+    selected_rows = []
+    for row in row_lists:
+        values = [row[index] if index < len(row) else "" for index in useful_indices]
+        if not any(str(value).strip() for value in values):
+            continue
+        selected_rows.append(values)
+        if len(selected_rows) >= MAX_TABLE_ROWS:
+            break
+    if not selected_rows:
+        return {}
+    return {
+        "columns": selected_columns,
+        "rows": selected_rows,
+        "source_table": table.get("name", ""),
+        "projection_note": (
+            f"runtime bounded projection: first {len(selected_rows)} rows × "
+            f"{len(selected_columns)} non-empty columns"
+        ),
     }
 
 
@@ -323,26 +445,74 @@ def _sampling_note(table: dict[str, Any], categories: list[str], asset: dict[str
     return ""
 
 
-def _match_chart_asset(
+def _match_evidence_asset(
     visual: dict[str, Any],
     assets: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    refs = {str(item) for item in visual.get("source_refs") or []}
-    chart_assets = [asset for asset in assets if asset.get("chart_ready")]
-    for asset in chart_assets:
+    ordered_refs = [str(item) for item in visual.get("source_refs") or [] if str(item)]
+    # A compound ref identifies one exact table. Respect the worker's source
+    # order when more than one supporting table is present.
+    for ref in ordered_refs:
+        if ":" not in ref:
+            continue
+        for asset in assets:
+            if ref in {
+                str(asset.get("ref") or ""),
+                str(asset.get("asset_id") or ""),
+            }:
+                return asset
+    refs = {
+        alias
+        for item in ordered_refs
+        for alias in _ref_aliases(str(item))
+    }
+    for asset in assets:
         keys = {
-            str(asset.get("evidence_id") or ""),
-            str(asset.get("asset_id") or ""),
-            str(asset.get("ref") or ""),
+            alias
+            for value in (
+                asset.get("evidence_id"),
+                asset.get("asset_id"),
+                asset.get("ref"),
+            )
+            for alias in _ref_aliases(str(value or ""))
         }
         if refs & {key for key in keys if key}:
             return asset
     title = str(visual.get("title") or "")
-    for asset in chart_assets:
+    for asset in assets:
         label = str(asset.get("label") or "")
         if label and (label in title or title in label):
             return asset
-    return chart_assets[0] if chart_assets else {}
+    return {}
+
+
+def _match_source_image(
+    visual: dict[str, Any], evidence_index: list[dict[str, Any]]
+) -> str:
+    refs = {
+        alias
+        for item in visual.get("source_refs") or []
+        for alias in _ref_aliases(str(item))
+    }
+    for record in evidence_index:
+        evidence_id = str(record.get("id") or "")
+        if not refs.intersection(_ref_aliases(evidence_id)):
+            continue
+        source_refs = record.get("source_refs") or {}
+        source_path = Path(str(source_refs.get("source_path") or ""))
+        if source_path.suffix.lower() in IMAGE_SUFFIXES and source_path.is_file():
+            return str(source_path)
+    return ""
+
+
+def _ref_aliases(value: str) -> set[str]:
+    value = value.strip()
+    if not value:
+        return set()
+    aliases = {value}
+    if value.startswith("EV-"):
+        aliases.add(value[3:])
+    return aliases
 
 
 def _has_chart_data(data: Any) -> bool:
@@ -356,6 +526,21 @@ def _has_chart_data(data: Any) -> bool:
         return True
     values = data.get("values")
     return isinstance(values, list) and bool(values)
+
+
+def _has_table_data(data: Any) -> bool:
+    return (
+        isinstance(data, dict)
+        and bool(data.get("columns") or data.get("headers"))
+        and bool(data.get("rows"))
+    )
+
+
+def _has_source_image(data: Any) -> bool:
+    if not isinstance(data, dict):
+        return False
+    path = Path(str(data.get("image_path") or ""))
+    return path.suffix.lower() in IMAGE_SUFFIXES and path.is_file()
 
 
 def _first_non_empty(key: str, payloads: Iterable[Any]) -> Any:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from presentation_agent.visual_evidence import (
     audit_required_visual_evidence,
@@ -81,6 +83,27 @@ class VisualEvidenceAuditTests(unittest.TestCase):
         audit = audit_required_visual_evidence({"visuals": []}, self.report)
         self.assertFalse(audit["passed"])
         self.assertIn("没有生成", audit["issues"][0]["reason"])
+
+    def test_registered_source_image_is_renderable_visual_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "evidence.png"
+            image_path.write_bytes(b"image")
+            formatted = {
+                "visuals": [
+                    {
+                        "visual_evidence_id": "VE-01",
+                        "section_heading": "Executive Summary",
+                        "type": "chart",
+                        "title": "历史用户时长变化",
+                        "source_refs": ["E-01"],
+                        "required": True,
+                        "placement": "opening",
+                        "data": {"image_path": str(image_path)},
+                    }
+                ]
+            }
+            audit = audit_required_visual_evidence(formatted, self.report)
+        self.assertTrue(audit["passed"])
 
 
 if __name__ == "__main__":

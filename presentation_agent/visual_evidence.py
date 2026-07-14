@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 
@@ -84,6 +85,9 @@ def _data_ready(visual: dict[str, Any]) -> bool:
         return False
     visual_type = str(visual.get("type") or "")
     if visual_type == "chart":
+        image_path = Path(str(data.get("image_path") or ""))
+        if image_path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+            return image_path.is_file()
         categories = data.get("categories")
         if not isinstance(categories, list) or not categories:
             return False

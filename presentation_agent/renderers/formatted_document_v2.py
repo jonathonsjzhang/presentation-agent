@@ -380,8 +380,18 @@ def _render_visual_asset(doc: Any, asset: dict[str, Any], asset_dir: Path) -> No
 
     asset_type = str(asset.get("asset_type") or "")
     title = str(asset.get("title") or asset.get("asset_id") or "视觉资产")
-    if asset_type == "table":
-        data = asset.get("data") or {}
+    data = asset.get("data") or {}
+    image_path = Path(str(data.get("image_path") or ""))
+    if image_path.is_file() and image_path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+        paragraph = doc.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = paragraph.add_run()
+        run.add_picture(str(image_path), width=Inches(6.35))
+        caption = doc.add_paragraph()
+        caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = caption.add_run(title)
+        _set_run_font(run, size=9.5, color="1F4D78", bold=True)
+    elif asset_type == "table":
         columns = [str(value) for value in data.get("columns") or data.get("headers") or []]
         rows = data.get("rows") or []
         if not columns:
