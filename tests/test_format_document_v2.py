@@ -282,6 +282,196 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 "preset=standard_business_brief",
             )
 
+    def test_format_runtime_projects_irregular_workbook_table_without_inventing_chart(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            stage_dir = temp / "stage_4_format"
+            handoff_dir = stage_dir / "handoff"
+            handoff_dir.mkdir(parents=True)
+            sidecar = temp / "workbook.json"
+            write_json(
+                sidecar,
+                {
+                    "sheets": [
+                        {
+                            "name": "生态对比",
+                            "rows": [
+                                ["维度", "Broadcom", "NVIDIA"],
+                                ["网络标准", "以太网", "InfiniBand"],
+                                ["生态策略", "开放", "垂直整合"],
+                            ],
+                        }
+                    ]
+                },
+            )
+            report = load(REPORT)
+            report["delivery_target"] = "document"
+            report["evidence_index"] = [
+                {
+                    "id": "E1",
+                    "source_name": "生态.xlsx",
+                    "source_type": "xlsx",
+                    "source_refs": {"parsed_artifact_path": str(sidecar)},
+                    "data_assets": [
+                        {
+                            "asset_id": "T1-compare",
+                            "kind": "table",
+                            "label": "生态对比",
+                            "chart_ready": False,
+                        }
+                    ],
+                }
+            ]
+            # Simulate a carried catalog created before runtime table
+            # projections were added.
+            report["evidence_assets"] = [
+                {
+                    "evidence_id": "E1",
+                    "asset_id": "T1-compare",
+                    "ref": "E1:T1-compare",
+                    "chart_ready": False,
+                }
+            ]
+            input_path = stage_dir / "input.json"
+            write_json(input_path, report)
+            write_json(
+                stage_dir / "run_state.json",
+                {
+                    "run_id": "format-table-test",
+                    "contract_profile": "v0_3",
+                    "agent_id": "format",
+                    "agent_name": "可视化",
+                    "stage": 4,
+                    "status": "init",
+                    "current_step": "awaiting_gen_output",
+                    "round_index": 0,
+                    "input_path": str(input_path),
+                    "output_dir": str(stage_dir),
+                    "p0_open": [],
+                    "p1_open": [],
+                    "produced_artifacts": [],
+                    "history": [],
+                    "review_subagents_enabled": False,
+                },
+            )
+            write_json(
+                handoff_dir / "output_gen.json",
+                {
+                    "visuals": [
+                        {
+                            "visual_evidence_id": "VE-TABLE-01",
+                            "section_heading": "一、成果保存与回访共同出现，但因果仍待验证",
+                            "type": "chart",
+                            "title": "Broadcom 与 NVIDIA 生态对比",
+                            "source_refs": ["E1:T1-compare"],
+                            "required": False,
+                            "placement": "section",
+                        }
+                    ]
+                },
+            )
+            runner = StepRunner(
+                ROOT, stage_dir, data_root=temp / "data", contract_profile="v0_3"
+            )
+            result = RenderResult(
+                status="rendered",
+                fmt="document",
+                fidelity="formatted",
+                output_path=str(stage_dir / "report_formatted.docx"),
+            )
+            with patch("presentation_agent.renderers.render_material", return_value=result):
+                runner.commit()
+
+            artifact = read_json(stage_dir / "artifact.json")
+            visual = artifact["visuals"][0]
+            self.assertEqual(visual["type"], "table")
+            self.assertEqual(visual["data"]["columns"], ["维度", "Broadcom", "NVIDIA"])
+            self.assertEqual(visual["data"]["rows"][0], ["网络标准", "以太网", "InfiniBand"])
+            self.assertEqual(
+                artifact["evidence_asset_enrichment"][0]["kind"],
+                "table_fallback",
+            )
+
+    def test_visual_preflight_failure_still_renders_draft_before_blocking(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            stage_dir = temp / "stage_4_format"
+            handoff_dir = stage_dir / "handoff"
+            handoff_dir.mkdir(parents=True)
+            report = load(REPORT)
+            report["delivery_target"] = "document"
+            report["report_markdown"] = (
+                "# 标题\n\n## Executive Summary\n\n结论。\n\n[可视化论据：VE-01]\n"
+            )
+            report["visual_evidence_placements"] = [
+                {
+                    "id": "VE-01",
+                    "data_type": "time_series",
+                    "required": True,
+                    "section_heading": "Executive Summary",
+                    "marker": "[可视化论据：VE-01]",
+                }
+            ]
+            input_path = stage_dir / "input.json"
+            write_json(input_path, report)
+            write_json(
+                stage_dir / "run_state.json",
+                {
+                    "run_id": "format-preflight-test",
+                    "contract_profile": "v0_3",
+                    "agent_id": "format",
+                    "agent_name": "可视化",
+                    "stage": 4,
+                    "status": "init",
+                    "current_step": "awaiting_gen_output",
+                    "round_index": 0,
+                    "input_path": str(input_path),
+                    "output_dir": str(stage_dir),
+                    "p0_open": [],
+                    "p1_open": [],
+                    "produced_artifacts": [],
+                    "history": [],
+                    "review_subagents_enabled": False,
+                },
+            )
+            write_json(
+                handoff_dir / "output_gen.json",
+                {
+                    "visuals": [
+                        {
+                            "visual_evidence_id": "VE-01",
+                            "section_heading": "Executive Summary",
+                            "type": "chart",
+                            "title": "缺数据趋势",
+                            "source_refs": ["E-MISSING"],
+                            "required": True,
+                            "placement": "opening",
+                        }
+                    ]
+                },
+            )
+            draft_path = stage_dir / "report_formatted.docx"
+            draft_path.write_bytes(b"draft")
+            render_result = RenderResult(
+                status="rendered",
+                fmt="document",
+                fidelity="formatted",
+                output_path=str(draft_path),
+            )
+            runner = StepRunner(
+                ROOT, stage_dir, data_root=temp / "data", contract_profile="v0_3"
+            )
+            with patch(
+                "presentation_agent.renderers.render_material",
+                return_value=render_result,
+            ) as mocked_renderer:
+                result = runner.commit()
+
+            mocked_renderer.assert_called_once()
+            self.assertEqual(result["status"], "blocked")
+            self.assertEqual(result["render_result"]["output_path"], str(draft_path))
+            self.assertIn("可视化论据检查未通过", result["render_result"]["detail"])
+
     def test_line_chart_data_renders_as_document_visual(self) -> None:
         formatted = load(FORMATTED)
         formatted["visuals"][0]["type"] = "chart"

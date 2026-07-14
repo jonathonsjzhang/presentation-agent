@@ -676,6 +676,78 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertEqual(restored["last_event"], "manager_commit_failed")
             self.assertIn("report next", restored["last_error"]["recovery"])
 
+    def test_format_render_failure_is_reported_before_missing_page_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            task_dir = run_dir / "tasks" / "format-001_format"
+            artifact_path = task_dir / "artifact.json"
+            render_detail = "可视化论据检查未通过：缺少可绘制的完整数据"
+            artifact = {
+                "agent_id": "format",
+                "schema": "formatted_material.v2",
+                "delivery_target": "document",
+                "visuals": [],
+                "render_result": {
+                    "status": "error",
+                    "target": "document",
+                    "output_path": "",
+                    "detail": render_detail,
+                },
+            }
+            write_json_file(artifact_path, artifact)
+            task = {
+                "task_id": "format-001",
+                "agent_id": "format",
+                "task_dir": str(task_dir),
+                "artifact_path": str(artifact_path),
+                "status": "worker_completed",
+            }
+            manager = ManagerOrchestrator(
+                ROOT,
+                run_dir,
+                contract_profile="v0_3",
+            )
+            manager._save_state(
+                {
+                    "version": "manager_state.v2",
+                    "run_id": "format-error-priority-test",
+                    "contract_profile": "v0_3",
+                    "current_actor": "manager",
+                    "manager_phase": "acceptance",
+                    "manager_step": "awaiting_output",
+                    "human_gate": None,
+                    "current_task": task,
+                    "tasks": [task],
+                    "worker_result": {
+                        "artifact_path": str(artifact_path),
+                        "artifact": artifact,
+                        "render_result": artifact["render_result"],
+                    },
+                    "accepted_artifacts": [],
+                    "project_state": {
+                        "delivery_budget": {"body_page_limit": 7}
+                    },
+                    "run_mode": "full_auto",
+                    "report_charter": {},
+                    "review_subagents_enabled": False,
+                }
+            )
+            write_json_file(
+                manager.agent.output_path("acceptance"),
+                {
+                    "action": "complete",
+                    "acceptance_report": {
+                        "verdict": "accept",
+                        "reason": "format accepted",
+                    },
+                },
+            )
+
+            with self.assertRaisesRegex(StepError, "可视化论据检查未通过") as caught:
+                manager.commit_manager()
+
+            self.assertNotIn("正文页数硬约束未通过", str(caught.exception))
+
     def test_delivery_gate_exposes_structured_choice_and_routes_selection(
         self,
     ) -> None:

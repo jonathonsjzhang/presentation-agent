@@ -955,13 +955,9 @@ class StepRunner:
                         str(item.get("reason") or "可视化论据不完整")
                         for item in visual_audit.get("issues") or []
                     )
-                    return RenderResult(
-                        status="error",
-                        fmt=str(artifact.get("delivery_target") or "unknown"),
-                        fidelity="formatted",
-                        detail=f"可视化论据检查未通过：{detail}",
-                    )
-                artifact.pop("upstream_revision_requests", None)
+                else:
+                    detail = ""
+                    artifact.pop("upstream_revision_requests", None)
                 render_result = render_material(
                     artifact,
                     self.run_dir,
@@ -974,6 +970,14 @@ class StepRunner:
                 self._apply_format_body_budget_audit(
                     artifact, source_report, render_result
                 )
+                if visual_audit["passed"] is not True:
+                    visual_detail = f"可视化论据检查未通过：{detail}"
+                    render_result.status = "error"
+                    render_result.detail = (
+                        f"{render_result.detail}; {visual_detail}"
+                        if render_result.detail
+                        else visual_detail
+                    )
                 return render_result
             except Exception as exc:
                 from presentation_agent.renderers.base import RenderResult
