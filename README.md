@@ -79,7 +79,7 @@
 
 v0.3 的默认生产依赖固定为 `analysis → storyline → report → qa_preparation → format`。Manager 可以派发返工，但不能把 Evidence 插入五阶段生产主链；Evidence 在有原始材料时作为 Brief 前的 run-level 输入处理任务运行，生成的 Catalog 由 Brief Gate 和 Analysis 共同复用。Analysis 内原触发仅保留为旧 run 或直接调用的兼容兜底。逐字稿 worker 已删除，不再出现在默认链路、扩展 gate 或 task packet 枚举中。
 
-Evidence Catalog 采用“解析细、目录粗”的双层模型：connector 仍把表格行、问卷题目、文档段落和访谈原话解析为 source units，用于 coverage、精确定位和 sidecar 回查；Evidence Harvester 不再把每个 source unit 原子化成 catalog item。XLSX/CSV 等数据材料按“一个文件一条 evidence”聚合，文件中的 sheet、指标、时间序列、key findings 和 data assets 都是该 item 的内部信息；多人访谈合集按“一次独立访谈/一位受访者一条 evidence”聚合，同一人的属性、不同问题、观察和代表性原话合并在一个 item 内。比如 8 个 QM 文件、1 份问卷和一份包含 4 位受访者的访谈合集，应得到 13 条 evidence。这样既保留底层可追溯性，也控制 Brief Gate 与 Analysis 的上下文规模。
+Evidence Catalog 采用“解析细、目录粗”的分层模型：connector 仍把表格行、问卷题目、文档段落和访谈原话解析为 source units，用于 coverage、精确定位和 sidecar 回查；Evidence Harvester 不再把每个 source unit 原子化成 catalog item。XLSX/CSV 等数据材料按“一个文件一条 evidence”聚合；访谈合集按“一场 interview session 一条”聚合，联合访谈不按参与者拆分；同时包含访谈、数据表、论文、Blog、Podcast、官网资料和作者归纳的研究包，按去重后的底层来源生成 evidence，正文与附录对同一来源的复述不重复计数，作者归纳只作为 claim context。比如 8 个 QM 文件、1 份问卷和一份包含 4 场独立访谈的合集，应得到 13 条 evidence。这样既保留底层可追溯性，也控制 Brief Gate 与 Analysis 的上下文规模。
 
 ## 四、双层 Loop
 

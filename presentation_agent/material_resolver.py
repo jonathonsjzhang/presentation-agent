@@ -32,6 +32,26 @@ INTERVIEW_HINTS = (
     "interviews",
     "respondent transcript",
 )
+SOURCE_BUNDLE_HINTS = (
+    "原始资料",
+    "资料汇总",
+    "研究底稿",
+    "论据清单",
+    "research pack",
+    "source pack",
+    "evidence pack",
+)
+PUBLIC_SOURCE_HINTS = (
+    "http://",
+    "https://",
+    "arxiv",
+    "blog",
+    "podcast",
+    "linkedin",
+    "官网",
+    "公开资料",
+    "公开信息",
+)
 INLINE_SOURCE_UNIT_LIMIT = 80
 INLINE_SOURCE_UNIT_HEAD = 40
 INLINE_SOURCE_UNIT_TAIL = 10
@@ -449,9 +469,9 @@ def _evidence_grain(material: dict[str, Any]) -> dict[str, Any]:
     Connectors intentionally keep rows, paragraphs, questions, and quotes as
     source units for coverage and traceability.  Those parsing units are not
     automatically evidence items.  Tabular datasets are catalogued once per
-    file, while interview collections are catalogued once per independent
-    interview/respondent even when several interviews share one workbook or
-    document.
+    file, interview collections once per interview session, and mixed research
+    packs once per underlying source. Several participants in one joint
+    interview remain one evidence item.
     """
 
     hint_text = " ".join(
@@ -465,12 +485,29 @@ def _evidence_grain(material: dict[str, Any]) -> dict[str, Any]:
             "topic",
         )
     ).lower()
+    content_text = _material_content_text(material).lower()
+    has_interview_content = any(hint in content_text for hint in INTERVIEW_HINTS)
+    has_public_sources = any(hint in content_text for hint in PUBLIC_SOURCE_HINTS)
+    looks_like_source_bundle = any(hint in hint_text for hint in SOURCE_BUNDLE_HINTS)
+    if looks_like_source_bundle and (has_interview_content or has_public_sources):
+        return {
+            "unit": "underlying_source",
+            "rule": "one_item_per_underlying_source",
+            "source_units_role": "coverage_and_traceability_only",
+            "source_boundaries": [
+                "interview_session",
+                "dataset_collection",
+                "public_source",
+            ],
+            "deduplication": "body summaries and appendix restatements reuse the same evidence item",
+            "analyst_synthesis_role": "claim_context_only",
+        }
     if any(hint in hint_text for hint in INTERVIEW_HINTS):
         return {
-            "unit": "interview",
-            "rule": "one_item_per_interview",
+            "unit": "interview_session",
+            "rule": "one_item_per_interview_session",
             "source_units_role": "coverage_and_traceability_only",
-            "semantic_override": "split by independent respondent/interview, not by question or quote",
+            "semantic_override": "split by interview session, not by participant, question, or quote; separate respondent columns count separately only when they represent separate sessions",
         }
     if str(material.get("source_type") or "") in TABLE_SOURCE_TYPES:
         return {
@@ -483,8 +520,22 @@ def _evidence_grain(material: dict[str, Any]) -> dict[str, Any]:
         "unit": "coherent_source",
         "rule": "keep the fewest independently traceable catalog items",
         "source_units_role": "coverage_and_traceability_only",
-        "semantic_override": "if the source contains multiple independent interviews, use one_item_per_interview",
+        "semantic_override": "if the source contains multiple independent interviews, use one_item_per_interview_session; if it aggregates interviews, datasets, and public sources, use one_item_per_underlying_source",
     }
+
+
+def _material_content_text(material: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in ("paragraphs", "source_units"):
+        values = material.get(key)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if isinstance(value, dict):
+                parts.append(str(value.get("raw_content") or value.get("content") or ""))
+            else:
+                parts.append(str(value or ""))
+    return " ".join(parts)
 
 
 def _material_summary(material: dict[str, Any]) -> str:

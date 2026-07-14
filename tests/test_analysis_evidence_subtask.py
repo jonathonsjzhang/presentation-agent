@@ -16,6 +16,7 @@ from presentation_agent.connectors.table_profiler import profile_xlsx_sheets
 from presentation_agent.io import read_json, write_json
 from presentation_agent.launch import normalize_brief
 from presentation_agent.manager import ManagerOrchestrator
+from presentation_agent.material_resolver import _evidence_grain
 from presentation_agent.spawn import SpawnRequest
 from presentation_agent.step import StepRunner
 
@@ -433,9 +434,38 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
 
         evidence_input = read_json(Path(first["input_path"]))
         grain = evidence_input["evidence_index"][0]["evidence_grain"]
-        self.assertEqual(grain["unit"], "interview")
-        self.assertEqual(grain["rule"], "one_item_per_interview")
+        self.assertEqual(grain["unit"], "interview_session")
+        self.assertEqual(grain["rule"], "one_item_per_interview_session")
         self.assertNotIn("max_items", grain)
+
+    def test_mixed_research_pack_uses_underlying_source_grain(self) -> None:
+        grain = _evidence_grain(
+            {
+                "source_name": "Surge AI 高人效原因分析_原始资料.docx",
+                "source_type": "docx",
+                "paragraphs": [
+                    "访谈notes",
+                    "20251222 数据团队安德亮&Oscar访谈",
+                    "AdvancedIF论文 https://arxiv.org/example",
+                    "Edwin Podcast",
+                    "附录：正文来源复述",
+                ],
+            }
+        )
+        self.assertEqual(grain["unit"], "underlying_source")
+        self.assertEqual(grain["rule"], "one_item_per_underlying_source")
+        self.assertEqual(grain["analyst_synthesis_role"], "claim_context_only")
+        self.assertIn("interview_session", grain["source_boundaries"])
+
+    def test_joint_interview_stays_one_session(self) -> None:
+        grain = _evidence_grain(
+            {
+                "source_name": "安德亮和Oscar访谈记录.docx",
+                "source_type": "docx",
+            }
+        )
+        self.assertEqual(grain["rule"], "one_item_per_interview_session")
+        self.assertIn("not by participant", grain["semantic_override"])
 
     def test_evidence_skill_keeps_source_units_out_of_catalog_grain(self) -> None:
         instructions = (ROOT / "skills" / "evidence_harvester" / "SKILL.md").read_text(
@@ -443,7 +473,9 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         )
         self.assertIn("source unit 是读取与 coverage 粒度", instructions)
         self.assertIn("一个文件恰好一条 evidence", instructions)
-        self.assertIn("一次独立访谈/一位受访者恰好一条 evidence", instructions)
+        self.assertIn("一次独立访谈 session 恰好一条 evidence", instructions)
+        self.assertIn("多来源研究包 / 论据聚合清单", instructions)
+        self.assertIn("同场联合访谈不得按参与者重复拆分", instructions)
         self.assertIn("应输出 **13 条** evidence", instructions)
 
     def test_evidence_subtask_profiles_large_csv_without_inlining_all_rows(self) -> None:
