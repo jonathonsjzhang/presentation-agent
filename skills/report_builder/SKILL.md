@@ -158,7 +158,7 @@ Brief gate 必须严格按 runtime 返回的单次四题协议执行，不得拆
 
 ```tool_call
 AskUserQuestion(
-  questions = instruction.ask_user_question_payload.questions
+  questions = current_instruction.ask_user_question_payload.questions
 )
 ```
 
@@ -193,9 +193,15 @@ runtime 会返回 `presentation_required_before_tool=true`、独立的 `presenta
 2. 将四题答案汇总为 JSON 回传，例如 `{"research_purpose":"...","research_direction":"...","high_confidence_evidence":["EV-003","EV-008"],"brief_confirmed":true}`；没有特别优先的论据也必须显式传 `"high_confidence_evidence":[]`。执行 `report feedback --text '<上述 JSON>'` 后，runtime 会把答案写回 `raw_brief.json` 并记录本次明确确认。
 3. 若用户选择“准确，继续”，feedback 返回 `next_action=report_approve_without_asking_again`，直接执行 `report approve`，**不得再弹第二个确认面板**。若用户选择“需要修改”，把修改归入 `brief_updates` 且传 `"brief_confirmed":false`；runtime 重显更新后的完整 Brief，并只再次询问确认。
 
-最终确认页应按顺序包含研究目的、当前研究 hypo、正式 Evidence List、用户标记的高可信论据、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。若 `present_to_user` 缺少 Brief 内容，先执行 `report status --run "<run_id>"` 检查状态；仍缺失则报告协议错误，不要凭宿主记忆拼一份后直接批准。
+最终确认页应按顺序包含研究目的、当前研究 hypo、正式 Evidence List、用户标记的高可信论据、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。若 `present_to_user` 缺少 Brief 内容，先执行 `report next --run "<run_id>"` 重新取得 `current_instruction`，并用 `report status` 核对 actor/gate；仍缺失则报告协议错误，不要凭宿主记忆拼一份后直接批准。
 
 ## 3. 推进 report loop
+
+`report start/next/submit/approve/feedback` 使用同一个轻量响应契约：当前动作始终位于
+`current_instruction`。不要再根据命令分别猜测 `result` 或 `instruction`；完整 Manager
+state、Worker artifact、Evidence Catalog 只通过返回的 `*_path` / `*_ref` 按需读取。
+`report status` 默认只返回控制面摘要；只有诊断确需完整状态时才使用
+`report manager-status`。
 
 循环执行：
 
@@ -205,7 +211,7 @@ python -m presentation_agent.cli \
   report next --run "<run_id>"
 ```
 
-根据返回的 `actor` 处理：
+根据返回的 `current_instruction.actor` 处理：
 
 ### actor=human
 
@@ -280,6 +286,15 @@ python -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
   report submit --run "<run_id>" --spawn-completed
 ```
+
+Worker 的 `result_delivery=direct_file`：Agent/Task 工具的对话消息可以为空，不能据此判定
+失败。完成标准是当前 `output_path` 存在、晚于本轮 spawn request、包含合法非空 JSON，且
+`report submit --spawn-completed` 成功生成 receipt 并 commit。若消息为空但文件有效，直接
+按成功处理；若消息非空但没有可信文件，则按失败处理。
+
+Worker instruction 只内嵌 skill、任务摘要、schema 和输入路径。完整 Evidence Catalog 与
+上游 artifact 位于 `input_path`；先读取顶层索引，再按 evidence/source ref 深入，禁止把
+整个 input 或 sidecar 打印到宿主对话。
 
 ### actor=worker 且没有 spawn.detail
 

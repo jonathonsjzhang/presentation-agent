@@ -75,6 +75,15 @@ def normalize_report_profile(
         raw_audience = source.get("audience", "")
         if isinstance(raw_audience, Mapping):
             raw_audience = raw_audience.get("primary", "")
+        requested_targets = source.get("requested_delivery_targets") or source.get(
+            "delivery_targets"
+        )
+        if isinstance(requested_targets, (list, tuple)) and requested_targets:
+            requested_target = requested_targets[0]
+        elif isinstance(requested_targets, str):
+            requested_target = requested_targets
+        else:
+            requested_target = None
         values = {
             "audience": _normalize_value("audience", raw_audience, config),
             "report_type": _normalize_value(
@@ -82,7 +91,16 @@ def normalize_report_profile(
             ),
             "output_format": _normalize_value(
                 "output_format",
-                source.get("output_format", source.get("material_format", "ppt")),
+                source.get(
+                    "delivery_target",
+                    source.get(
+                        "output_format",
+                        source.get(
+                            "material_format",
+                            requested_target or "document",
+                        ),
+                    ),
+                ),
                 config,
             ),
         }

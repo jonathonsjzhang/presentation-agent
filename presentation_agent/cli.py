@@ -710,20 +710,54 @@ def main() -> None:
         return
 
 
-def _worker_spawn_response(result: object) -> dict[str, object]:
+def _current_instruction(result: object) -> dict[str, object]:
+    """Normalize Manager/Worker/Human transitions to one host-facing shape."""
+
     if not isinstance(result, dict):
         return {}
     nested = result.get("instruction")
     instruction = nested if isinstance(nested, dict) else result
-    if instruction.get("actor") != "worker":
-        return {}
+    # Large artifacts and complete briefs live on disk. Human-facing text and
+    # structured question payloads stay inline because the host must present
+    # them immediately.
+    omitted = {"brief", "evidence_options", "storyline"}
+    normalized = {
+        key: value
+        for key, value in instruction.items()
+        if key not in omitted
+    }
+    if "next_action" not in normalized and result.get("next_action"):
+        normalized["next_action"] = result["next_action"]
+    return normalized
+
+
+def _report_response(
+    *,
+    run_dir: Path,
+    result: object,
+    manager: ManagerOrchestrator,
+    run_id: str | None = None,
+    brief_path: str | None = None,
+) -> dict[str, object]:
+    instruction = _current_instruction(result)
     spawn = instruction.get("spawn")
-    return {
-        "instruction": instruction,
+    response: dict[str, object] = {
+        "ok": True,
+        "run_dir": str(run_dir),
+        "current_instruction": instruction,
         "spawn_required": bool(
             isinstance(spawn, dict) and spawn.get("status") == "dispatched"
         ),
+        "manager": manager.status_summary(),
+        "next_action": instruction.get(
+            "next_action", "host_write_output_then_report_submit"
+        ),
     }
+    if run_id:
+        response["run_id"] = run_id
+    if brief_path:
+        response["brief_path"] = brief_path
+    return response
 
 
 def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> None:
@@ -751,15 +785,15 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             contract_profile=args.contract_profile,
         )
         prepared = manager.initialize_run(brief_path)
-        _print_json({
-            "ok": True,
-            "run_id": run_id,
-            "run_dir": str(run_dir),
-            "brief_path": str(brief_path),
-            "instruction": prepared,
-            "manager": manager.status(),
-            "next_action": prepared.get("next_action", "human_feedback"),
-        })
+        _print_json(
+            _report_response(
+                run_dir=run_dir,
+                result=prepared,
+                manager=manager,
+                run_id=run_id,
+                brief_path=str(brief_path),
+            )
+        )
         return
 
     run_dir = workspace.run_dir(args.run)
@@ -774,7 +808,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
         _print_json({
             "ok": True,
             "run_dir": str(run_dir),
-            "manager": manager.status(),
+            "manager": manager.status_summary(),
         })
         return
 
@@ -790,19 +824,9 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
         try:
             prepared = manager.prepare()
         except StepError as exc:
-            _print_json({"ok": False, "error": str(exc), "manager": manager.status()})
+            _print_json({"ok": False, "error": str(exc), "manager": manager.status_summary()})
             raise SystemExit(3)
-        _print_json({
-            "ok": True,
-            "run_dir": str(run_dir),
-            "instruction": prepared,
-            "spawn_required": bool(
-                isinstance(prepared.get("spawn"), dict)
-                and prepared["spawn"].get("status") == "dispatched"
-            ),
-            "manager": manager.status(),
-            "next_action": prepared.get("next_action", "host_write_output_then_report_submit"),
-        })
+        _print_json(_report_response(run_dir=run_dir, result=prepared, manager=manager))
         return
 
     if args.report_command == "submit":
@@ -842,19 +866,9 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             else:
                 raise StepError(f"未知 current_actor: {actor}")
         except StepError as exc:
-            _print_json({"ok": False, "error": str(exc), "manager": manager.status()})
+            _print_json({"ok": False, "error": str(exc), "manager": manager.status_summary()})
             raise SystemExit(3)
-        _print_json({
-            "ok": True,
-            "run_dir": str(run_dir),
-            "result": result,
-            **_worker_spawn_response(result),
-            "manager": manager.status(),
-            "next_action": result.get(
-                "next_action",
-                "host_write_output_then_report_submit",
-            ),
-        })
+        _print_json(_report_response(run_dir=run_dir, result=result, manager=manager))
         return
 
     if args.report_command == "approve":
@@ -872,36 +886,21 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
                 delivery_option=getattr(args, "delivery_option", None),
             )
         except StepError as exc:
-            _print_json({"ok": False, "error": str(exc), "manager": manager.status()})
+            _print_json({"ok": False, "error": str(exc), "manager": manager.status_summary()})
             raise SystemExit(3)
-        _print_json({
-            "ok": True,
-            "run_dir": str(run_dir),
-            "result": result,
-            **_worker_spawn_response(result),
-            "manager": manager.status(),
-            "next_action": result.get(
-                "next_action",
-                "completed" if result.get("status") == "completed" else "host_write_output_then_report_submit",
-            ),
-        })
+        response = _report_response(run_dir=run_dir, result=result, manager=manager)
+        if isinstance(result, dict) and result.get("status") == "completed":
+            response["next_action"] = "completed"
+        _print_json(response)
         return
 
     if args.report_command == "feedback":
         try:
             result = manager.record_human_feedback(args.text)
         except StepError as exc:
-            _print_json({"ok": False, "error": str(exc), "manager": manager.status()})
+            _print_json({"ok": False, "error": str(exc), "manager": manager.status_summary()})
             raise SystemExit(3)
-        _print_json({
-            "ok": True,
-            "run_dir": str(run_dir),
-            "result": result,
-            "manager": manager.status(),
-            "next_action": result.get(
-                "next_action", "host_write_output_then_report_submit"
-            ),
-        })
+        _print_json(_report_response(run_dir=run_dir, result=result, manager=manager))
         return
 
 

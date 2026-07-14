@@ -19,7 +19,7 @@ from presentation_agent.manager import (
     _should_pause,
 )
 from presentation_agent.context import ContextAssembler
-from presentation_agent.cli import build_parser, _worker_spawn_response
+from presentation_agent.cli import build_parser, _current_instruction
 from presentation_agent.step import PipelineStepper, StepError, StepRunner
 from presentation_agent.spawn import WorkBuddySpawnAdapter
 from presentation_agent.skill_package import load_skill_package
@@ -121,16 +121,15 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 ["report", "start", "--brief-file", "brief.json"]
             )
 
-    def test_worker_spawn_is_exposed_consistently_at_cli_top_level(self) -> None:
+    def test_worker_spawn_is_normalized_as_current_instruction(self) -> None:
         instruction = {
             "actor": "worker",
             "step": "gen",
             "spawn": {"status": "dispatched", "adapter": "workbuddy"},
         }
         for result in (instruction, {"instruction": instruction}):
-            exposed = _worker_spawn_response(result)
-            self.assertIs(exposed["instruction"], instruction)
-            self.assertTrue(exposed["spawn_required"])
+            exposed = _current_instruction(result)
+            self.assertEqual(exposed, instruction)
 
     def test_default_run_mode_pauses_after_analysis_and_storyline(self) -> None:
         self.assertTrue(_should_pause(None, "analysis"))

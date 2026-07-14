@@ -96,6 +96,7 @@ class GenericSkill:
             objections,
             previous_artifact,
             candidate_hint,
+            external_input_path=str(context.get("external_input_path") or ""),
         )
         request = LLMRequest(
             system=system,
@@ -135,10 +136,16 @@ class GenericSkill:
         objections: Optional[list[Objection]],
         previous_artifact: Optional[dict[str, Any]],
         candidate_hint: Optional[str] = None,
+        external_input_path: str = "",
     ) -> str:
         blocks: list[str] = []
         if input_data.get("schema") == "worker_context.v1":
-            blocks.extend(self._projected_context_blocks(input_data))
+            blocks.extend(
+                self._projected_context_blocks(
+                    input_data,
+                    external_input_path=external_input_path,
+                )
+            )
         else:
             blocks.append("## 本环节输入(上游 artifact 或原始 brief)")
             blocks.append(self._json_block(input_data))
@@ -187,7 +194,10 @@ class GenericSkill:
         return "\n\n".join(blocks)
 
     def _projected_context_blocks(
-        self, input_data: dict[str, Any]
+        self,
+        input_data: dict[str, Any],
+        *,
+        external_input_path: str = "",
     ) -> list[str]:
         blocks = [
             "## 项目约束（report charter，优先级最高）",
@@ -207,6 +217,16 @@ class GenericSkill:
                 "## 原始 brief（已按本 Worker 投影）",
                 self._json_block(raw_brief),
             ])
+        if external_input_path:
+            blocks.extend([
+                "## 完整任务输入（必须读取）",
+                (
+                    f"完整、唯一的业务输入位于 `{external_input_path}`。"
+                    "其中包含 evidence_catalog、evidence_assets、上游 artifact 和材料引用。"
+                    "先读取该 JSON 的顶层索引，再按任务需要深入具体字段；"
+                    "不要把整个文件复制到对话或输出中。"
+                ),
+            ])
         canonical_inputs = {
             key: input_data[key]
             for key in (
@@ -219,13 +239,13 @@ class GenericSkill:
             )
             if input_data.get(key) not in (None, "", [], {})
         }
-        if canonical_inputs:
+        if canonical_inputs and not external_input_path:
             blocks.extend([
                 "## v0.3 Canonical inputs（本环节正式输入）",
                 self._json_block(canonical_inputs),
             ])
         inputs = input_data.get("inputs", {})
-        if inputs:
+        if inputs and not external_input_path:
             blocks.extend([
                 "## 命名空间化上游输入（保留来源，不得跨来源臆测）",
                 self._json_block(inputs),

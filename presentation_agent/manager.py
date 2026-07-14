@@ -76,6 +76,11 @@ class ManagerAgentRuntime:
             "",
             "## 本轮 Manager Context",
             "",
+            "Context 中的大型 brief、Evidence Catalog 与 Worker artifact 以摘要和文件路径引用。",
+            "planning 默认使用摘要；只有某个任务定义事实缺失时才按字段读取 raw_brief_path/catalog_ref。",
+            "acceptance 必须读取 worker_result.artifact_path 后再判断。不要根据 preview 补写事实，",
+            "也不要把完整文件复制进输出或宿主对话。",
+            "",
             "```json",
             json.dumps(context, ensure_ascii=False, indent=2),
             "```",
@@ -690,6 +695,7 @@ class WorkerExecutor:
             contract_profile=self.contract_profile,
         ).prepare()
         instruction["actor"] = "worker"
+        instruction.setdefault("input_path", str(task_dir / "input.json"))
 
         # Spawn split: inline behaves exactly like today; native adapters emit a
         # self-contained spawn request and annotate the instruction. The Manager
@@ -933,6 +939,7 @@ class ManagerOrchestrator:
                     "step": status.get("current_step"),
                     "instruction_path": status.get("instruction_path"),
                     "output_path": status.get("output_path"),
+                    "input_path": str(task_dir / "input.json"),
                 }
                 # Spawn split on the awaiting_* read path. The StepRunner already
                 # advanced into a sub-step (e.g. review/revise) whose handoff files
@@ -1415,6 +1422,40 @@ class ManagerOrchestrator:
             "plan": read_json(self.plan_path, default={}),
             "worker": worker_status,
             "decisions_path": str(self.decisions_path),
+        }
+
+    def status_summary(self) -> dict[str, Any]:
+        """Return the control-plane facts hosts need without artifact snapshots."""
+
+        state = self._load_state()
+        current = state.get("current_task") or {}
+        if not isinstance(current, dict):
+            current = {}
+        return {
+            "run_id": state.get("run_id"),
+            "status": state.get("status"),
+            "current_actor": state.get("current_actor"),
+            "manager_phase": state.get("manager_phase"),
+            "manager_step": state.get("manager_step"),
+            "human_gate": state.get("human_gate"),
+            "last_event": state.get("last_event"),
+            "spawn_adapter": state.get("spawn_adapter"),
+            "current_task": {
+                key: current.get(key)
+                for key in (
+                    "task_id",
+                    "agent_id",
+                    "status",
+                    "task_dir",
+                    "input_path",
+                    "artifact_path",
+                )
+                if current.get(key) not in (None, "")
+            },
+            "state_path": str(self.state_path),
+            "plan_path": str(self.plan_path),
+            "charter_path": str(self.charter_path),
+            "last_error": state.get("last_error"),
         }
 
     def current_worker_dir(self, state: Optional[dict[str, Any]] = None) -> Optional[Path]:
@@ -2086,7 +2127,8 @@ class ManagerOrchestrator:
             "phase": phase,
             "event": event,
             "run_id": state.get("run_id"),
-            "raw_brief": raw_brief,
+            "raw_brief": self._manager_brief_projection(raw_brief),
+            "raw_brief_path": str(self.raw_brief_path),
             "report_charter": charter,
             "report_profile": profile,
             "capability_registry": {
@@ -2115,14 +2157,97 @@ class ManagerOrchestrator:
             ),
             "task_statuses": state.get("tasks", []),
             "current_task": state.get("current_task") or {},
-            "worker_result": state.get("worker_result") or {},
+            "worker_result": self._manager_worker_result_projection(
+                state.get("worker_result") or {}
+            ),
             "human_feedback": feedback[-5:],
-            "previous_manager_decision": state.get("previous_pending_decision") or {},
+            "previous_manager_decision": self._manager_decision_projection(
+                state.get("previous_pending_decision") or {}
+            ),
             "artifact_catalog": self._artifact_catalog(state),
             "manager_memory": self.agent.memory.generation_guidance(
                 MANAGER_MEMORY_DIMENSIONS, limit=6
             ),
             "available_workers": self.workers.capabilities(),
+        }
+
+    def _manager_brief_projection(self, brief: dict[str, Any]) -> dict[str, Any]:
+        """Keep planning semantic context while moving evidence payloads to refs."""
+
+        projected = {
+            key: copy.deepcopy(value)
+            for key, value in brief.items()
+            if key
+            not in {
+                "evidence_catalog",
+                "evidence_index",
+                "evidence_assets",
+                "source_manifest",
+                "raw_materials",
+                "source_units",
+                "rows",
+                "resolved_materials",
+            }
+        }
+        catalog = brief.get("evidence_catalog")
+        if isinstance(catalog, dict):
+            items = catalog.get("items") or catalog.get("evidence_items") or []
+            sources = catalog.get("source_manifest") or []
+            evidence_index = catalog.get("evidence_index") or brief.get(
+                "evidence_index"
+            ) or []
+            projected["evidence_catalog_summary"] = {
+                "schema": catalog.get("schema"),
+                "catalog_ref": brief.get("evidence_catalog_ref"),
+                "catalog_fingerprint": catalog.get("catalog_fingerprint"),
+                "item_count": len(items) if isinstance(items, list) else 0,
+                "source_count": len(sources) if isinstance(sources, list) else 0,
+                "unresolved_count": len(catalog.get("unresolved") or []),
+                "material_inventory": [
+                    {
+                        key: row.get(key)
+                        for key in (
+                            "id",
+                            "material_id",
+                            "source_name",
+                            "source_type",
+                            "summary",
+                        )
+                        if row.get(key) not in (None, "")
+                    }
+                    for row in evidence_index[:30]
+                    if isinstance(row, dict)
+                ],
+            }
+        return projected
+
+    @staticmethod
+    def _manager_worker_result_projection(result: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(result, dict):
+            return {}
+        return {
+            key: copy.deepcopy(value)
+            for key, value in result.items()
+            if key != "artifact" and value not in (None, "", [], {})
+        }
+
+    @staticmethod
+    def _manager_decision_projection(decision: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(decision, dict):
+            return {}
+        return {
+            key: copy.deepcopy(value)
+            for key, value in decision.items()
+            if key
+            in {
+                "action",
+                "acceptance_report",
+                "task_packet",
+                "missing_fields",
+                "brief_stage",
+                "confirmation_ready",
+            }
+            and value not in (None, "", [], {})
         }
 
     @staticmethod
