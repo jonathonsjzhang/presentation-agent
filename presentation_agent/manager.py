@@ -2923,7 +2923,9 @@ class ManagerOrchestrator:
                 result["next_task"] = decision.get("task_packet", {}).get("agent_id")
                 result["accepted_artifacts"] = state.get("accepted_artifacts", [])
                 result["storyline"] = artifact
-                result["questions"] = self._storyline_confirmation_questions()
+                result["questions"] = self._storyline_confirmation_questions(
+                    needs_detail=bool(state.get("storyline_feedback_error"))
+                )
                 result["next_action"] = "report_approve_or_feedback"
             else:
                 result["acceptance_report"] = decision.get("acceptance_report")
@@ -3648,7 +3650,19 @@ class ManagerOrchestrator:
         return "\n".join(lines)
 
     @staticmethod
-    def _storyline_confirmation_questions() -> list[dict[str, Any]]:
+    def _storyline_confirmation_questions(
+        *, needs_detail: bool = False
+    ) -> list[dict[str, Any]]:
+        if needs_detail:
+            return [
+                {
+                    "header": "修改说明",
+                    "question": "请说明 Storyline 不合适的原因，或直接写出你的修改意见。",
+                    "inputType": "text",
+                    "multiSelect": False,
+                    "options": [],
+                }
+            ]
         return [
             {
                 "header": "Storyline确认",
@@ -3672,13 +3686,6 @@ class ManagerOrchestrator:
                     },
                 ],
             },
-            {
-                "header": "修改说明",
-                "question": "如选择“不好”或“我自己修改”，请说明原因或直接写出你的修改意见；如确认可以，可留空。",
-                "inputType": "text",
-                "multiSelect": False,
-                "options": [],
-            },
         ]
 
     def _record_storyline_confirmation_feedback(
@@ -3686,8 +3693,27 @@ class ManagerOrchestrator:
         state: dict[str, Any],
         feedback: str,
     ) -> dict[str, Any]:
-        intent = self._classify_storyline_confirmation_feedback(feedback)
+        project_state = state.setdefault("project_state", {})
+        pending_intent = (
+            str(project_state.get("storyline_pending_feedback_intent") or "")
+            if isinstance(project_state, dict)
+            else ""
+        )
+        classified_intent = self._classify_storyline_confirmation_feedback(feedback)
+        intent = (
+            "approve"
+            if classified_intent == "approve"
+            else pending_intent
+            if pending_intent in ("rewrite", "custom")
+            else classified_intent
+        )
+        effective_feedback = feedback
+        if pending_intent in ("rewrite", "custom") and classified_intent != "approve":
+            prefix = "不好，原因：" if pending_intent == "rewrite" else "我自己修改："
+            effective_feedback = f"{prefix}{feedback}"
         if intent == "approve":
+            if isinstance(project_state, dict):
+                project_state.pop("storyline_pending_feedback_intent", None)
             state.setdefault("project_state", {})["storyline_confirmation"] = {
                 "status": "approved",
                 "human_feedback": feedback,
@@ -3704,6 +3730,8 @@ class ManagerOrchestrator:
 
         if intent in ("rewrite", "custom"):
             if not self._has_meaningful_storyline_feedback_detail(feedback, intent):
+                if isinstance(project_state, dict):
+                    project_state["storyline_pending_feedback_intent"] = intent
                 state["storyline_feedback_error"] = (
                     "选择“不好，重新写”或“我自己修改”时，需要说明原因或提供修改内容，"
                     "否则 Storyline 只能随机重写。"
@@ -3720,7 +3748,7 @@ class ManagerOrchestrator:
                 return self._human_gate_result(state)
             return self._revise_current_storyline_task_from_human_feedback(
                 state,
-                feedback=feedback,
+                feedback=effective_feedback,
                 mode=intent,
             )
 
@@ -3913,6 +3941,7 @@ class ManagerOrchestrator:
         project_state = state.setdefault("project_state", {})
         if isinstance(project_state, dict):
             project_state.pop("storyline_confirmation", None)
+            project_state.pop("storyline_pending_feedback_intent", None)
             project_state["storyline_revision_request"] = {
                 "mode": mode,
                 "feedback": feedback,

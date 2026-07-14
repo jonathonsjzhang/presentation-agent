@@ -234,6 +234,7 @@ Analysis 论点组确认 gate：
 Storyline 确认 gate：
 
 - 如果 `present_to_user` 是“Storyline 确认”，只展示这一版核心答案、章节故事线和关键边界，不要要求用户在多版故事线中选择。
+- 首次确认只发起 **1 个选择题**（可以进入 Report / 不好，重新写 / 我自己修改），不得固定追加“修改说明”第二题。只有用户选择后两项却没有给出可执行意见时，才在下一轮单独追问修改内容。
 - 用户确认可以：执行 `report approve --run "<run_id>"`，进入 Report。
 - 用户选择“不好，重新写”：必须让用户说明原因，再执行 `report feedback --text '<不好 + 原因>'`。不要直接 approve；runtime 会复用当前 Storyline task 进入 revise，修订后会再次回到 Storyline 确认 gate。
 - 用户选择“我自己修改”：把用户的非结构化修改意见原样放进 `report feedback --text`。不要替用户改 `storyline.v3` JSON；当前 Storyline agent 会根据反馈重新整理一版结构化故事线，并再次请求确认。
