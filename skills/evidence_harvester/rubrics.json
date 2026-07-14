@@ -19,6 +19,14 @@
       "fix": "补充遗漏的关键证据；无法读取时记录 unresolved。"
     },
     {
+      "id": "EVID-GRAIN-001",
+      "severity": "P0",
+      "dimension": "证据颗粒度",
+      "criterion": "数据型表格一个文件一条 evidence；访谈合集一次独立访谈/一位受访者一条 evidence。",
+      "check": "对照 evidence_index.evidence_grain 检查：one_item_per_file 的 E-id 是否只出现一次；同一受访者是否被按问题、主题、人口属性或原话重复拆条；source unit、sheet、指标或 data asset 是否被误当成独立 evidence。",
+      "fix": "把同一数据文件的发现合并进一个 item；把同一受访者的所有问题、观察、代表性原话和 caveat 合并进一个 item，同时保留独立访谈之间的边界。"
+    },
+    {
       "id": "EVID-ROLE-001",
       "severity": "P0",
       "dimension": "角色边界",
