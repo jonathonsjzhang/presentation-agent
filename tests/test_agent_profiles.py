@@ -184,10 +184,12 @@ class AgentProfileLoaderTests(unittest.TestCase):
             ]
             positions = [confirmation.index(item) for item in expected_order]
             self.assertEqual(positions, sorted(positions))
-            self.assertIn("研究目的", confirmation)
+            self.assertIn("研究背景", confirmation)
+            self.assertNotIn("研究目的", confirmation)
             self.assertIn("当前研究 hypo", confirmation)
             question_headers = [item["header"] for item in prepared["questions"]]
-            self.assertIn("研究目的", question_headers)
+            self.assertIn("研究背景", question_headers)
+            self.assertNotIn("研究目的", question_headers)
             self.assertIn("当前研究 hypo", question_headers)
             self.assertIn("高可信论据", question_headers)
             self.assertNotIn("Review模式", question_headers)
@@ -256,7 +258,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertIn("缺少字段", incomplete["feedback_error"])
 
             prepared = manager.record_human_feedback(json.dumps({
-                "research_purpose": "回答测试主题为何值得优先研究",
+                "research_background": "测试主题近期成为业务优先议题",
                 "research_direction": "测试主题由价值提升驱动",
                 "high_confidence_evidence": [],
                 "brief_confirmed": True,
@@ -270,7 +272,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertFalse(prepared["interaction_required"])
             self.assertEqual(prepared["questions"], [])
             self.assertIn("Brief 最终确认", prepared["present_to_user"])
-            self.assertIn("回答测试主题为何值得优先研究", prepared["present_to_user"])
+            self.assertIn("测试主题近期成为业务优先议题", prepared["present_to_user"])
             self.assertIn("用户标记的高可信论据", prepared["present_to_user"])
 
             prepared = manager.record_human_feedback(json.dumps({
@@ -335,7 +337,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertEqual(len(prepared["questions"]), 4)
         self.assertEqual(
             [question["header"] for question in prepared["questions"]],
-            ["研究目的", "当前研究 hypo", "高可信论据", "Brief确认"],
+            ["研究背景", "当前研究 hypo", "高可信论据", "Brief确认"],
         )
 
     def test_v03_manager_uses_profile_specific_skill_without_legacy_workers(
@@ -1559,7 +1561,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
                     self.assertEqual(prepared["agent_id"], "evidence_harvester")
                     continue
                 self.assertEqual(prepared["gate"], "brief")
-                self.assertIn("研究目的", prepared["missing_fields"])
+                self.assertIn("研究背景", prepared["missing_fields"])
                 self.assertIn("当前研究 hypo", prepared["missing_fields"])
                 self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
                 self.assertIn(

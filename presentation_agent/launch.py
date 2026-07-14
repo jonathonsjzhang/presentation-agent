@@ -27,7 +27,7 @@ BriefInput = Union[str, Path, dict]
 
 RAW_BRIEF_SCHEMA = "raw_brief.v1"
 
-# The opening brief gate now asks the user to complete research purpose,
+# The opening brief gate now asks the user to complete research background,
 # direction, and evidence confidence. Normalization only needs enough signal to
 # start that gate; defaults cover the rest.
 _STARTING_CONTEXT_FIELDS = (

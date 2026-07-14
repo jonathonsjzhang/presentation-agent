@@ -2363,8 +2363,8 @@ class ManagerOrchestrator:
         questions: list[dict[str, Any]] = []
         if always_ask or not cls._first_brief_text(brief, "research_purpose"):
             questions.append({
-                "header": "研究目的",
-                "question": "项目研究目的是什么（如为了回答XX问题，或XX研究的延伸）？",
+                "header": "研究背景",
+                "question": "项目研究背景是什么（如业务现状、问题由来或发起本次研究的上下文）？",
                 "inputType": "text",
                 "multiSelect": False,
                 "options": [],
@@ -2423,7 +2423,9 @@ class ManagerOrchestrator:
 
         aliases = {
             "research_purpose": "research_purpose",
+            "research_background": "research_purpose",
             "研究目的": "research_purpose",
+            "研究背景": "research_purpose",
             "research_direction": "research_direction",
             "hypothesis": "research_direction",
             "hypo": "research_direction",
@@ -2468,7 +2470,7 @@ class ManagerOrchestrator:
             return updates
 
         label_pattern = re.compile(
-            r"(?m)^\s*(研究目的|当前研究\s*hypo|高可信论据)\s*[：:]\s*(.+?)\s*$",
+            r"(?m)^\s*(研究背景|研究目的|当前研究\s*hypo|高可信论据)\s*[：:]\s*(.+?)\s*$",
             re.IGNORECASE,
         )
         for match in label_pattern.finditer(feedback):
@@ -2484,7 +2486,7 @@ class ManagerOrchestrator:
         updates = self._parse_brief_feedback(feedback)
         if not updates:
             state["brief_feedback_error"] = (
-                "未识别到可写回 Brief 的字段。请按结构化答案提交研究目的、"
+                "未识别到可写回 Brief 的字段。请按结构化答案提交研究背景、"
                 "当前研究 hypo、高可信论据或 brief_updates。"
             )
             self._save_state(state)
@@ -2746,7 +2748,7 @@ class ManagerOrchestrator:
             "",
             "| 项目 | 内容 |",
             "|------|------|",
-            f"| **研究目的** | {research_purpose} |",
+            f"| **研究背景** | {research_purpose} |",
             f"| **当前研究 hypo** | {research_direction} |",
         ]
 
@@ -2817,7 +2819,7 @@ class ManagerOrchestrator:
             )
         else:
             lines.append(
-                "请在同一个结构化提问面板中完成研究目的、当前研究 hypo、"
+                "请在同一个结构化提问面板中完成研究背景、当前研究 hypo、"
                 "高可信论据三项填空，并确认其余 Brief 设定是否准确。"
             )
 
@@ -2834,7 +2836,7 @@ class ManagerOrchestrator:
             )
         else:
             present_to_user = decision.get("user_message") or {
-            "brief": "请确认 brief 信息是否完整、准确。请补充研究目的、当前研究 hypo，并填写高可信论据；可调整报告主题、听众、项目类型、交付形式和报告篇幅。",
+            "brief": "请确认 brief 信息是否完整、准确。请补充研究背景、当前研究 hypo，并填写高可信论据；可调整报告主题、听众、项目类型、交付形式和报告篇幅。",
             "plan": "请确认 Manager 的任务定义和执行计划。",
             "worker_result": "当前步骤已完成，请查看中间产物。如需继续，确认后进入下一步。",
             "final": "所有任务已完成，请确认最终交付物。",
