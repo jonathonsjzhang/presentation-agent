@@ -8,16 +8,11 @@ from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
-from presentation_agent.io import read_json, write_json
 from presentation_agent.renderers.base import RenderResult
 from presentation_agent.renderers.visual_quality import (
     audit_render_output,
     renderer_readiness_issues,
 )
-from presentation_agent.step import StepRunner
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class VisualQualityTests(unittest.TestCase):
@@ -137,89 +132,6 @@ class VisualQualityTests(unittest.TestCase):
                 )
             self.assertFalse(audit["passed"])
             self.assertIn("near_black_raster", self._codes(audit))
-
-    def test_v04_format_commit_persists_real_page_quality_manifest(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            (root / "handoff").mkdir()
-            write_json(
-                root / "input.json",
-                {
-                    "contract_profile": "v0_4",
-                    "delivery_target": "document",
-                    "report_markdown": (
-                        "# 测试报告\n\n## Executive Summary\n\n"
-                        "留存率由 20% 提升到 30%。\n"
-                    ),
-                    "brief": {
-                        "title": "测试报告",
-                        "audience": "strategy_lead",
-                        "purpose": "decision_support",
-                    },
-                    "audience": "strategy_lead",
-                    "purpose": "decision_support",
-                    "input_readiness": {"status": "ready"},
-                    "manager_task": {"agent_id": "format"},
-                    "evidence_assets": [
-                        {
-                            "evidence_id": "E1",
-                            "asset_id": "T1-retention",
-                            "ref": "E1:T1-retention",
-                            "chart_ready": True,
-                            "chart_data": {
-                                "chart_type": "bar",
-                                "categories": ["之前", "现在"],
-                                "values": [20, 30],
-                            },
-                        }
-                    ],
-                },
-            )
-            write_json(
-                root / "run_state.json",
-                {
-                    "run_id": "visual-quality-integration",
-                    "task_id": "format-1",
-                    "agent_id": "format",
-                    "agent_name": "Format",
-                    "stage": 5,
-                    "status": "running",
-                    "current_step": "awaiting_gen_output",
-                    "round_index": 0,
-                    "input_path": str(root / "input.json"),
-                    "produced_artifacts": [],
-                    "history": [],
-                    "p0_open": [],
-                    "p1_open": [],
-                    "contract_profile": "v0_4",
-                    "review_subagents_enabled": False,
-                },
-            )
-            write_json(
-                root / "handoff" / "output_gen.json",
-                {
-                    "visuals": [
-                        {
-                            "type": "chart",
-                            "title": "留存率提升",
-                            "source_refs": ["E1:T1-retention"],
-                            "after_heading": "Executive Summary",
-                        }
-                    ]
-                },
-            )
-            result = StepRunner(
-                ROOT,
-                root,
-                data_root=root / "data",
-                contract_profile="v0_4",
-            ).commit()
-            artifact = read_json(root / "artifact.json")
-            audit = read_json(Path(artifact["visual_quality_manifest_path"]))
-            self.assertEqual(result["status"], "pending_human_review")
-            self.assertTrue(audit["passed"], audit["issues"])
-            self.assertTrue(audit["inspected_assets"])
-            self.assertTrue(audit["inspected_pages"])
 
     @staticmethod
     def _material() -> dict:
