@@ -1183,6 +1183,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             self.assertEqual(gate["next_action"], "report_approve_or_feedback")
             self.assertIn("Storyline 确认", gate["present_to_user"])
             self.assertIn("核心答案", gate["present_to_user"])
+            self.assertIn("Executive Summary", gate["present_to_user"])
             self.assertIn("故事线", gate["present_to_user"])
             self.assertIn(
                 "| 序号 | 章节 | 标题（Leadline） | 核心论证 |",

@@ -104,7 +104,7 @@ def derive_delivery_budget(report_charter: dict[str, Any]) -> dict[str, Any]:
         return {}
     # Keep the writing budget linear and predictable: 800-900 characters per
     # requested body page, with the midpoint as the generation target.  The
-    # Executive Summary remains a fixed 300-350 characters within that total.
+    # Executive Summary remains a fixed 250-350 characters within that total.
     report_char_min = limit * 800
     report_char_target = limit * 850
     report_char_limit = limit * 900
@@ -116,7 +116,7 @@ def derive_delivery_budget(report_charter: dict[str, Any]) -> dict[str, Any]:
         "body_char_target": report_char_target,
         "body_char_warning": report_char_limit,
         "report_body_char_limit": report_char_limit,
-        "executive_summary_char_min": 300,
+        "executive_summary_char_min": 250,
         "executive_summary_char_max": 350,
         "max_body_visuals": min(3, max(1, limit)),
     }

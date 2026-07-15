@@ -4,21 +4,27 @@
   "title": "Storyline worker submission",
   "type": "object",
   "additionalProperties": true,
-  "required": ["core_answer", "sections", "visual_evidence_plan"],
+  "required": ["core_answer", "executive_summary", "sections", "visual_evidence_plan"],
   "properties": {
     "core_answer": {"type": "string", "minLength": 1},
+    "executive_summary": {
+      "type": "string",
+      "minLength": 250,
+      "maxLength": 350,
+      "description": "A final-reader Markdown bullet-form Executive Summary written after the storyline, following the same logic and section order. Use one string with newline-separated top-level and optional second-level bullets."
+    },
     "sections": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": true,
-        "required": ["chapter", "heading", "brief", "finding_refs"],
+        "required": ["chapter", "heading", "brief", "finding_refs", "evidence_refs"],
         "properties": {
           "chapter": {
             "type": "string",
             "minLength": 1,
-            "description": "Concise chapter/section name used to identify the topic, not the conclusion."
+            "description": "Internal short label for locating the section. It is not the reader-facing section title."
           },
           "heading": {
             "type": "string",
@@ -28,13 +34,20 @@
           "brief": {
             "type": "string",
             "minLength": 1,
-            "description": "The core argument explaining how the section establishes its leadline."
+            "description": "A compact but complete editorial blueprint: the decisive evidence, supported inference, necessary explanation or boundary, and how the section advances the core answer. It is not final report prose."
           },
           "finding_refs": {
             "type": "array",
             "minItems": 1,
             "items": {"type": "string", "minLength": 1},
             "uniqueItems": true
+          },
+          "evidence_refs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true,
+            "description": "Evidence IDs from Analysis that are actually used by this section."
           },
           "visual_evidence_refs": {
             "type": "array",
