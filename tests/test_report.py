@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from presentation_agent.llm.schema import validate
+from presentation_agent.skill_package import load_skill_package
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +42,12 @@ class ReportCoreTests(unittest.TestCase):
                 "REPORT-TRACE-001",
             }.issubset(ids)
         )
+
+    def test_editorial_style_reference_is_bundled_for_generation(self) -> None:
+        instructions = load_skill_package(ROOT, "report").instructions
+        self.assertIn("BUNDLED REFERENCES", instructions)
+        self.assertIn("Reference: references/editorial_style.md", instructions)
+        self.assertIn("删除常见 AI 腔", instructions)
 
     def test_frozen_report_strictly_validates_as_report_v1(self) -> None:
         self.assertEqual(validate(self.report, self.schema), [])

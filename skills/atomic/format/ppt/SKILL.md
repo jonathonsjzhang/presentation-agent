@@ -1,11 +1,18 @@
 ---
 name: ppt
-description: Adapt report structure for a presentation with page-level claims, one question and conclusion per page, controlled length, and appendix split.
+description: Translate an approved report and storyline into a presentation with page-level conclusion titles, one role per page, exhibit-led copy, controlled length, and an appendix split while preserving the approved argument.
 ---
 
 # PPT Format
 
-Use this atomic capability only when `output_format=ppt`. Storyline units are pages and each page advances one claim.
+Use this atomic capability only when `output_format=ppt`. Core Storyline remains section-based; the PPT adapter may split approved sections into pages, but it must preserve their argument, order, evidence strength and boundaries.
+
+## PPT 内容转译原则
+
+- 每页只完成一个主要认知或证明动作，并给出一个主要 takeaway。背景、发现、机制、比较、含义或建议可以成为页面角色，但不要在同一页并列多个无关角色。
+- 页面标题应写清对象和判断，避免“现状分析、原因研究、策略建议”等目录式标题。只读标题链时，读者应能复述核心答案和主要推导。
+- 标题与主展项共同承担论证：标题给判断，图表、表格、矩阵或引文给依据。正文使用紧凑短语、标签和必要注释，不把长文段落直接粘贴到页面。
+- 来源、定义和方法边界放在读者可找到的位置，但不压过主要结论。具体分页、布局、字体、间距和文件质量由 renderer/runtime 完成并检查。
 
 ## PPT 版式核心规则
 
@@ -20,7 +27,7 @@ Use this atomic capability only when `output_format=ppt`. Storyline units are pa
   发现2：功能满意度驱动留存...
   ```
 - ✅ 每页必须包含**至少一个视觉元素**（图表/表格/形状/矩阵），**禁止纯文字页**
-- ✅ 图表类型选择不受限（柱状图/条形图/折线图/散点图/饼图/表格/矩阵等均可），根据数据特征选择最合适的方式。**散点图在展示"幅度 vs 比率"双维度时为首选**
+- ✅ 视觉类型必须以当前 renderer capability 为边界，根据阅读任务选择其原生支持的图表、表格、矩阵或 callout；不要在 prompt 中承诺 renderer 尚不支持的图形
 
 ### 2. 信息密度与版式多样性
 - 每页由三个信息层级构成：
