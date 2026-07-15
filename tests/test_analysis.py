@@ -25,12 +25,23 @@ class AnalysisSkillTests(unittest.TestCase):
         self.package = load_skill_package(ROOT, "analysis")
 
     def test_skill_package_contains_complete_instructions_and_schema(self) -> None:
-        self.assertIn("证据准备度", self.package.instructions)
-        self.assertIn("比较和追问", self.package.instructions)
-        self.assertIn("证据观察 → 有边界的推断", self.package.instructions)
-        self.assertIn("样本选择、指标口径与时间窗", self.package.instructions)
+        self.assertIn("证据综合与候选论点设计者", self.package.instructions)
+        self.assertIn("用 Minto 金字塔构造真正可选的论点组", self.package.instructions)
+        self.assertIn("结论先行、以上统下、归类分组、逻辑递进", self.package.instructions)
+        self.assertIn("关键证据或比较 → 识别出的模式", self.package.instructions)
+        self.assertIn("选择不同 option 是否会实质改变最终核心答案", self.package.instructions)
+        self.assertIn("不把 sub-theses 排成最终章节", self.package.instructions)
+        self.assertIn("核心视觉证据候选", self.package.instructions)
         self.assertIn("analysis.v1", self.package.schemas)
         self.assertNotIn("BUNDLED REFERENCES", self.package.instructions)
+
+        agents = read_json(ROOT / "configs" / "agents.json")
+        active = agents["contract_profiles"]["v0_4"]
+        analysis = next(worker for worker in active["workers"] if worker["id"] == "analysis")
+        self.assertIn(
+            "核心视觉证据候选",
+            analysis["output_contract"]["required_headings"],
+        )
 
     def test_frozen_fixture_is_strict_analysis_v1(self) -> None:
         self.assertEqual(self.artifact["agent_id"], "analysis")
