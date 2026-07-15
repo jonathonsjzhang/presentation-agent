@@ -29,6 +29,7 @@ class Pipeline:
         self.runner = LoopRunner(
             root,
             provider_override=provider_override,
+            contract_profile="v0_3",
         )
         self.stages = self._ordered_stages()
 

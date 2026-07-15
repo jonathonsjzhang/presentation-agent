@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any, Optional
 
@@ -15,6 +16,7 @@ from presentation_agent.agent_profiles import (
 from presentation_agent.capabilities.registry import CapabilityRegistry
 from presentation_agent.context import ContextAssembler
 from presentation_agent.cross_review import CrossStageReviewer
+from presentation_agent.failures import classify_failure
 from presentation_agent.io import append_jsonl, read_json, write_json
 from presentation_agent.llm.schema import validate
 from presentation_agent.memory import MemoryStore
@@ -230,7 +232,9 @@ class ManagerAgentRuntime:
             state = read_json(
                 self.run_dir / "manager_state.json", default={}
             )
-            if self.contract_profile == "v0_3":
+            if self.contract_profile == "v0_4":
+                self._normalize_v04_acceptance_packet(decision, state)
+            elif self.contract_profile == "v0_3":
                 self._normalize_v03_acceptance_packet(decision, state)
             report = decision.get("acceptance_report")
             if not isinstance(report, dict):
@@ -300,6 +304,93 @@ class ManagerAgentRuntime:
                 }
             )
         return decision
+
+    def _normalize_v04_acceptance_packet(
+        self,
+        decision: dict[str, Any],
+        state: dict[str, Any],
+    ) -> None:
+        """Build the small, explicit v0.4 dispatch/revision packet.
+
+        Manager owns the revision stage. Runtime only supplies canonical paths
+        and the happy-path next Worker; it never rewrites an explicit stage.
+        """
+
+        action = str(decision.get("action") or "")
+        if action not in {"dispatch", "revise"}:
+            return
+        current = state.get("current_task") or {}
+        current_agent = str(current.get("agent_id") or "")
+        happy_next = {
+            "analysis": "storyline",
+            "storyline": "report",
+            "report": "qa_preparation",
+            "qa_preparation": "format",
+        }
+        submitted = decision.get("task_packet")
+        submitted_packet = submitted if isinstance(submitted, dict) else {}
+        explicit_stage = str(
+            decision.get("stage")
+            or submitted_packet.get("agent_id")
+            or ""
+        )
+        target = (
+            happy_next.get(current_agent, "")
+            if action == "dispatch"
+            else explicit_stage or current_agent
+        )
+        if not target:
+            return
+        canonical_inputs = [
+            str(item.get("artifact_path"))
+            for item in state.get("accepted_artifacts", [])
+            if str(item.get("artifact_path") or "").strip()
+        ]
+        current_artifact = str(
+            current.get("artifact_path")
+            or (state.get("worker_result") or {}).get("artifact_path")
+            or ""
+        )
+        if current_artifact and current_artifact not in canonical_inputs:
+            canonical_inputs.append(current_artifact)
+        packet = copy.deepcopy(submitted_packet)
+        packet.update(
+            {
+                "agent_id": target,
+                "objective": str(
+                    packet.get("objective")
+                    or decision.get("feedback")
+                    or f"完成 {target} 阶段的专业任务。"
+                ),
+                "input_artifacts": canonical_inputs,
+            }
+        )
+        packet.setdefault("task_id", f"{action}-{target}")
+        if action == "revise":
+            feedback = str(
+                decision.get("feedback")
+                or "; ".join(
+                    str(item)
+                    for item in (decision.get("acceptance_report") or {}).get(
+                        "revision_requirements", []
+                    )
+                )
+            ).strip()
+            if feedback:
+                packet["revision_feedback"] = [feedback]
+        selection = (state.get("project_state") or {}).get(
+            "analysis_thesis_selection"
+        )
+        if selection:
+            packet["selected_analysis_thesis"] = selection
+        if target in {"report", "qa_preparation", "format"}:
+            confirmation = (state.get("project_state") or {}).get(
+                "storyline_confirmation"
+            )
+            if confirmation:
+                packet["storyline_approval"] = confirmation
+        decision["stage"] = target
+        decision["task_packet"] = packet
 
     def _normalize_v03_acceptance_packet(
         self,
@@ -569,7 +660,6 @@ class WorkerExecutor:
         packet: dict[str, Any],
         report_charter: dict[str, Any],
         raw_brief_path: Path,
-        review_subagents_enabled: bool = True,
     ) -> dict[str, Any]:
         agent_id = str(packet.get("agent_id") or "")
         if agent_id not in self.specs:
@@ -596,7 +686,25 @@ class WorkerExecutor:
                 "Manager task_packet 包含无法解析的 input_artifacts: "
                 + ", ".join(unresolved_inputs)
             )
-        if self.contract_profile == "v0_3":
+        if self.contract_profile == "v0_4":
+            required_kind = {
+                "storyline": "analysis",
+                "report": "storyline",
+                "qa_preparation": "report",
+                "format": "report",
+            }.get(agent_id)
+            available_kinds = {
+                str(data.get("artifact_kind") or "")
+                for _, data in resolved_artifacts
+                if isinstance(data, dict)
+                and data.get("schema") == "markdown_artifact.v1"
+            }
+            if required_kind and required_kind not in available_kinds:
+                raise StepError(
+                    f"v0.4 Worker {agent_id} 缺少 canonical {required_kind}.md; "
+                    f"已解析 artifact kinds={sorted(available_kinds)}"
+                )
+        elif self.contract_profile == "v0_3":
             required_schema = {
                 "storyline": "analysis.v1",
                 "report": "storyline.v3",
@@ -673,7 +781,6 @@ class WorkerExecutor:
             "created_at": now_iso(),
             "updated_at": now_iso(),
             "contract_profile": self.contract_profile,
-            "review_subagents_enabled": review_subagents_enabled,
         }
         write_json(task_dir / "run_state.json", run_state)
         return {
@@ -725,12 +832,10 @@ class WorkerExecutor:
             or run_state.get("agent_id")
             or ""
         )
-        step = str(instruction.get("step") or "")
-        role = "reviewer" if step.startswith("review") else "worker"
         return SpawnRequest(
             task_dir=request_task_dir,
             agent_id=agent_id,
-            role=role,
+            role="worker",
             instruction_path=Path(instruction.get("instruction_path") or ""),
             output_path=Path(instruction.get("output_path") or ""),
             input_path=Path(
@@ -843,8 +948,6 @@ class ManagerOrchestrator:
             "brief_interaction_stage": "collection_and_confirmation",
             "brief_explicitly_confirmed": False,
             "run_mode": None,  # set during brief confirmation; default pauses after analysis/storyline
-            "review_mode": "schema_only",
-            "review_subagents_enabled": False,
             "created_at": now_iso(),
             "updated_at": now_iso(),
         }
@@ -942,12 +1045,11 @@ class ManagerOrchestrator:
                     "input_path": str(task_dir / "input.json"),
                 }
                 # Spawn split on the awaiting_* read path. The StepRunner already
-                # advanced into a sub-step (e.g. review/revise) whose handoff files
+                # advanced into a generation or revision sub-step whose handoff files
                 # exist on disk; prepare() short-circuits here without going through
                 # WorkerExecutor.prepare(), so native adapters would otherwise never
                 # (re-)emit a spawn_request for this sub-step. Annotate it here so the
-                # read-only reviewer / revise worker is physically dispatched with the
-                # correct capability contract instead of leaving a stale request.
+                # current Worker is physically dispatched instead of leaving a stale request.
                 self._annotate_spawn(task_dir, instruction)
                 has_spawn = bool(instruction.get("spawn"))
                 instruction["next_action"] = (
@@ -1011,7 +1113,8 @@ class ManagerOrchestrator:
             budget_required = bool(delivery_budget.get("body_page_limit"))
             budget_audit = self._body_budget_audit(worker_result)
             requires_budget_pass = (
-                budget_required
+                self.contract_profile == "v0_3"
+                and budget_required
                 and (
                     action == "dispatch"
                     and current_task.get("agent_id") == "report"
@@ -1165,7 +1268,7 @@ class ManagerOrchestrator:
             return self._record_evidence_intake_completed(state, result)
         task["status"] = "worker_completed"
         task["artifact_path"] = result.get("artifact_path")
-        task["review_summary"] = result.get("review_summary")
+        task["validation_summary"] = result.get("validation_summary")
         task["render_result"] = result.get("render_result")
         task["rendered_files"] = list(result.get("rendered_files") or [])
         task["completed_at"] = now_iso()
@@ -1174,13 +1277,17 @@ class ManagerOrchestrator:
         state["execution_plan"] = read_json(self.plan_path, default={})
 
         task_dir = Path(str(task["task_dir"]))
-        cross_review = self.cross_reviewer.review_stage(task_dir)
+        cross_review = (
+            {"status": "pass", "issues": [], "summary": "v0.4 uses canonical documents and final render validation"}
+            if self.contract_profile == "v0_4"
+            else self.cross_reviewer.review_stage(task_dir)
+        )
         state["worker_result"] = {
             "task_id": task.get("task_id"),
             "agent_id": task.get("agent_id"),
             "artifact_path": result.get("artifact_path"),
             "artifact": read_json(Path(str(result.get("artifact_path"))), default={}),
-            "worker_review_summary": result.get("review_summary"),
+            "worker_validation_summary": result.get("validation_summary"),
             "worker_memory_notes": result.get("memory_notes"),
             "render_result": result.get("render_result"),
             "rendered_files": list(result.get("rendered_files") or []),
@@ -1190,6 +1297,8 @@ class ManagerOrchestrator:
                 read_json(Path(str(result.get("artifact_path"))), default={}),
             ),
         }
+        if self.contract_profile == "v0_4":
+            return self._record_v04_worker_completed(state, task)
         state["current_actor"] = "manager"
         state["manager_phase"] = "acceptance"
         state["manager_step"] = "init"
@@ -1202,11 +1311,404 @@ class ManagerOrchestrator:
         )
         return self.prepare()
 
+    def _record_v04_worker_completed(
+        self, state: dict[str, Any], task: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Advance the simple v0.4 happy path without Manager handshakes."""
+
+        agent_id = str(task.get("agent_id") or "")
+        if agent_id == "format" and not self._format_delivery_succeeded(
+            state.get("worker_result") or {}
+        ):
+            render_result = (state.get("worker_result") or {}).get(
+                "render_result"
+            ) or {}
+            return self._record_completed_runtime_failure(
+                state,
+                task,
+                str(render_result.get("detail") or "Format renderer did not produce a deliverable"),
+            )
+        state["last_failure_signature"] = None
+        state["failure_streak"] = 0
+        if agent_id in {"analysis", "storyline"}:
+            next_agent = "storyline" if agent_id == "analysis" else "report"
+            state["current_actor"] = "human"
+            state["human_gate"] = "worker_result"
+            state["pending_decision"] = {
+                "action": "dispatch",
+                "acceptance_report": {
+                    "verdict": "accept",
+                    "reason": f"等待用户确认 {agent_id} canonical document",
+                },
+                "task_packet": self._v04_task_packet(
+                    state, next_agent, include_current=True
+                ),
+            }
+            state["status"] = "awaiting_intermediate_review"
+            state["last_event"] = f"{agent_id}_human_gate"
+            self._save_state(state)
+            return self._human_gate_result(state)
+
+        self._v04_accept_current_task(state, task)
+        if agent_id == "report":
+            packet = task.get("packet") if isinstance(task.get("packet"), dict) else {}
+            if packet.get("revision_feedback"):
+                return self._dispatch(
+                    state,
+                    self._v04_task_packet(state, "format"),
+                    reason="v0.4 Report revision skips QA and reuses existing qa.md when available",
+                )
+            return self._dispatch(
+                state,
+                self._v04_task_packet(state, "qa_preparation"),
+                reason="v0.4 automatic happy-path dispatch report → QA",
+            )
+        if agent_id == "qa_preparation":
+            return self._dispatch(
+                state,
+                self._v04_task_packet(state, "format"),
+                reason="v0.4 automatic happy-path dispatch QA → Format",
+            )
+        if agent_id == "format":
+            worker_result = state.get("worker_result") or {}
+            published = self._publish_deliverables(
+                self._format_rendered_files(worker_result)
+                + [
+                    str((worker_result.get("artifact") or {}).get("render_manifest_path") or "")
+                ]
+            )
+            state["published_files"] = published
+            task["published_files"] = published
+            self._replace_task(state, task)
+            for item in state.get("accepted_artifacts", []):
+                if item.get("task_dir") == task.get("task_dir"):
+                    item["published_files"] = published
+            state["current_actor"] = "human"
+            state["human_gate"] = "final"
+            state["pending_decision"] = {
+                "action": "complete",
+                "acceptance_report": {
+                    "verdict": "accept",
+                    "reason": "真实交付文件、render manifest 与发布副本已生成。",
+                },
+            }
+            state["status"] = "awaiting_final_approval"
+            state["last_event"] = "format_final_gate"
+            self._save_state(state)
+            return self._human_gate_result(state)
+        raise StepError(f"v0.4 未知 Worker 完成状态: {agent_id}")
+
+    def record_worker_failure(self, error: Exception) -> dict[str, Any]:
+        """Retry one deterministic failure in the same task, then circuit-break."""
+
+        state = self._load_state()
+        task = state.get("current_task")
+        if state.get("current_actor") != "worker" or not isinstance(task, dict):
+            raise StepError("当前没有可记录失败的 Worker")
+        stage = str(task.get("agent_id") or "runtime")
+        failure = classify_failure(str(error), stage=stage)
+        streak = self._register_failure(state, failure)
+        write_json(Path(str(task["task_dir"])) / "runtime_failure.json", failure)
+        task["last_failure"] = failure
+        task["failure_streak"] = streak
+        self._replace_task(state, task)
+        if streak >= 2:
+            return self._open_failure_circuit(state, task, failure)
+
+        runner = StepRunner(
+            self.root,
+            Path(str(task["task_dir"])),
+            data_root=self.data_root,
+            contract_profile=self.contract_profile,
+        )
+        instruction = runner.prepare_revision_for_failure(failure)
+        instruction["actor"] = "worker"
+        instruction["structured_error"] = failure
+        instruction["retry_same_task"] = True
+        self._annotate_spawn(Path(str(task["task_dir"])), instruction)
+        instruction["next_action"] = (
+            "host_spawn_then_continue"
+            if instruction.get("spawn")
+            else "host_write_output_then_continue"
+        )
+        state["last_instruction"] = instruction
+        state["status"] = "retrying_worker_failure"
+        self._save_state(state)
+        return instruction
+
+    def _record_completed_runtime_failure(
+        self,
+        state: dict[str, Any],
+        task: dict[str, Any],
+        message: str,
+    ) -> dict[str, Any]:
+        failure = classify_failure(message, stage=str(task.get("agent_id") or "format"))
+        streak = self._register_failure(state, failure)
+        write_json(Path(str(task["task_dir"])) / "runtime_failure.json", failure)
+        task["last_failure"] = failure
+        task["failure_streak"] = streak
+        self._replace_task(state, task)
+        if streak >= 2:
+            return self._open_failure_circuit(state, task, failure)
+        target = str(failure.get("responsible_stage") or "format")
+        if target not in {"analysis", "storyline", "report", "qa_preparation", "format"}:
+            return self._open_failure_circuit(state, task, failure)
+        state["current_actor"] = "manager"
+        state["human_gate"] = None
+        state["pending_decision"] = None
+        self._save_state(state)
+        return self._dispatch(
+            state,
+            self._v04_task_packet(
+                state,
+                target,
+                feedback=str(failure.get("message") or ""),
+            ),
+            reason=f"structured runtime repair: {failure['error_code']}",
+        )
+
+    @staticmethod
+    def _register_failure(
+        state: dict[str, Any], failure: dict[str, Any]
+    ) -> int:
+        signature = str(failure.get("signature") or "")
+        streak = (
+            int(state.get("failure_streak") or 0) + 1
+            if state.get("last_failure_signature") == signature
+            else 1
+        )
+        state["last_failure_signature"] = signature
+        state["failure_streak"] = streak
+        row = dict(failure)
+        row["streak"] = streak
+        row["at"] = now_iso()
+        state.setdefault("runtime_failures", []).append(row)
+        return streak
+
+    def _open_failure_circuit(
+        self,
+        state: dict[str, Any],
+        task: dict[str, Any],
+        failure: dict[str, Any],
+    ) -> dict[str, Any]:
+        task["status"] = "blocked"
+        self._replace_task(state, task)
+        state["current_actor"] = "human"
+        state["human_gate"] = "decision"
+        state["status"] = "blocked_repeated_failure"
+        state["pending_decision"] = {
+            "action": "blocked",
+            "structured_error": failure,
+            "acceptance_report": {
+                "verdict": "blocked",
+                "reason": f"同一错误连续出现 2 次，已熔断：{failure.get('error_code')}",
+            },
+        }
+        self._save_state(state)
+        return self._human_gate_result(state)
+
+    def revise_stage(self, stage: str, feedback: str) -> dict[str, Any]:
+        """Dispatch an explicit v0.4 stage revision from any human gate."""
+
+        if self.contract_profile != "v0_4":
+            raise StepError("report revise --stage 仅支持 v0.4")
+        if stage not in {"analysis", "storyline", "report", "qa_preparation", "format"}:
+            raise StepError(f"未知返工阶段: {stage}")
+        if not str(feedback or "").strip():
+            raise StepError("返工 feedback 不能为空")
+        state = self._load_state()
+        if state.get("current_actor") != "human":
+            raise StepError("显式阶段返工只能从人工 Gate 发起")
+        state["human_gate"] = None
+        state["pending_decision"] = None
+        state["current_actor"] = "manager"
+        state["status"] = "running"
+        self._save_state(state)
+        return self._dispatch(
+            state,
+            self._v04_task_packet(state, stage, feedback=str(feedback).strip()),
+            reason=f"explicit stage revision: {stage}",
+        )
+
+    def continue_until_boundary(self, max_steps: int = 50) -> dict[str, Any]:
+        """Consume ready files and deterministic transitions until external work is needed."""
+
+        for _ in range(max_steps):
+            state = self._load_state()
+            actor = state.get("current_actor")
+            if actor == "human":
+                return self.prepare()
+            if actor == "manager":
+                prepared = self.prepare()
+                if prepared.get("actor") == "manager":
+                    return prepared
+                continue
+            if actor != "worker":
+                raise StepError(f"未知 current_actor: {actor}")
+            task_dir = self.current_worker_dir(state)
+            if task_dir is None:
+                raise StepError("Manager state 缺少当前 Worker task_dir")
+            runner = StepRunner(
+                self.root,
+                task_dir,
+                data_root=self.data_root,
+                contract_profile=self.contract_profile,
+            )
+            worker_status = runner.status()
+            output_path = str(worker_status.get("output_path") or "")
+            if not output_path or not Path(output_path).is_file() or Path(output_path).stat().st_size == 0:
+                return self.prepare()
+            try:
+                if state.get("spawn_adapter") != "inline":
+                    self.record_spawn_completed()
+                worker_result = runner.commit()
+            except StepError as exc:
+                return self.record_worker_failure(exc)
+            if worker_result.get("step") == "done":
+                result = self.record_worker_completed(worker_result)
+            else:
+                result = self.prepare()
+            if result.get("actor") in {"human", "manager"}:
+                return result
+            # A newly dispatched Worker needs external generation unless its
+            # output was already written, in which case the loop can consume it.
+        raise StepError(f"continue 超过安全上限 {max_steps} 步")
+
+    def _publish_deliverables(self, files: list[str]) -> list[str]:
+        if self.run_dir.parent.name == "runs":
+            publish_dir = self.run_dir.parent.parent / "artifacts" / "deliverables" / self.run_dir.name
+        else:
+            publish_dir = self.run_dir / "deliverables"
+        publish_dir.mkdir(parents=True, exist_ok=True)
+        published: list[str] = []
+        for value in files:
+            source = Path(value)
+            if not source.is_file():
+                continue
+            target = publish_dir / source.name
+            if source.resolve() != target.resolve():
+                shutil.copy2(source, target)
+            if str(target) not in published:
+                published.append(str(target))
+        return published
+
+    def _v04_accept_current_task(
+        self, state: dict[str, Any], task: dict[str, Any]
+    ) -> None:
+        task["status"] = "accepted"
+        task["accepted_at"] = now_iso()
+        self._replace_task(state, task)
+        self._set_plan_task_status(str(task.get("task_id") or ""), "accepted")
+        state["accepted_artifacts"] = [
+            item
+            for item in state.get("accepted_artifacts", [])
+            if item.get("task_dir") != task.get("task_dir")
+        ]
+        state.setdefault("accepted_artifacts", []).append(
+            {
+                "task_id": task.get("task_id"),
+                "agent_id": task.get("agent_id"),
+                "artifact_path": task.get("artifact_path"),
+                "task_dir": task.get("task_dir"),
+                "render_result": task.get("render_result"),
+                "rendered_files": list(task.get("rendered_files") or []),
+            }
+        )
+
+    def _v04_task_packet(
+        self,
+        state: dict[str, Any],
+        target: str,
+        *,
+        include_current: bool = False,
+        feedback: str = "",
+    ) -> dict[str, Any]:
+        paths = [
+            str(item.get("artifact_path"))
+            for item in state.get("accepted_artifacts", [])
+            if str(item.get("artifact_path") or "").strip()
+        ]
+        current = state.get("current_task") or {}
+        current_path = str(current.get("artifact_path") or "")
+        if include_current and current_path and current_path not in paths:
+            paths.append(current_path)
+        packet: dict[str, Any] = {
+            "task_id": f"{target}-{len(state.get('tasks', [])) + 1}",
+            "agent_id": target,
+            "objective": feedback or f"完成 {target} 阶段的专业任务。",
+            "input_artifacts": paths,
+        }
+        selection = (state.get("project_state") or {}).get(
+            "analysis_thesis_selection"
+        )
+        if selection:
+            packet["selected_analysis_thesis"] = selection
+        confirmation = (state.get("project_state") or {}).get(
+            "storyline_confirmation"
+        )
+        if confirmation:
+            packet["storyline_approval"] = confirmation
+        if feedback:
+            packet["revision_feedback"] = [feedback]
+        return packet
+
+    @staticmethod
+    def _v04_charter_from_brief(brief: dict[str, Any]) -> dict[str, Any]:
+        """Create the minimal shared charter deterministically from confirmed Brief."""
+
+        materials = brief.get("materials") if isinstance(brief.get("materials"), list) else []
+        inventory: list[str] = []
+        for index, item in enumerate(materials, 1):
+            label = (
+                item.get("name")
+                or item.get("material_id")
+                or item.get("path")
+                or item.get("source_path")
+                if isinstance(item, dict)
+                else item
+            )
+            inventory.append(str(label or f"material-{index}"))
+        topic = str(brief.get("topic") or "待分析主题").strip()
+        purpose = str(
+            brief.get("research_purpose")
+            or brief.get("decision_goal")
+            or f"回答关于{topic}的核心问题"
+        ).strip()
+        direction = str(
+            brief.get("research_direction")
+            or brief.get("expected_action")
+            or "形成可供讨论的事实判断"
+        ).strip()
+        scope = brief.get("scope") if isinstance(brief.get("scope"), list) else []
+        requested_targets = (
+            brief.get("requested_delivery_targets")
+            or brief.get("delivery_targets")
+            or ["document"]
+        )
+        if isinstance(requested_targets, str):
+            requested_targets = [requested_targets]
+        return {
+            "topic": topic,
+            "research_purpose": purpose,
+            "research_direction": direction,
+            "audience": str(brief.get("audience") or "exec_office"),
+            "project_type": str(brief.get("project_type") or "分析类"),
+            "report_type": str(brief.get("report_type") or "deep_dive"),
+            "report_length": str(brief.get("report_length") or "3页"),
+            "requested_delivery_targets": list(requested_targets),
+            "decision_question": str(brief.get("decision_question") or purpose),
+            "expected_action": str(brief.get("expected_action") or direction),
+            "scope": scope or [topic],
+            "material_inventory": inventory,
+            "high_confidence_evidence": list(brief.get("high_confidence_evidence") or []),
+            "constraints": list(brief.get("constraints") or []),
+            "assumptions": list(brief.get("assumptions") or []),
+        }
+
     def approve(
         self,
         *,
         run_mode: Optional[str] = None,
-        review_mode: Optional[str] = None,
         delivery_option: Optional[str] = None,
     ) -> dict[str, Any]:
         state = self._load_state()
@@ -1244,18 +1746,6 @@ class ManagerOrchestrator:
             else:
                 state["run_mode"] = list(DEFAULT_CHECKPOINT_PAUSE_AGENTS)
                 state["custom_pause_agents"] = list(DEFAULT_CHECKPOINT_PAUSE_AGENTS)
-            selected_review_mode = (
-                review_mode
-                or decision.get("review_mode")
-                or brief_data.get("review_mode")
-                or "schema_only"
-            )
-            if selected_review_mode not in ("independent", "schema_only"):
-                raise StepError(f"未知 review_mode: {selected_review_mode}")
-            state["review_mode"] = selected_review_mode
-            state["review_subagents_enabled"] = (
-                selected_review_mode == "independent"
-            )
             state["human_gate"] = None
             state["pending_decision"] = None
             state["current_actor"] = "manager"
@@ -1266,8 +1756,20 @@ class ManagerOrchestrator:
             self._save_state(state)
             self._append_decision("brief_confirmed",
                 "用户确认了 brief，"
-                f"run_mode={state['run_mode']}，review_mode={selected_review_mode}",
+                f"run_mode={state['run_mode']}",
                 {"brief": brief_data})
+            if self.contract_profile == "v0_4":
+                charter = self._v04_charter_from_brief(
+                    read_json(self.raw_brief_path, default={})
+                )
+                return self._commit_plan(
+                    state,
+                    {
+                        "action": "dispatch",
+                        "report_charter": charter,
+                        "task_packet": self._v04_task_packet(state, "analysis"),
+                    },
+                )
             return {"actor": "manager", "step": "planning",
                     "message": "Brief 已确认，开始规划。"}
         if gate == "plan":
@@ -1310,6 +1812,15 @@ class ManagerOrchestrator:
             packet = decision.get("task_packet")
             if not isinstance(packet, dict):
                 raise StepError("已确认中间产物，但 Manager decision 中没有 task_packet")
+            if self.contract_profile == "v0_4":
+                current_task = state.get("current_task")
+                if isinstance(current_task, dict):
+                    self._v04_accept_current_task(state, current_task)
+                # Rebuild after recording the human approval so every later
+                # Worker receives all canonical documents and approval notes.
+                packet = self._v04_task_packet(
+                    state, str(packet.get("agent_id") or "")
+                )
             state["current_actor"] = "manager"
             self._save_state(state)
             return self._dispatch(state, packet, reason="user reviewed intermediate result")
@@ -1328,6 +1839,7 @@ class ManagerOrchestrator:
                 "run_dir": str(self.run_dir),
                 "accepted_artifacts": state.get("accepted_artifacts", []),
                 "rendered_files": self._accepted_rendered_files(state),
+                "published_files": list(state.get("published_files") or []),
                 "present_to_user": decision.get("user_message") or "汇报项目已完成并通过最终确认。",
             }
         if gate == "delivery_options":
@@ -1671,11 +2183,8 @@ class ManagerOrchestrator:
         """Emit a spawn_request for an awaiting_* sub-step and annotate the
         instruction. No-op for the inline adapter (preserves today's behaviour).
 
-        The sub-step's role is derived from the step name via the same rule as
-        WorkerExecutor: review/revise-review steps spawn a read-only reviewer,
-        everything else a writable worker. This keeps the maker-checker capability
-        contract physically enforced on the awaiting_* read path too, not only on
-        the dispatch/prepare transition path.
+        Every awaiting generation/revision sub-step is performed by the same
+        stage Worker; there is no separate process Reviewer role.
         """
         adapter = self.workers.spawn_adapter
         if adapter.kind == "inline":
@@ -1724,8 +2233,7 @@ class ManagerOrchestrator:
             except Exception:
                 pass
         # _build_spawn_request keys off instruction["step"]; the awaiting_* short
-        # circuit only has current_step, which already carries the sub-step name
-        # (e.g. "awaiting_review_output" / "awaiting_revise_output").
+        # circuit already carries the generation or revision sub-step name.
         step = str(instruction.get("step") or "")
         sub = step[len("awaiting_"):] if step.startswith("awaiting_") else step
         request = self.workers._build_spawn_request(
@@ -1907,7 +2415,11 @@ class ManagerOrchestrator:
         task = state.get("current_task")
 
         # --- Manager memory scan for acceptance insights ---
-        memory_alerts = self._scan_acceptance_memory(state, decision)
+        memory_alerts = (
+            []
+            if self.contract_profile == "v0_4"
+            else self._scan_acceptance_memory(state, decision)
+        )
         if memory_alerts:
             decision.setdefault("memory_alerts", []).extend(memory_alerts)
 
@@ -2062,9 +2574,6 @@ class ManagerOrchestrator:
             packet,
             state.get("report_charter") or read_json(self.charter_path, default={}),
             self.raw_brief_path,
-            review_subagents_enabled=bool(
-                state.get("review_subagents_enabled", True)
-            ),
         )
         state.setdefault("tasks", []).append(task)
         self._set_plan_task_status(str(task.get("task_id") or ""), "dispatched", task)
@@ -2853,7 +3362,6 @@ class ManagerOrchestrator:
             "status": state.get("status"),
             "present_to_user": present_to_user,
             "run_mode": state.get("run_mode"),
-            "review_mode": state.get("review_mode"),
         }
 
         if gate == "brief":
@@ -2980,6 +3488,11 @@ class ManagerOrchestrator:
         elif gate in ("final", "decision"):
             result["acceptance_report"] = decision.get("acceptance_report")
             result["questions_for_human"] = decision.get("questions_for_human", [])
+            if decision.get("structured_error"):
+                result["structured_error"] = decision["structured_error"]
+            if state.get("published_files"):
+                result["published_files"] = list(state["published_files"])
+                result["rendered_files"] = self._accepted_rendered_files(state)
             result["next_action"] = "report_approve" if gate == "final" else "human_feedback"
 
         else:
@@ -3029,6 +3542,9 @@ class ManagerOrchestrator:
             return False
         if state.get("human_gate") != "worker_result":
             return False
+        if self.contract_profile == "v0_4":
+            artifact = (state.get("worker_result") or {}).get("artifact") or {}
+            return bool(self._artifact_markdown(artifact))
         return bool(self._analysis_thesis_options_from_state(state))
 
     def _analysis_thesis_selection(self, state: dict[str, Any]) -> dict[str, Any] | None:
@@ -3052,6 +3568,36 @@ class ManagerOrchestrator:
 
     @staticmethod
     def _analysis_thesis_options(artifact: dict[str, Any]) -> list[dict[str, Any]]:
+        markdown = ManagerOrchestrator._artifact_markdown(artifact)
+        if markdown:
+            matches = list(
+                re.finditer(
+                    r"^###\s+(方案\s*[A-C一二三123]|TG-[A-Za-z0-9_-]+)\s*[：:]?\s*(.+)$",
+                    markdown,
+                    flags=re.MULTILINE,
+                )
+            )
+            options = []
+            for index, match in enumerate(matches[:3]):
+                end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+                body = markdown[match.end():end].strip()
+                option_id = re.sub(r"\s+", "", match.group(1))
+                options.append(
+                    {
+                        "option_id": option_id,
+                        "main_thesis": match.group(2).strip(),
+                        "sub_theses": [
+                            {"claim": line.lstrip("- ").strip(), "finding_refs": []}
+                            for line in body.splitlines()
+                            if line.strip().startswith("-")
+                        ][:4],
+                        "finding_refs": re.findall(r"\[(EV-[A-Za-z0-9_-]+)\]", body),
+                        "evidence_strength": "",
+                        "best_for": "",
+                        "tradeoffs": [],
+                    }
+                )
+            return options
         raw_options = artifact.get("thesis_options")
         if not isinstance(raw_options, list) or not raw_options:
             raw_options = artifact.get("viewpoint_candidates")
@@ -3471,7 +4017,7 @@ class ManagerOrchestrator:
             raise StepError(f"Analysis run_state 不存在，无法复用当前 task: {run_state_path}")
         run_state = read_json(run_state_path, default={})
         round_index = int(run_state.get("round_index") or 0)
-        run_state["current_step"] = "review_completed"
+        run_state["current_step"] = "validation_completed"
         run_state["status"] = "running"
         run_state["max_revision_rounds"] = max(
             int(run_state.get("max_revision_rounds") or 0),
@@ -3509,7 +4055,11 @@ class ManagerOrchestrator:
         )
         run_state["updated_at"] = now_iso()
         handoff_dir = task_dir / "handoff"
-        stale_revise_output = handoff_dir / "output_revise.json"
+        stale_revise_output = handoff_dir / (
+            "output_revise.md"
+            if self.contract_profile == "v0_4"
+            else "output_revise.json"
+        )
         if stale_revise_output.exists():
             stale_revise_output.unlink()
         write_json(run_state_path, run_state)
@@ -3558,6 +4108,8 @@ class ManagerOrchestrator:
         if state.get("human_gate") != "worker_result":
             return False
         artifact = self._storyline_artifact_from_state(state)
+        if self.contract_profile == "v0_4":
+            return bool(self._artifact_markdown(artifact))
         return bool(artifact.get("core_answer") or artifact.get("sections"))
 
     def _storyline_artifact_from_state(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -3578,6 +4130,22 @@ class ManagerOrchestrator:
         *,
         error: str = "",
     ) -> str:
+        markdown = ManagerOrchestrator._artifact_markdown(artifact)
+        if markdown:
+            lines = [
+                "## Storyline 确认",
+                "",
+                "Storyline 已基于确认后的 Analysis 方向形成完整文档。请阅读全文后确认是否进入 Report；如需重写或修改，请说明具体原因。",
+                "",
+                markdown,
+                "",
+                "---",
+                "",
+                "请选择：可以进入 Report；或说明需要重写/修改的具体内容。",
+            ]
+            if error:
+                lines.insert(3, f"需要补充：{error}")
+            return "\n".join(lines)
         lines = [
             "## Storyline 确认",
             "",
@@ -3652,6 +4220,18 @@ class ManagerOrchestrator:
             ]
         )
         return "\n".join(lines)
+
+    @staticmethod
+    def _artifact_markdown(artifact: dict[str, Any]) -> str:
+        if not isinstance(artifact, dict):
+            return ""
+        direct = artifact.get("content_markdown")
+        if isinstance(direct, str) and direct.strip():
+            return direct.strip()
+        path = Path(str(artifact.get("content_path") or ""))
+        if path.is_file():
+            return path.read_text(encoding="utf-8").strip()
+        return ""
 
     @staticmethod
     def _storyline_confirmation_questions(
@@ -3886,7 +4466,7 @@ class ManagerOrchestrator:
             raise StepError(f"Storyline run_state 不存在，无法复用当前 task: {run_state_path}")
         run_state = read_json(run_state_path, default={})
         round_index = int(run_state.get("round_index") or 0)
-        run_state["current_step"] = "review_completed"
+        run_state["current_step"] = "validation_completed"
         run_state["status"] = "running"
         run_state["max_revision_rounds"] = max(
             int(run_state.get("max_revision_rounds") or 0),
@@ -3925,7 +4505,11 @@ class ManagerOrchestrator:
         )
         run_state["updated_at"] = now_iso()
         handoff_dir = task_dir / "handoff"
-        stale_revise_output = handoff_dir / "output_revise.json"
+        stale_revise_output = handoff_dir / (
+            "output_revise.md"
+            if self.contract_profile == "v0_4"
+            else "output_revise.json"
+        )
         if stale_revise_output.exists():
             stale_revise_output.unlink()
         write_json(run_state_path, run_state)

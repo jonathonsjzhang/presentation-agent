@@ -53,7 +53,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
         self.assertIn("独立且不带任何 tool call", instructions)
         self.assertIn("同时含有 `tool_calls`", instructions)
 
-    def test_user_facing_report_start_defaults_to_v03(self) -> None:
+    def test_user_facing_report_start_defaults_to_v04(self) -> None:
         args = build_parser().parse_args(
             [
                 "report",
@@ -64,7 +64,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 "codex",
             ]
         )
-        self.assertEqual(args.contract_profile, "v0_3")
+        self.assertEqual(args.contract_profile, "v0_4")
         self.assertEqual(args.spawn_adapter, "codex")
         approve = build_parser().parse_args(
             [
@@ -74,20 +74,16 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 "run-id",
                 "--run-mode",
                 "full_auto",
-                "--review-mode",
-                "schema_only",
                 "--delivery-option",
                 "format:ppt",
             ]
         )
         self.assertEqual(approve.run_mode, "full_auto")
-        self.assertEqual(approve.review_mode, "schema_only")
         self.assertEqual(approve.delivery_option, "format:ppt")
         default_approve = build_parser().parse_args(
             ["report", "approve", "--run", "run-id"]
         )
         self.assertIsNone(default_approve.run_mode)
-        self.assertEqual(default_approve.review_mode, "schema_only")
         custom = build_parser().parse_args(
             [
                 "report",
@@ -288,8 +284,6 @@ class AgentProfileLoaderTests(unittest.TestCase):
             manager.approve()
             approved_state = manager.status()["state"]
             self.assertEqual(approved_state["run_mode"], ["analysis", "storyline"])
-            self.assertEqual(approved_state["review_mode"], "schema_only")
-            self.assertFalse(approved_state["review_subagents_enabled"])
 
     def test_brief_gate_exposes_evidence_confidence_text_input(self) -> None:
         brief = normalize_brief(
@@ -1354,7 +1348,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             brief["requested_followup_targets"], ["ppt", "html"]
         )
 
-    def test_review_choice_is_copied_into_each_worker_task(self) -> None:
+    def test_worker_task_has_no_reviewer_control_flags(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             run_dir = Path(temp_dir)
             raw_brief_path = run_dir / "raw_brief.json"
@@ -1385,10 +1379,10 @@ class AgentProfileLoaderTests(unittest.TestCase):
                 },
                 read_json(FIXTURES / "report_charter.v2.valid.json"),
                 raw_brief_path,
-                review_subagents_enabled=False,
             )
             task_state = read_json(Path(task["task_dir"]) / "run_state.json")
-            self.assertFalse(task_state["review_subagents_enabled"])
+            self.assertNotIn("review_subagents_enabled", task_state)
+            self.assertNotIn("review_mode", task_state)
 
     def test_step_runner_recompiles_stale_format_capabilities_from_input(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1484,7 +1478,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
                     raw_brief_path,
                 )
 
-    def test_spawn_chain_uses_worker_reviewer_worker_roles(self) -> None:
+    def test_spawn_chain_uses_worker_role_for_generation_and_revision(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             task_dir = Path(temp_dir)
             handoff = task_dir / "handoff"
@@ -1503,7 +1497,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             )
 
             roles = {}
-            for step in ("gen", "review", "revise"):
+            for step in ("gen", "revise"):
                 request = executor._build_spawn_request(
                     task_dir,
                     {
@@ -1516,14 +1510,9 @@ class AgentProfileLoaderTests(unittest.TestCase):
                     },
                 )
                 roles[step] = request.role
-                if step == "review":
-                    detail = WorkBuddySpawnAdapter().spawn(request).detail
-                    self.assertEqual(detail["subagent_type"], "Explore")
-                    self.assertEqual(detail["result_delivery"], "host_relay")
-
             self.assertEqual(
                 roles,
-                {"gen": "worker", "review": "reviewer", "revise": "worker"},
+                {"gen": "worker", "revise": "worker"},
             )
 
     def test_v03_normalization_preserves_material_references(self) -> None:
@@ -1641,9 +1630,9 @@ class AgentProfileLoaderTests(unittest.TestCase):
                     prepared["present_to_user"],
                 )
 
-    def test_default_profile_activates_document_first_v03(self) -> None:
+    def test_default_profile_activates_markdown_first_v04(self) -> None:
         profile = load_agent_profile(ROOT)
-        self.assertEqual(profile.contract_profile, "v0_3")
+        self.assertEqual(profile.contract_profile, "v0_4")
         self.assertEqual(
             profile.profile_config["schema_gate_mode"],
             "advisory",
@@ -1669,7 +1658,7 @@ class AgentProfileLoaderTests(unittest.TestCase):
             manager = ManagerOrchestrator(ROOT, run_dir)
             prepared = manager.initialize_run(brief_path)
 
-        self.assertEqual(manager.contract_profile, "v0_3")
+        self.assertEqual(manager.contract_profile, "v0_4")
         self.assertEqual(prepared["brief"]["delivery_targets"], ["document"])
         self.assertIn(
             "analysis（分析） → storyline（故事线） → report（报告产出） → qa_preparation（追问清单） → format（可视化排版）",
@@ -1776,12 +1765,6 @@ class V03StepRuntimeTests(unittest.TestCase):
                 output = read_json(FIXTURES / fixtures[agent_id])
                 Path(prepared["output_path"]).write_text(
                     json.dumps(output, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                review = runner.commit()
-                self.assertEqual(review["step"], "review")
-                Path(review["output_path"]).write_text(
-                    '{"objections": []}',
                     encoding="utf-8",
                 )
                 done = runner.commit()

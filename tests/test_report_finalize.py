@@ -54,8 +54,6 @@ class ReportFinalizeIntegrationTests(unittest.TestCase):
     def _finish(self, report: dict | None = None) -> dict:
         generation = self.runner.prepare()
         write_json(Path(generation["output_path"]), report or read_json(REPORT_FIXTURE))
-        review = self.runner.commit()
-        write_json(Path(review["output_path"]), {"objections": []})
         return self.runner.commit()
 
     def test_success_materializes_canonical_markdown(self) -> None:
@@ -160,9 +158,6 @@ class ReportFinalizeIntegrationTests(unittest.TestCase):
         report["report_markdown"] = ""
         generation = self.runner.prepare()
         write_json(Path(generation["output_path"]), report)
-        review = self.runner.commit()
-        self.assertEqual(review["step"], "review")
-        write_json(Path(review["output_path"]), {"objections": []})
         result = self.runner.commit()
         self.assertEqual(result["status"], "blocked")
         self.assertEqual(

@@ -133,7 +133,7 @@ class ReportProfileTests(unittest.TestCase):
         self.assertEqual(brief["report_type"], "deep_dive")
         self.assertEqual(brief["output_format"], "document")
         self.assertEqual(brief["delivery_targets"], ["document"])
-        self.assertEqual(brief["report_profile_version"], "v0_3")
+        self.assertEqual(brief["report_profile_version"], "v0_4")
 
 
 if __name__ == "__main__":

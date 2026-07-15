@@ -168,7 +168,17 @@ class ArtifactReviewer:
             submission = {
                 key: value
                 for key, value in artifact.items()
-                if key not in {"agent_id", "schema", "delivery_target", "render_result"}
+                if key not in {
+                    "agent_id",
+                    "schema",
+                    "delivery_target",
+                    "render_result",
+                    "render_manifest_path",
+                    "artifact_manifest",
+                    "evidence_assets",
+                    "evidence_asset_enrichment",
+                    "body_budget_audit",
+                }
             }
             raw_errors = validate(submission, schema)
             deduped = _dedup_validation_errors(raw_errors)

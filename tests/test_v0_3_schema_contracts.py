@@ -118,25 +118,25 @@ class V03SchemaContractTests(unittest.TestCase):
         self.assertIn("## 听众可能追问的问题", qa_report["report_markdown"])
         self.assertTrue(qa_report["qa_question_list"])
 
-    def test_v03_agent_contract_is_the_only_active_api(self) -> None:
+    def test_v03_agent_contract_remains_available_as_legacy_api(self) -> None:
         config = read_json(ROOT / "configs/agents.json")
         profile = config["contract_profiles"]["v0_3"]
-        self.assertEqual(config["active_contract_profile"], "v0_3")
-        self.assertEqual(profile["status"], "active")
+        self.assertEqual(config["active_contract_profile"], "v0_4")
+        self.assertEqual(profile["status"], "legacy")
         self.assertEqual(profile["activated_at"], "2026-07-05")
         self.assertEqual(
             read_json(ROOT / "configs/context_requirements.json")[
                 "contract_profiles"
             ]["v0_3"]["status"],
-            "active",
+            "legacy",
         )
         self.assertEqual(
             read_json(ROOT / "configs/capabilities.json")[
                 "contract_profiles"
             ]["v0_3"]["status"],
-            "active",
+            "legacy",
         )
-        self.assertEqual(profile["activation"], "default_user_entry")
+        self.assertEqual(profile["activation"], "explicit_legacy")
         self.assertEqual(
             profile["canonical_stages"],
             ["analysis", "storyline", "report", "qa_preparation", "format"],

@@ -80,6 +80,7 @@ def resolve_raw_materials(
         "parsed_directories": 0,
         "inline_materials": 0,
         "unresolved_materials": 0,
+        "unsupported_files": [],
         "unresolved": [],
     }
     artifact_dir = artifact_dir.resolve() if artifact_dir else None
@@ -114,6 +115,17 @@ def resolve_raw_materials(
             summary["parsed_files"] += directory_records["parsed_files"]
             summary["unresolved_materials"] += directory_records["unresolved_materials"]
             summary["unresolved"].extend(directory_records["unresolved"])
+            summary["unsupported_files"].extend(directory_records["unsupported_files"])
+            continue
+
+        if path.suffix.lower() not in SUPPORTED_SUFFIXES:
+            unresolved = _unresolved_material(material, str(path), "unsupported_file_type")
+            resolved.append(unresolved)
+            summary["unresolved_materials"] += 1
+            summary["unsupported_files"].append(str(path))
+            summary["unresolved"].append(
+                {"path": str(path), "reason": "unsupported_file_type"}
+            )
             continue
 
         parsed = _load_material_file(
@@ -211,13 +223,23 @@ def _resolve_directory(
     unresolved: list[dict[str, str]] = []
     parsed_files = 0
     unresolved_materials = 0
-    files = [
+    unsupported_files: list[str] = []
+    all_files = [
         item
         for item in sorted(path.rglob("*"))
         if item.is_file()
         and not any(part.startswith(".") for part in item.relative_to(path).parts)
-        and item.suffix.lower() in SUPPORTED_SUFFIXES
     ]
+    files = [item for item in all_files if item.suffix.lower() in SUPPORTED_SUFFIXES]
+    for unsupported in (
+        item for item in all_files if item.suffix.lower() not in SUPPORTED_SUFFIXES
+    ):
+        unsupported_files.append(str(unsupported))
+        unresolved_materials += 1
+        unresolved.append({"path": str(unsupported), "reason": "unsupported_file_type"})
+        materials.append(
+            _unresolved_material(original, str(unsupported), "unsupported_file_type")
+        )
     for file_index, file_path in enumerate(files, start=1):
         parsed = _load_material_file(
             file_path,
@@ -238,7 +260,7 @@ def _resolve_directory(
                     "reason": parsed.get("parse_error") or parsed.get("parse_status", "error"),
                 }
             )
-    if not files:
+    if not all_files:
         unresolved_materials += 1
         unresolved.append({"path": str(path), "reason": "no_supported_files"})
         materials.append(_unresolved_material(original, str(path), "no_supported_files"))
@@ -246,6 +268,7 @@ def _resolve_directory(
         "materials": materials,
         "parsed_files": parsed_files,
         "unresolved_materials": unresolved_materials,
+        "unsupported_files": unsupported_files,
         "unresolved": unresolved,
     }
 

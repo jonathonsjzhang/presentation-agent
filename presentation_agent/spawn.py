@@ -14,25 +14,18 @@ self-contained instruction package:
                   so this adapter writes a ``spawn_request.json`` into the task
                   directory; the host SKILL.md dispatch rules read it and perform
                   the real ``Agent`` spawn.
-- ``claude``    : emits native Claude Code ``Task`` parameters, including
-                  write-tool restrictions for the reviewer.
-- ``codex``     : emits native Codex ``spawn_agent`` / ``wait_agent`` parameters,
-                  with a read-only reviewer sandbox.
+- ``claude``    : emits native Claude Code ``Task`` parameters.
+- ``codex``     : emits native Codex ``spawn_agent`` / ``wait_agent`` parameters.
 - ``cli``       : Claude Code / Codex headless terminals spawn an isolated
                   process. Builds a concrete argv from a built-in dialect
-                  (``claude -p`` / ``codex exec``, with read-only flags for a
-                  reviewer) and either emits it into ``spawn_request.json`` for a
+                  (``claude -p`` / ``codex exec``) and either emits it into ``spawn_request.json`` for a
                   capable environment to run, or (``execute=True``) runs it via
                   ``subprocess`` when the binary is present.
 
 Design invariants (kept terminal-agnostic so the framework stays portable):
 
-- ``max_depth = 1`` : Codex restricts sub-agent depth to one. A spawned worker
-                      must NOT spawn further sub-agents; the L3 reviewer is
-                      spawned by the Manager layer, never by the worker itself.
+- ``max_depth = 1`` : a spawned Worker must NOT spawn further sub-agents.
 - write scope       : a worker's write operations are confined to its task_dir.
-- reviewer delivery : a read-only reviewer returns JSON to the host; the host
-                      relays it into the designated review output file.
 
 The Manager state machine (``record_worker_completed`` etc.) is untouched: every
 adapter ultimately yields the same handoff/artifact contract the host commits
@@ -54,7 +47,7 @@ from presentation_agent.llm.schema import extract_json
 from presentation_agent.step import StepError
 
 
-SpawnRole = Literal["worker", "reviewer"]
+SpawnRole = Literal["worker"]
 SpawnMode = Literal["foreground", "background"]
 
 
@@ -227,7 +220,6 @@ def prepare_evidence_intake(
                 "history": [],
                 "created_at": now_iso(),
                 "updated_at": now_iso(),
-                "review_subagents_enabled": False,
             },
         )
     runner = StepRunner(
@@ -356,8 +348,8 @@ def commit_evidence_subtask(
     schema_warnings = [o.to_dict() for o in objections]
     if schema_warnings:
         catalog["schema_warnings"] = schema_warnings
-    review = {
-        "reviewer": "schema_compatibility_gate",
+    validation = {
+        "validator": "schema_compatibility_gate",
         "mode": "advisory",
         "blocking_checks": [
             "catalog_is_json_object",
@@ -366,7 +358,7 @@ def commit_evidence_subtask(
         "schema_warnings": schema_warnings,
         "objections": [],
     }
-    write_json(subtask_dir / "review.json", review)
+    write_json(subtask_dir / "validation.json", validation)
     write_json(subtask_dir / "evidence_catalog.json", catalog)
     state_path = subtask_dir / "run_state.json"
     state = read_json(state_path, default={})
@@ -376,7 +368,7 @@ def commit_evidence_subtask(
     state["schema_warning_count"] = len(schema_warnings)
     state["produced_artifacts"] = [
         str(subtask_dir / "evidence_catalog.json"),
-        str(subtask_dir / "review.json"),
+        str(subtask_dir / "validation.json"),
     ]
     write_json(state_path, state)
     return catalog
@@ -508,8 +500,8 @@ class ClaudeCodeSpawnAdapter(SpawnAdapter):
     kind = "claude"
 
     def spawn(self, request: SpawnRequest) -> SpawnResult:
-        subagent_type = "general-purpose" if request.role == "worker" else "Explore"
-        result_delivery = "direct_file" if request.role == "worker" else "host_relay"
+        subagent_type = "general-purpose"
+        result_delivery = "direct_file"
         prompt = _build_cli_prompt(request)
         spec = {
             "host": "claude_code",
@@ -524,13 +516,11 @@ class ClaudeCodeSpawnAdapter(SpawnAdapter):
             "prompt": prompt,
             "skill_execution": _skill_execution_contract(request),
             "result_delivery": result_delivery,
-            "disallowed_tools": (
-                [] if request.role == "worker" else ["Write", "Edit", "Bash", "NotebookEdit"]
-            ),
+            "disallowed_tools": [],
             "invariants": {
                 "max_depth": 1,
                 "write_scope": str(request.task_dir),
-                "read_only": request.role == "reviewer",
+                "read_only": False,
             },
         }
         spawn_file = request.task_dir / "spawn_request.json"
@@ -559,9 +549,9 @@ class CodexSpawnAdapter(SpawnAdapter):
     kind = "codex"
 
     def spawn(self, request: SpawnRequest) -> SpawnResult:
-        native_role = "worker" if request.role == "worker" else "explorer"
-        sandbox_mode = "workspace-write" if request.role == "worker" else "read-only"
-        result_delivery = "direct_file" if request.role == "worker" else "host_relay"
+        native_role = "worker"
+        sandbox_mode = "workspace-write"
+        result_delivery = "direct_file"
         prompt = _build_cli_prompt(request)
         spec = {
             "host": "codex",
@@ -581,7 +571,7 @@ class CodexSpawnAdapter(SpawnAdapter):
             "invariants": {
                 "max_depth": 1,
                 "write_scope": str(request.task_dir),
-                "read_only": request.role == "reviewer",
+                "read_only": False,
             },
         }
         spawn_file = request.task_dir / "spawn_request.json"
@@ -606,28 +596,13 @@ class CodexSpawnAdapter(SpawnAdapter):
 
 
 # Built-in dialects for the two headless terminals we target. Each entry is a
-# command *template*: tokens are substituted per-spawn. ``{prompt}`` becomes a
-# self-contained instruction that tells the headless agent which files to read
-# and where to write its handoff output; the read-only flags below are what give
-# a reviewer its physical maker-checker isolation (it cannot mutate artifacts).
+# Worker command template; tokens are substituted per spawn.
 CLI_DIALECTS: dict[str, dict[str, list[str]]] = {
-    # Claude Code headless: `claude -p "<prompt>"`. A reviewer is constrained to
-    # read-only by disallowing every write/exec tool.
     "claude": {
         "worker": ["claude", "-p", "{prompt}"],
-        "reviewer": [
-            "claude",
-            "-p",
-            "{prompt}",
-            "--disallowedTools",
-            "Write,Edit,Bash,NotebookEdit",
-        ],
     },
-    # Codex headless: `codex exec "<prompt>"`. A reviewer runs in a read-only
-    # sandbox so it physically cannot write the artifact back.
     "codex": {
         "worker": ["codex", "exec", "{prompt}"],
-        "reviewer": ["codex", "exec", "--sandbox", "read-only", "{prompt}"],
     },
 }
 
@@ -652,19 +627,6 @@ def _build_cli_prompt(request: SpawnRequest) -> str:
     input, and the exact handoff file it must write back.
     """
 
-    if request.role == "reviewer":
-        return (
-            "你是一个隔离上下文的只读 Reviewer sub-agent，是 maker-checker "
-            "机制中的 checker。请读取审查指令包 "
-            f"{request.instruction_path}（其中内嵌审查 rubrics 与待审产物）"
-            "以及任务输入 "
-            f"{request.input_path}。请严格对照 P0/P1 rubrics 审查产物，并且只在 "
-            "stdout 返回一个精确格式的 JSON 对象："
-            '{"objections":[{"rubric_id":"...","severity":"...",'
-            '"dimension":"...","message":"...","evidence":"...",'
-            '"suggestion":"..."}]}；若通过则返回 {"objections": []}。'
-            "不要修改任何文件。"
-        )
     return (
         "你是一个隔离上下文的 Worker sub-agent，没有宿主对话历史。"
         "请以面向互联网战略分析场景的专业战略分析师身份完成任务，"
@@ -735,7 +697,7 @@ class CLISpawnAdapter(SpawnAdapter):
         """Return the argv template for this role.
 
         A custom command (containing placeholders) wins; otherwise fall back to
-        the built-in dialect's worker/reviewer template.
+        the built-in dialect's Worker template.
         """
 
         if self.command and any("{" in tok for tok in self.command):
@@ -762,7 +724,7 @@ class CLISpawnAdapter(SpawnAdapter):
 
     def spawn(self, request: SpawnRequest) -> SpawnResult:
         argv = self._render_argv(request)
-        result_delivery = "direct_file" if request.role == "worker" else "host_relay"
+        result_delivery = "direct_file"
         spec = {
             "host": "cli",
             "dialect": self.dialect,
@@ -777,7 +739,7 @@ class CLISpawnAdapter(SpawnAdapter):
             "invariants": {
                 "max_depth": 1,
                 "write_scope": str(request.task_dir),
-                "read_only": request.role == "reviewer",
+                "read_only": False,
             },
         }
         spawn_file = request.task_dir / "spawn_request.json"
@@ -818,22 +780,6 @@ class CLISpawnAdapter(SpawnAdapter):
                     "stderr": proc.stderr[-2000:],
                 },
             )
-        if request.role == "reviewer":
-            try:
-                write_json(request.output_path, extract_json(proc.stdout))
-            except ValueError as exc:
-                return SpawnResult(
-                    status="failed",
-                    artifact_path=None,
-                    detail={
-                        "spawn_request": str(spawn_file),
-                        "executor": "cli_subprocess",
-                        "returncode": 0,
-                        "error": f"reviewer stdout is not valid JSON: {exc}",
-                        "stdout": proc.stdout[-2000:],
-                        "result_delivery": result_delivery,
-                    },
-                )
         return SpawnResult(
             status="completed",
             artifact_path=request.output_path,

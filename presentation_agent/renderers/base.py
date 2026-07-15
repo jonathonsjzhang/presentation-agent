@@ -141,7 +141,10 @@ def render_material(
                 status="error",
                 fmt=backend,
                 fidelity=fidelity,
-                detail=f"format mismatch: compiled={backend}, artifact={artifact_format}",
+                detail=(
+                    f"delivery_target mismatch: compiled={backend}, "
+                    f"artifact={artifact_format}"
+                ),
             )
     expected_capability = _FORMAT_CAPABILITIES[backend]
     if selected_capabilities and expected_capability not in selected_capabilities:

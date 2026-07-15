@@ -12,6 +12,8 @@
     "report_charter": {"type": "object"},
     "task_packet": {"type": "object"},
     "acceptance_report": {"type": "object"},
+    "stage": {"type": "string", "enum": ["analysis", "storyline", "report", "qa_preparation", "format"]},
+    "feedback": {"type": "string"},
     "questions_for_human": {
       "type": "array",
       "items": {"type": "string", "minLength": 1}

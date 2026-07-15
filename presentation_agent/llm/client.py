@@ -37,6 +37,22 @@ class LLMClient:
             attempts += 1
             raw = self.adapter.generate(current)
             last_raw = raw
+            if request.metadata.get("response_format") == "markdown":
+                markdown = str(raw or "").strip()
+                if markdown:
+                    return LLMResponse(
+                        data={"content_markdown": markdown},
+                        raw_text=raw,
+                        provider=self.provider,
+                        purpose=request.purpose,
+                        attempts=attempts,
+                        usage={"attempts": attempts},
+                    )
+                last_error = ValueError("empty Markdown output")
+                current = self._with_hint(
+                    request, "上次输出为空；请输出完整 Markdown 文档。"
+                )
+                continue
             try:
                 data = extract_json(raw)
             except ValueError as exc:
@@ -71,9 +87,14 @@ class LLMClient:
 
     @staticmethod
     def _with_hint(request: LLMRequest, hint: str) -> LLMRequest:
+        markdown = request.metadata.get("response_format") == "markdown"
         return LLMRequest(
             system=request.system,
-            user=f"{request.user}\n\n[修正提示] {hint}\n请只输出一个 ```json 代码块，不要任何解释。",
+            user=(
+                f"{request.user}\n\n[修正提示] {hint}\n请直接输出完整 Markdown 正文。"
+                if markdown
+                else f"{request.user}\n\n[修正提示] {hint}\n请只输出一个 ```json 代码块，不要任何解释。"
+            ),
             purpose=request.purpose,
             schema=request.schema,
             schema_name=request.schema_name,

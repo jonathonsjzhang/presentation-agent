@@ -61,9 +61,9 @@ def build_parser() -> argparse.ArgumentParser:
     report_start.add_argument("--brief-file", required=True, help="raw_brief JSON file path.")
     report_start.add_argument(
         "--contract-profile",
-        choices=["v0_3"],
-        default="v0_3",
-        help="Runtime contract profile. Defaults to the document-first v0_3 user flow.",
+        choices=["v0_4", "v0_3"],
+        default="v0_4",
+        help="Runtime contract profile. Defaults to the simplified Markdown-first v0_4 flow.",
     )
     _add_spawn_adapter_option(report_start, required=True)
 
@@ -71,13 +71,21 @@ def build_parser() -> argparse.ArgumentParser:
     report_next.add_argument("--run", required=True, help="Run id or run directory.")
     _add_spawn_adapter_option(report_next)
 
+    report_continue = report_subs.add_parser(
+        "continue",
+        help="Consume ready outputs and deterministic transitions until a human gate, external Worker action, or error.",
+    )
+    report_continue.add_argument("--run", required=True, help="Run id or run directory.")
+    report_continue.add_argument("--max-steps", type=int, default=50)
+    _add_spawn_adapter_option(report_continue)
+
     report_submit = report_subs.add_parser("submit", help="Submit host output for the current instruction.")
     report_submit.add_argument("--run", required=True, help="Run id or run directory.")
     report_submit.add_argument("--output-file", help="JSON output file produced by the host model.")
     report_submit.add_argument(
         "--spawn-completed",
         action="store_true",
-        help="Attest that the dispatched sub-agent completed this Worker/Reviewer step.",
+        help="Attest that the dispatched Worker sub-agent completed this step.",
     )
     _add_spawn_adapter_option(report_submit)
 
@@ -100,12 +108,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Worker pause point for --run-mode custom; repeat as needed.",
     )
     report_approve.add_argument(
-        "--review-mode",
-        choices=["independent", "schema_only"],
-        default="schema_only",
-        help="Brief gate review mode; schema_only skips LLM review sub-agents.",
-    )
-    report_approve.add_argument(
         "--delivery-option",
         choices=[
             "format:ppt",
@@ -120,6 +122,18 @@ def build_parser() -> argparse.ArgumentParser:
     report_feedback.add_argument("--run", required=True, help="Run id or run directory.")
     report_feedback.add_argument("--text", required=True, help="Human feedback for the current Manager gate.")
     _add_spawn_adapter_option(report_feedback)
+
+    report_revise = report_subs.add_parser(
+        "revise", help="Explicitly revise one v0.4 stage from a human gate."
+    )
+    report_revise.add_argument("--run", required=True, help="Run id or run directory.")
+    report_revise.add_argument(
+        "--stage",
+        required=True,
+        choices=["analysis", "storyline", "report", "qa_preparation", "format"],
+    )
+    report_revise.add_argument("--feedback", required=True)
+    _add_spawn_adapter_option(report_revise)
 
     report_status = report_subs.add_parser("status", help="Show report run status.")
     report_status.add_argument("--run", required=True, help="Run id or run directory.")
@@ -178,8 +192,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--input", required=True, help="Input artifact JSON path.")
     run.add_argument("--out", help="Optional output directory.")
     run.add_argument("--provider", help="Override LLM provider (mock/cli/codex/inline).")
+    run.add_argument(
+        "--contract-profile",
+        choices=["v0_3"],
+        default="v0_3",
+        help="Direct single-worker debug profile; defaults to legacy JSON v0_3.",
+    )
 
-    pipe = sub.add_parser("pipeline", help="Run the five-stage v0.3 debug pipeline.")
+    pipe = sub.add_parser("pipeline", help="Run the five-stage debug pipeline.")
     pipe.add_argument("--input", required=True, help="Initial raw brief JSON path.")
     pipe.add_argument("--out", help="Optional output directory.")
     pipe.add_argument("--auto", action="store_true", help="Run all stages back to back.")
@@ -198,9 +218,9 @@ def build_parser() -> argparse.ArgumentParser:
     launch.add_argument("--out", help="Optional output directory.")
     launch.add_argument(
         "--contract-profile",
-        choices=["v0_3"],
-        default="v0_3",
-        help="Runtime contract profile. Defaults to the document-first v0_3 user flow.",
+        choices=["v0_4", "v0_3"],
+        default="v0_4",
+        help="Runtime contract profile. Defaults to the simplified Markdown-first v0_4 flow.",
     )
     launch.add_argument("--auto", action="store_true", help="Run all stages back to back.")
     launch.add_argument(
@@ -388,7 +408,11 @@ def main() -> None:
         return
 
     if args.command == "run":
-        runner = LoopRunner(root, provider_override=getattr(args, "provider", None))
+        runner = LoopRunner(
+            root,
+            provider_override=getattr(args, "provider", None),
+            contract_profile=getattr(args, "contract_profile", "v0_3"),
+        )
         result = runner.run(args.agent_id, Path(args.input).resolve(), Path(args.out).resolve() if args.out else None)
         print(f"status: {result['status']}")
         print(f"artifact: {result['artifact_path']}")
@@ -434,7 +458,7 @@ def main() -> None:
             return
         if result.get("mode") == "manager_controlled":
             print(f"brief: {result['brief_path']}")
-            print(f"contract profile: {result.get('contract_profile', 'v0_3')}")
+            print(f"contract profile: {result.get('contract_profile', 'v0_4')}")
             print(f"run dir: {result['run_dir']}")
             print(json.dumps(result["instruction"], ensure_ascii=False, indent=2))
             return
@@ -473,8 +497,8 @@ def main() -> None:
                 if present:
                     print(present)
                     print("")
-                if r.get("review_summary") and r["step"] != "done":
-                    print(f"🔍 {r['review_summary']}")
+                if r.get("validation_summary") and r["step"] != "done":
+                    print(f"🔍 {r['validation_summary']}")
                 if r.get("revision_reason"):
                     print(f"🔧 {r['revision_reason']}")
                 if r.get("memory_notes") and r["step"] != "done":
@@ -829,9 +853,19 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
         _print_json(_report_response(run_dir=run_dir, result=prepared, manager=manager))
         return
 
+    if args.report_command == "continue":
+        try:
+            result = manager.continue_until_boundary(max_steps=max(1, args.max_steps))
+        except StepError as exc:
+            _print_json({"ok": False, "error": str(exc), "manager": manager.status_summary()})
+            raise SystemExit(3)
+        _print_json(_report_response(run_dir=run_dir, result=result, manager=manager))
+        return
+
     if args.report_command == "submit":
         state = manager.status().get("state", {})
         actor = state.get("current_actor")
+        commit_attempted = False
         try:
             if actor == "manager":
                 if args.output_file:
@@ -856,6 +890,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
                             "完成后使用 report submit --spawn-completed。"
                         )
                     manager.record_spawn_completed()
+                commit_attempted = True
                 worker_result = runner.commit()
                 if worker_result.get("step") == "done":
                     result = manager.record_worker_completed(worker_result)
@@ -866,6 +901,14 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             else:
                 raise StepError(f"未知 current_actor: {actor}")
         except StepError as exc:
+            if actor == "worker" and commit_attempted:
+                try:
+                    result = manager.record_worker_failure(exc)
+                except StepError:
+                    pass
+                else:
+                    _print_json(_report_response(run_dir=run_dir, result=result, manager=manager))
+                    return
             _print_json({"ok": False, "error": str(exc), "manager": manager.status_summary()})
             raise SystemExit(3)
         _print_json(_report_response(run_dir=run_dir, result=result, manager=manager))
@@ -882,7 +925,6 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
                     )
             result = manager.approve(
                 run_mode=selected_run_mode,
-                review_mode=getattr(args, "review_mode", None),
                 delivery_option=getattr(args, "delivery_option", None),
             )
         except StepError as exc:
@@ -897,6 +939,16 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
     if args.report_command == "feedback":
         try:
             result = manager.record_human_feedback(args.text)
+        except StepError as exc:
+            _print_json({"ok": False, "error": str(exc), "manager": manager.status_summary()})
+            raise SystemExit(3)
+        _print_json(_report_response(run_dir=run_dir, result=result, manager=manager))
+        return
+
+
+    if args.report_command == "revise":
+        try:
+            result = manager.revise_stage(args.stage, args.feedback)
         except StepError as exc:
             _print_json({"ok": False, "error": str(exc), "manager": manager.status_summary()})
             raise SystemExit(3)
@@ -973,13 +1025,12 @@ def _copy_report_output(runner: StepRunner, output_file: Path) -> None:
     step = status.get("current_step")
     kind_map = {
         "awaiting_gen_output": "gen",
-        "awaiting_review_output": "review",
         "awaiting_revise_output": "revise",
     }
     kind = kind_map.get(str(step))
     if not kind:
         raise StepError(f"current step {step} is not awaiting host output")
-    target = runner.handoff_dir / f"output_{kind}.json"
+    target = runner._handoff_output_path(kind)
     target.write_text(output_file.read_text(encoding="utf-8"), encoding="utf-8")
 
 

@@ -18,11 +18,11 @@ from presentation_agent.spawn import (
 from presentation_agent.step import StepError
 
 
-def _request(task_dir: Path, role: str = "worker") -> SpawnRequest:
+def _request(task_dir: Path) -> SpawnRequest:
     return SpawnRequest(
         task_dir=task_dir,
         agent_id="analysis",
-        role=role,  # type: ignore[arg-type]
+        role="worker",
         instruction_path=task_dir / "handoff" / "instruction_gen.md",
         output_path=task_dir / "handoff" / "output_gen.json",
         input_path=task_dir / "input.json",
@@ -50,7 +50,7 @@ class WorkBuddySpawnAdapterTests(unittest.TestCase):
             task_dir = Path(tmp)
             adapter = WorkBuddySpawnAdapter()
             self.assertEqual(adapter.kind, "workbuddy")
-            result = adapter.spawn(_request(task_dir, role="worker"))
+            result = adapter.spawn(_request(task_dir))
 
             spawn_file = task_dir / "spawn_request.json"
             self.assertTrue(spawn_file.exists())
@@ -74,38 +74,24 @@ class WorkBuddySpawnAdapterTests(unittest.TestCase):
             self.assertIn("专业战略分析师", spec["prompt"])
             self.assertIn("唯一权威来源", spec["prompt"])
 
-    def test_reviewer_uses_readonly_explore_type(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            task_dir = Path(tmp)
-            result = WorkBuddySpawnAdapter().spawn(_request(task_dir, role="reviewer"))
-            spec = read_json(task_dir / "spawn_request.json")
-            # Reviewer must be a read-only agent type (maker-checker isolation).
-            self.assertEqual(spec["subagent_type"], "Explore")
-            self.assertEqual(spec["role"], "reviewer")
-            self.assertEqual(result.detail["subagent_type"], "Explore")
-            self.assertEqual(result.detail["result_delivery"], "host_relay")
-
-
 class NativeTerminalSpawnAdapterTests(unittest.TestCase):
-    def test_claude_reviewer_uses_task_with_write_tools_disabled(self) -> None:
+    def test_claude_worker_uses_general_purpose_task(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             task_dir = Path(tmp)
-            result = ClaudeCodeSpawnAdapter().spawn(
-                _request(task_dir, role="reviewer")
-            )
+            result = ClaudeCodeSpawnAdapter().spawn(_request(task_dir))
 
             spec = read_json(task_dir / "spawn_request.json")
             self.assertEqual(result.detail["tool"], "Task")
             self.assertEqual(spec["host"], "claude_code")
-            self.assertEqual(spec["subagent_type"], "Explore")
-            self.assertIn("Write", spec["disallowed_tools"])
-            self.assertTrue(spec["invariants"]["read_only"])
-            self.assertEqual(spec["result_delivery"], "host_relay")
+            self.assertEqual(spec["subagent_type"], "general-purpose")
+            self.assertEqual(spec["disallowed_tools"], [])
+            self.assertFalse(spec["invariants"]["read_only"])
+            self.assertEqual(spec["result_delivery"], "direct_file")
 
     def test_codex_worker_uses_spawn_agent_with_workspace_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             task_dir = Path(tmp)
-            result = CodexSpawnAdapter().spawn(_request(task_dir, role="worker"))
+            result = CodexSpawnAdapter().spawn(_request(task_dir))
 
             spec = read_json(task_dir / "spawn_request.json")
             self.assertEqual(result.detail["tool"], "spawn_agent")
@@ -123,17 +109,6 @@ class NativeTerminalSpawnAdapterTests(unittest.TestCase):
                 spec["prompt"],
             )
 
-    def test_codex_reviewer_is_read_only_explorer(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            task_dir = Path(tmp)
-            CodexSpawnAdapter().spawn(_request(task_dir, role="reviewer"))
-
-            spec = read_json(task_dir / "spawn_request.json")
-            self.assertEqual(spec["native_role"], "explorer")
-            self.assertEqual(spec["sandbox_mode"], "read-only")
-            self.assertTrue(spec["invariants"]["read_only"])
-
-
 class CLISpawnAdapterTests(unittest.TestCase):
     def test_emit_only_worker_builds_claude_argv(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -142,7 +117,7 @@ class CLISpawnAdapterTests(unittest.TestCase):
             adapter = CLISpawnAdapter(["claude"])  # dialect inferred from binary
             self.assertEqual(adapter.kind, "cli")
             self.assertEqual(adapter.dialect, "claude")
-            result = adapter.spawn(_request(task_dir, role="worker"))
+            result = adapter.spawn(_request(task_dir))
 
             self.assertEqual(result.status, "dispatched")
             self.assertEqual(result.detail["executor"], "cli_command_emitted")
@@ -160,27 +135,13 @@ class CLISpawnAdapterTests(unittest.TestCase):
             self.assertEqual(spec["invariants"]["max_depth"], 1)
             self.assertEqual(spec["invariants"]["write_scope"], str(task_dir))
 
-    def test_reviewer_codex_argv_is_read_only(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            task_dir = Path(tmp)
-            adapter = CLISpawnAdapter(["codex", "exec"])
-            self.assertEqual(adapter.dialect, "codex")
-            result = adapter.spawn(_request(task_dir, role="reviewer"))
-            argv = result.detail["argv"]
-            self.assertEqual(argv[0], "codex")
-            self.assertIn("--sandbox", argv)
-            self.assertIn("read-only", argv)
-            spec = read_json(task_dir / "spawn_request.json")
-            self.assertTrue(spec["invariants"]["read_only"])
-            self.assertEqual(spec["role"], "reviewer")
-
     def test_custom_template_placeholders_substituted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             task_dir = Path(tmp)
             adapter = CLISpawnAdapter(
                 ["mytool", "--in", "{instruction_path}", "--out", "{output_path}"]
             )
-            result = adapter.spawn(_request(task_dir, role="worker"))
+            result = adapter.spawn(_request(task_dir))
             argv = result.detail["argv"]
             self.assertEqual(argv[0], "mytool")
             self.assertIn(str(task_dir / "handoff" / "instruction_gen.md"), argv)

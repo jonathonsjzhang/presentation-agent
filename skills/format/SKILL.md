@@ -125,3 +125,9 @@ formatted material 的语义权威永远属于 `report_markdown`：
 - `data`：仅在原稿提供了可核对数据时填写
 
 只有当上游 `visual_evidence_placements` 为空时，才可以输出 `{"visuals": []}`。不要输出正文副本、delivery units、compression decisions、omission register、caveat register、artifact manifest、render plan 或 quality checks。
+
+## v0.4 简化交接（覆盖提交载体，不覆盖上述方法论）
+
+当 runtime 声明 `contract_profile=v0_4` 时，完整保留上述忠实落版、证据可视化和溯源准则，但只提交轻量 `format_plan.v1`：`visuals[]` 中保留 `type`、`title`、`source_refs`，需要定位时可给 `after_heading`，有可核对数据时可给 `data`。不再提交 `section_heading` 精确字符串、跨阶段视觉位置 ID、required/placement 等重复元数据，也不提交正文副本。runtime 必须基于真实 renderer 能力执行并生成 render manifest。
+
+`v0_3` 继续使用上面的 `formatted_material.v2` 要求，仅用于兼容旧运行。

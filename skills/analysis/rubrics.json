@@ -28,17 +28,17 @@
       "id": "ANALYSIS-CHALLENGE-001",
       "severity": "P1",
       "dimension": "竞争性解释",
-      "criterion": "会实质改变核心判断的反证、异常、替代解释和边界应保留在 challenges。",
-      "check": "优先检查自选择、口径变化、第三变量、反向因果、访谈偏差和外部事件；不要要求每条 finding 都配满挑战。",
-      "fix": "只补充会改变判断强度或适用范围的真实挑战，并相应调整 confidence。"
+      "criterion": "反证、替代解释或边界若会改变结论，必须被吸收到 claim、confidence 或 thesis option 的净判断中；challenges 只能保留调整后仍未解决的不确定性，不能充当过强主张的免责声明。",
+      "check": "把 claim 与 challenges 合并阅读：若某项挑战成立会推翻或显著改变结论，而 claim 和 confidence 仍保持不变，则未通过。不要要求每条 finding 都配满挑战。",
+      "fix": "收窄、条件化、降级或删除原判断，再保留仍会影响适用范围的真实挑战。"
     },
     {
       "id": "ANALYSIS-CONVERGENCE-001",
       "severity": "P1",
       "dimension": "收敛",
-      "criterion": "观点池去重并删除琐碎内容，同时没有越界设计唯一故事线。",
-      "check": "检查重复 finding、低信息量结论和 Storyline 产物。",
-      "fix": "合并重复项，保留观点池边界。"
+      "criterion": "观点池已去重；2–3 组 thesis options 在核心解释、判断重点或决策含义上实质不同、各有 finding 支撑，同时没有越界设计唯一故事线。",
+      "check": "若两个 options 只在措辞、确定性或行动力度上不同，应视为同一选项；同时检查重复 finding、低信息量结论和 Storyline 产物。",
+      "fix": "合并伪差异选项并围绕真实解释或选择空间重组；证据不足时如实表达验证型选项及其边界。"
     }
   ]
 }

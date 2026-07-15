@@ -88,13 +88,43 @@ def validate(
 
     Supported keywords: type, required, properties, items, enum, const,
     minItems, maxItems, minLength, maxLength, minimum, maximum,
-    additionalProperties, and local JSON-pointer $ref.
+    additionalProperties, allOf, anyOf, oneOf, not, if/then/else,
+    and local JSON-pointer $ref.
     Unknown keywords are ignored (lenient by design). Returns a list of human
     readable error strings; empty list means valid. No external dependency, so
     the harness stays pure-stdlib.
     """
     root_schema = _root_schema or schema
     errors: list[str] = []
+
+    for index, branch in enumerate(schema.get("allOf", [])):
+        if isinstance(branch, dict):
+            errors.extend(validate(data, branch, path, _root_schema=root_schema))
+    any_of = [item for item in schema.get("anyOf", []) if isinstance(item, dict)]
+    if any_of and not any(
+        not validate(data, item, path, _root_schema=root_schema)
+        for item in any_of
+    ):
+        errors.append(f"{path}: must match at least one anyOf branch")
+    one_of = [item for item in schema.get("oneOf", []) if isinstance(item, dict)]
+    if one_of:
+        matches = sum(
+            not validate(data, item, path, _root_schema=root_schema)
+            for item in one_of
+        )
+        if matches != 1:
+            errors.append(f"{path}: must match exactly one oneOf branch, matched {matches}")
+    negated = schema.get("not")
+    if isinstance(negated, dict) and not validate(
+        data, negated, path, _root_schema=root_schema
+    ):
+        errors.append(f"{path}: must not match forbidden schema")
+    condition = schema.get("if")
+    if isinstance(condition, dict):
+        matched = not validate(data, condition, path, _root_schema=root_schema)
+        branch = schema.get("then" if matched else "else")
+        if isinstance(branch, dict):
+            errors.extend(validate(data, branch, path, _root_schema=root_schema))
 
     ref = schema.get("$ref")
     if isinstance(ref, str):

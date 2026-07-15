@@ -143,3 +143,17 @@ Analysis 后只能在用户确认主论点组选项后 dispatch Storyline；Stor
 `acceptance_report` 只保留 verdict、reason，以及返工时的 revision_requirements。逐项 criteria results 与 cross-stage findings 已由 reviewer 产生，不再由 Manager 重写。
 
 phase、schema、task_id、execution plan、state updates 和 memory bookkeeping 由 runtime 添加。
+
+## v0.4 简化控制面（覆盖旧调度细节，不覆盖专业验收原则）
+
+当 runtime 声明 `contract_profile=v0_4` 时：
+
+- Brief 是所有 Worker 的共同事实源，确认后每一阶段完整传递；
+- 首次主链仍是 `Analysis → Storyline → Report → QA → Format`；
+- Analysis 与 Storyline 保留用户 Gate；Report 与 QA 正常完成后由 runtime 自动推进，不要求 Manager 重写逐项 acceptance JSON；
+- 用户反馈或阻塞发生时，Manager 必须用 `stage` 明确指定 `analysis`、`storyline`、`report`、`qa_preparation` 或 `format`，runtime 不得用 Artifact 中的 `target_agent` 覆盖该判断；
+- Report 或 Format 的局部返工默认复用已有 QA，不重新执行 Analysis/Storyline；核心观点或 Storyline 变化才让受影响的下游重新运行；
+- 环境、文件解析、Schema 形状和 renderer 错误由 runtime 处理，不让内容 Worker 重写；同一错误连续两次时熔断并 `ask_human`；
+- Memory 只提供软提示，不参与硬校验、责任路由或 Gate 复用判断。
+
+`v0_3` 继续遵循上面的固定 acceptance 与兼容路由，仅用于旧运行。

@@ -80,7 +80,11 @@ class GenericSkill:
     ) -> LLMRequest:
         package = context.get("skill_package", {})
         instructions = package.get("instructions", "")
-        schema = self._output_schema(package, spec)
+        markdown_output = (
+            str(spec.output_contract.get("artifact_format") or "").lower()
+            == "markdown"
+        )
+        schema = None if markdown_output else self._output_schema(package, spec)
         global_state = context.get("global_state", {})
         style_guidance = context.get("style_guidance", [])
         routing_policy = context.get("routing_policy", {})
@@ -106,6 +110,12 @@ class GenericSkill:
             schema_name=spec.output_schema,
             agent_id=spec.id,
             round_index=round_index,
+            metadata={
+                "response_format": "markdown" if markdown_output else "json",
+                "canonical_filename": str(
+                    spec.output_contract.get("canonical_filename") or ""
+                ),
+            },
         )
         self.last_prompt_budget = {
             "system_chars": len(system),
@@ -118,10 +128,14 @@ class GenericSkill:
         return request
 
     def _compose_system(self, spec: AgentSpec, instructions: str) -> str:
+        if str(spec.output_contract.get("artifact_format") or "") == "markdown":
+            output_rule = "直接产出一份完整 Markdown 文档，不要 JSON 外壳。"
+        else:
+            output_rule = f"产出符合 {spec.output_schema} 的单个 JSON 对象。"
         header = (
             f"你是汇报助手流水线中的 Agent「{spec.name}」(stage {spec.stage})。"
             "严格遵循下方 skill 说明书(SKILL.md)的角色、工作流和输出要求，"
-            f"产出符合 {spec.output_schema} 的单个 JSON 对象。"
+            + output_rule
         )
         return f"{header}\n\n===== SKILL 说明书 =====\n{instructions}".strip()
 
@@ -185,12 +199,20 @@ class GenericSkill:
             blocks.append(f"## 输出 schema({spec.output_schema})，必须严格符合")
             blocks.append(self._json_block(schema))
 
-        blocks.append(
-            "## 输出要求\n"
-            f"- 只输出一个 ```json 代码块，内容为符合 {spec.output_schema} 的对象。\n"
-            "- 不要任何解释、前言或结语。\n"
-            "- 信息缺失时，按 SKILL.md 的规则写入 open_questions 等字段，不要编造，也不要留 TODO 占位。"
-        )
+        if str(spec.output_contract.get("artifact_format") or "") == "markdown":
+            blocks.append(
+                "## 输出要求\n"
+                "- 直接输出完整 Markdown 正文，不要代码围栏，不要 JSON 外壳。\n"
+                "- 严格使用 SKILL.md 的规范章节；信息缺失时在正文中透明说明。\n"
+                "- 不要留 TODO 占位，不要在文档之外添加解释。"
+            )
+        else:
+            blocks.append(
+                "## 输出要求\n"
+                f"- 只输出一个 ```json 代码块，内容为符合 {spec.output_schema} 的对象。\n"
+                "- 不要任何解释、前言或结语。\n"
+                "- 信息缺失时按 SKILL.md 透明说明，不要编造，也不要留 TODO 占位。"
+            )
         return "\n\n".join(blocks)
 
     def _projected_context_blocks(

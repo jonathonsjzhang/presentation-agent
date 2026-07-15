@@ -1,10 +1,128 @@
 {
   "version": "agent-definition.v2",
-  "active_contract_profile": "v0_3",
+  "active_contract_profile": "v0_4",
   "contract_profiles": {
-    "v0_3": {
+    "v0_4": {
       "status": "active",
       "activation": "default_user_entry",
+      "schema_gate_mode": "advisory",
+      "activated_at": "2026-07-15",
+      "manager_charter_schema": "report_charter.v2",
+      "canonical_stages": [
+        "analysis",
+        "storyline",
+        "report",
+        "qa_preparation",
+        "format"
+      ],
+      "default_delivery_targets": ["document"],
+      "internal_subagents": ["evidence_harvester"],
+      "workers": [
+        {
+          "id": "analysis",
+          "name": "分析",
+          "stage": 1,
+          "skill": "analysis",
+          "description": "形成一份完整、可独立阅读、可追溯的分析底稿，并提出候选主论点。",
+          "previous_agent_id": "manager",
+          "next_agent_id": "storyline",
+          "input_schema": "report_charter.v2",
+          "output_schema": "markdown_artifact.v1",
+          "output_contract": {
+            "artifact_format": "markdown",
+            "artifact_kind": "analysis",
+            "canonical_filename": "analysis.md",
+            "required_headings": ["核心发现", "竞争性解释与边界", "候选论点组", "待验证问题"]
+          },
+          "memory_dimensions": ["证据完整性", "发现", "替代解释", "So What", "决策张力"],
+          "max_revision_rounds": 1,
+          "state": {"global_reads": ["audience_profile", "target_action"], "global_writes": [], "generation_memory_dimensions": ["证据完整性", "发现", "替代解释", "So What"]},
+          "harness": {"skill_package": "skills/analysis", "runtime_adapter": "markdown_first_skill_runtime", "review_policy": "self_check_plus_file_validation", "connectors": ["doc_reader", "docx_reader", "pdf_reader", "xlsx_reader", "csv_reader"]}
+        },
+        {
+          "id": "storyline",
+          "name": "故事线",
+          "stage": 2,
+          "skill": "storyline",
+          "description": "把已确认分析收敛为一份完整故事线文档。",
+          "previous_agent_id": "analysis",
+          "next_agent_id": "report",
+          "input_schema": "markdown_artifact.v1",
+          "output_schema": "markdown_artifact.v1",
+          "output_contract": {
+            "artifact_format": "markdown",
+            "artifact_kind": "storyline",
+            "canonical_filename": "storyline.md",
+            "required_headings": ["核心答案", "故事线", "关键边界", "不进入主线的内容"]
+          },
+          "memory_dimensions": ["Executive Summary", "Message Pyramid", "论证结构", "章节设计", "证据边界"],
+          "max_revision_rounds": 1,
+          "state": {"global_reads": ["audience_profile", "target_action", "delivery_budget"], "global_writes": [], "generation_memory_dimensions": ["Executive Summary", "论证结构", "证据边界"]},
+          "harness": {"skill_package": "skills/storyline", "runtime_adapter": "markdown_first_skill_runtime", "review_policy": "self_check_plus_file_validation", "connectors": []}
+        },
+        {
+          "id": "report",
+          "name": "报告产出",
+          "stage": 3,
+          "skill": "report",
+          "description": "读取完整 Brief、Analysis、Storyline 和 Evidence，写成 canonical Markdown 报告。",
+          "previous_agent_id": "storyline",
+          "next_agent_id": "qa_preparation",
+          "input_schema": "markdown_artifact.v1",
+          "output_schema": "markdown_artifact.v1",
+          "output_contract": {
+            "artifact_format": "markdown",
+            "artifact_kind": "report",
+            "canonical_filename": "report.md",
+            "required_headings": ["Executive Summary"]
+          },
+          "memory_dimensions": ["完整原稿", "连续写作", "论证完整性", "可追溯性", "Caveat"],
+          "max_revision_rounds": 1,
+          "state": {"global_reads": ["audience_profile", "target_action", "delivery_budget"], "global_writes": [], "generation_memory_dimensions": ["完整原稿", "论证完整性", "可追溯性", "Caveat"]},
+          "harness": {"skill_package": "skills/report", "runtime_adapter": "markdown_first_skill_runtime", "review_policy": "self_check_plus_file_validation", "connectors": []}
+        },
+        {
+          "id": "qa_preparation",
+          "name": "Q&A 梳理",
+          "stage": 4,
+          "skill": "qa_preparation",
+          "description": "以听众视角形成独立追问文档，不复制或改写正文。",
+          "previous_agent_id": "report",
+          "next_agent_id": "format",
+          "input_schema": "markdown_artifact.v1",
+          "output_schema": "markdown_artifact.v1",
+          "output_contract": {
+            "artifact_format": "markdown",
+            "artifact_kind": "qa",
+            "canonical_filename": "qa.md",
+            "required_headings": ["听众可能追问的问题"]
+          },
+          "memory_dimensions": ["挑战问题", "逻辑压力测试", "证据边界", "战略取舍", "受众关注"],
+          "max_revision_rounds": 1,
+          "state": {"global_reads": ["audience_profile", "target_action"], "global_writes": [], "generation_memory_dimensions": ["挑战问题", "逻辑压力测试", "证据边界", "受众关注"]},
+          "harness": {"skill_package": "skills/qa_preparation", "runtime_adapter": "markdown_first_skill_runtime", "review_policy": "self_check_plus_file_validation", "connectors": []}
+        },
+        {
+          "id": "format",
+          "name": "可视化",
+          "stage": 5,
+          "skill": "format",
+          "description": "读取 canonical 报告、可选 QA 与 Evidence Assets，选择 renderer 支持的视觉并生成真实交付文件。",
+          "previous_agent_id": "qa_preparation",
+          "next_agent_id": null,
+          "input_schema": "markdown_artifact.v1",
+          "output_schema": "format_plan.v1",
+          "output_contract": {"artifact_format": "json", "artifact_kind": "format_plan", "canonical_filename": "format_plan.json"},
+          "memory_dimensions": ["版式", "视觉层级", "来源映射", "载体适配", "Caveat 保真"],
+          "max_revision_rounds": 1,
+          "state": {"global_reads": ["audience_profile", "target_action", "delivery_budget"], "global_writes": [], "generation_memory_dimensions": ["版式", "视觉层级", "来源映射", "载体适配"]},
+          "harness": {"skill_package": "skills/format", "runtime_adapter": "generic_llm_skill_runtime", "review_policy": "schema_plus_real_render", "connectors": ["docx_writer", "pptx_writer", "html_writer"]}
+        }
+      ]
+    },
+    "v0_3": {
+      "status": "legacy",
+      "activation": "explicit_legacy",
       "schema_gate_mode": "advisory",
       "contract_frozen_at": "2026-07-02",
       "activated_at": "2026-07-05",

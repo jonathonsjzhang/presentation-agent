@@ -4,49 +4,49 @@
       "id": "STORYLINE-APEX-001",
       "severity": "P1",
       "dimension": "核心主张",
-      "criterion": "core_answer 应直接回答决策问题，可复述，并体现材料带来的新认识。",
-      "check": "判断它是否只是 findings 摘要或无信息量共识。",
-      "fix": "收窄范围并淬炼真正有张力的答案。"
+      "criterion": "core_answer 应忠实表达 selected_analysis_thesis，直接回答 Governing Question，且可复述、可证伪、证据强度匹配。",
+      "check": "检查 Storyline 是否悄悄改选、拼接或升级了 Analysis 论点。",
+      "fix": "恢复已选论点；若它与证据无法同时成立，收窄主张或退回 Analysis。"
     },
     {
       "id": "STORYLINE-PYRAMID-001",
       "severity": "P1",
       "dimension": "金字塔",
-      "criterion": "sections 概括下层、使用统一分类维度，并按一种逻辑排序。",
-      "check": "执行层级测试、同类测试和连接词测试。",
-      "fix": "重组混杂或平级堆叠的章节。"
+      "criterion": "sections 应把已选论点分解为少量不同且必要的证明任务，上层概括下层，同层属于同一逻辑范畴。",
+      "check": "判断章节是在证明同一个答案，还是按 findings 或素材类别平铺。",
+      "fix": "围绕已选论点重组、合并或删除章节，不为形式完整补节点。"
     },
     {
       "id": "STORYLINE-PROGRESSION-001",
       "severity": "P1",
       "dimension": "论证累进",
-      "criterion": "前文结论成为后文输入，框架前置，每节只完成一个主要判断。",
-      "check": "删除第 N 节后若 N+1 仍完全成立，说明前一节没有推进作用。",
+      "criterion": "标题链应形成从已知到新认识的推进，每节只完成一个主要判断，前文结论成为后文输入。",
+      "check": "若删除某节后后文仍完全成立，或章节只能用‘另外’连接，该节没有推进主线。",
       "fix": "重排、合并或删除无推进作用的章节。"
     },
     {
       "id": "STORYLINE-EVIDENCE-001",
       "severity": "P0",
       "dimension": "证据边界",
-      "criterion": "所有 finding_refs 真实；低置信度 finding 不得被写成确定事实或强因果。",
-      "check": "对照 Analysis 检查引用是否存在、判断强度是否明显升级。",
-      "fix": "修正 finding_refs，或把超出证据的主张收窄为假设/边界。"
+      "criterion": "所有 finding_refs 必须真实，结论强度不得超过对应 finding 的 evidence、confidence 与 challenge 所允许的范围。",
+      "check": "对照 Analysis 检查引用、因果强度、外推范围，以及关键 challenge 是否实际改变了表述。",
+      "fix": "修正引用并收窄标题、brief 或 core_answer；关键缺口无法修复时退回 Analysis。"
     },
     {
       "id": "STORYLINE-FOCUS-001",
       "severity": "P1",
       "dimension": "主线聚焦",
-      "criterion": "主线围绕 core_answer，有重点与记忆点；未使用 finding 可以主动舍弃。",
-      "check": "检查不能汇聚回核心答案的分支。",
-      "fix": "移至附录或舍弃，不追求全量覆盖。"
+      "criterion": "每个正文节点都应服务同一个 core_answer；正确但不承担必要证明任务的内容应降层或舍弃。",
+      "check": "检查每节删除后是否只减少信息量，却不影响核心答案成立。",
+      "fix": "将旁支移至附录或删除，只保留最短充分主线。"
     },
     {
       "id": "STORYLINE-BUDGET-001",
       "severity": "P1",
-      "dimension": "正文篇幅",
-      "criterion": "Storyline 应服从 delivery_budget；Report正文统一按每页800-900中文字符规划；Executive Summary固定为300-350字符，不随总页数变化，并为关键视觉预留空间。",
-      "check": "检查Executive Summary是否能在固定篇幅内覆盖核心判断、关键证据、决策含义和主要边界；是否为次要 finding 单独开章，或用4个以上并列主体章节消耗正文预算；方法与边界和QA不计入正文。",
-      "fix": "合并承担相近论证作用的章节，降层次要发现，只保留使核心答案成立的最短充分主线。"
+      "dimension": "交付预算",
+      "criterion": "Storyline 应用 delivery_budget 控制章节数量、故事粒度并为关键视觉留白，不承担最终字符或分页审计。",
+      "check": "检查是否为次要 finding 单独开章，或在 Storyline 阶段生成 page plan 和精细字数计算。",
+      "fix": "合并相近证明任务、降层次要内容；把具体字符与分页控制留给 Report、runtime 和 Format。"
     }
   ]
 }

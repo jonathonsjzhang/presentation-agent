@@ -32,6 +32,7 @@ class InlineAdapter:
         self.handoff_path = Path(handoff_path) if handoff_path else None
 
     def compose_instruction(self, request: LLMRequest) -> str:
+        markdown = request.metadata.get("response_format") == "markdown"
         lines = [
             "## 由宿主模型执行的生成步骤",
             "",
@@ -44,9 +45,14 @@ class InlineAdapter:
             request.user.strip(),
             "",
             "### 输出要求",
-            f"- 严格符合 schema: {request.schema_name or '(见下)'}",
-            "- 只产出一个 JSON 对象，写入约定的交接文件后由程序读取校验。",
+            (
+                "- 直接产出完整 Markdown 正文，写入约定的 .md 交接文件。"
+                if markdown
+                else f"- 严格符合 schema: {request.schema_name or '(见下)'}"
+            ),
         ]
+        if not markdown:
+            lines.append("- 只产出一个 JSON 对象，写入约定的交接文件后由程序读取校验。")
         return "\n".join(lines)
 
     def generate(self, request: LLMRequest) -> str:
@@ -61,5 +67,6 @@ class InlineAdapter:
                 "应由宿主模型先按 compose_instruction 的指令产出 JSON 写入此路径。"
             )
         text = self.handoff_path.read_text(encoding="utf-8")
-        extract_json(text)
+        if request.metadata.get("response_format") != "markdown":
+            extract_json(text)
         return text

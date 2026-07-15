@@ -31,7 +31,7 @@ class DefaultManagerChainTests(unittest.TestCase):
             '"research_direction":"价值确认优先于单纯提醒",'
             '"high_confidence_evidence":[],"brief_confirmed":true}'
         )
-        manager.approve(run_mode="full_auto", review_mode="schema_only")
+        manager.approve(run_mode="full_auto")
 
     def _packet(
         self,
