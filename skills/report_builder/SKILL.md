@@ -1,5 +1,5 @@
 ---
-name: report_builder
+name: report-builder
 description: >-
   互联网战略分析汇报助手【宿主入口 · GitHub 分发 · CLI 调度】。当用户说"安装汇报助手"、
   "更新汇报助手"、"帮我做一份战略汇报 / 复盘 / 高管汇报 / 汇报 PPT / storyline /
@@ -197,7 +197,7 @@ runtime 会返回 `presentation_required_before_tool=true`、独立的 `presenta
 2. 将四题答案汇总为 JSON 回传，例如 `{"research_purpose":"...","research_direction":"...","high_confidence_evidence":["EV-003","EV-008"],"brief_confirmed":true}`；没有特别优先的论据也必须显式传 `"high_confidence_evidence":[]`。执行 `report feedback --text '<上述 JSON>'` 后，runtime 会把答案写回 `raw_brief.json` 并记录本次明确确认。
 3. 若用户选择“准确，继续”，feedback 返回 `next_action=report_approve_without_asking_again`，直接执行 `report approve`，**不得再弹第二个确认面板**。若用户选择“需要修改”，把修改归入 `brief_updates` 且传 `"brief_confirmed":false`；runtime 重显更新后的完整 Brief，并只再次询问确认。
 
-最终确认页应按顺序包含研究背景、当前研究 hypo、正式 Evidence List、用户标记的高可信论据、报告主题、听众、项目类型、交付形式、报告篇幅、agent 执行流程和“是否发起 review sub_agent：否（更高效）”。不要询问要调起哪些 worker，也不要询问是否发起 review sub_agent 或 full_auto mode；默认全流程执行，不发起 review sub_agent，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。若 `present_to_user` 缺少 Brief 内容，先执行 `report next --run "<run_id>"` 重新取得 `current_instruction`，并用 `report status` 核对 actor/gate；仍缺失则报告协议错误，不要凭宿主记忆拼一份后直接批准。
+最终确认页应按顺序包含研究背景、当前研究 hypo、正式 Evidence List、用户标记的高可信论据、报告主题、听众、项目类型、交付形式、报告篇幅和 agent 执行流程。不要询问要调起哪些 worker、reviewer 或 full_auto mode；默认全流程执行，并在 Analysis、Storyline 两个环节完成后各暂停一次让用户确认，Storyline 确认后自动走到最终报告。若 `present_to_user` 缺少 Brief 内容，先执行 `report next --run "<run_id>"` 重新取得 `current_instruction`，并用 `report status` 核对 actor/gate；仍缺失则报告协议错误，不要凭宿主记忆拼一份后直接批准。
 
 ## 3. 推进 report loop
 
@@ -221,7 +221,7 @@ state、Worker artifact、Evidence Catalog 只通过返回的 `*_path` / `*_ref`
 
 ### actor=human
 
-展示 `present_to_user` 后立即检查 `interaction_required`。值为 `true` 时必须调用 `preferred_tool`；在 WorkBuddy 中就是把 `ask_user_question_payload` 透传给 `AskUserQuestion`。首次 Brief gate 必须在一个面板中完整呈现 4 题；不能因为草案已有研究背景而删题，也不能把 Brief 确认推迟到另一轮。不要询问 worker 选择或 review sub_agent 选择。
+展示 `present_to_user` 后立即检查 `interaction_required`。值为 `true` 时必须调用 `preferred_tool`；在 WorkBuddy 中就是把 `ask_user_question_payload` 透传给 `AskUserQuestion`。首次 Brief gate 必须在一个面板中完整呈现 4 题；不能因为草案已有研究背景而删题，也不能把 Brief 确认推迟到另一轮。不要询问 worker、reviewer 或自动化模式选择。
 
 - 四题答案：`report feedback --text '{"research_purpose":"...","research_direction":"...","high_confidence_evidence":[...],"brief_confirmed":true}'`
 - feedback 返回 `report_approve_without_asking_again` 时：`report approve`

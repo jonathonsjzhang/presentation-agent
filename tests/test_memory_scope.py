@@ -81,11 +81,7 @@ class MemoryScopeTests(unittest.TestCase):
             [],
         )
 
-    def test_atomic_capability_promotion_writes_owner_rubric(self) -> None:
-        rubric_path = (
-            self.root / "skills" / "atomic" / "format" / "ppt" / "rubrics.json"
-        )
-        write_json(rubric_path, {"rubrics": []})
+    def test_repeated_memory_remains_scoped_hot_memory(self) -> None:
         store = MemoryStore(self.root, "format", data_root=self.data_root)
         store.save_items([
             MemoryItem(
@@ -105,37 +101,10 @@ class MemoryScopeTests(unittest.TestCase):
             )
         ])
 
-        result = store.apply_promotion(["M-001"])
-
-        self.assertEqual(result["promoted"], ["M-001"])
-        promoted = read_json(rubric_path)["rubrics"][0]
-        self.assertEqual(promoted["applies_to"], ["format"])
-        self.assertEqual(promoted["source"]["owner"], "format.ppt")
-
-    def test_cross_scoped_promotion_requires_manual_generalization(self) -> None:
-        store = MemoryStore(self.root, "format", data_root=self.data_root)
-        store.save_items([
-            MemoryItem(
-                id="M-001",
-                dimension="受众版式",
-                trigger="董事会PPT",
-                trigger_type="keyword",
-                suggestion="只保留三张核心图",
-                hit_count=3,
-                owner="format.ppt",
-                applies_to={
-                    "worker": ["format"],
-                    "audience": ["board"],
-                    "report_type": ["*"],
-                    "format": ["ppt"],
-                },
-            )
-        ])
-
-        result = store.apply_promotion(["M-001"])
-
-        self.assertEqual(result["promoted"], [])
-        self.assertEqual(result["skipped_scoped"], ["M-001"])
+        items = store.load_items()
+        self.assertEqual(items[0].hit_count, 3)
+        self.assertEqual(items[0].owner, "format.ppt")
+        self.assertFalse((self.root / "skills").exists())
 
     def test_feedback_route_emits_capability_owner_and_narrow_scope(self) -> None:
         route = MemoryRouter(self.root, data_root=self.data_root).route(

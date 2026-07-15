@@ -14,7 +14,7 @@ class GenericSkill:
     """Package-driven implementation for specialist Worker agents.
 
     The behavior of each Worker is defined by its skill package
-    (SKILL.md + rubrics.json + schemas/), not by hand-written Python. This class
+    (SKILL.md + schemas/), not by hand-written Python. This class
     reads the package out of the runtime context, composes a prompt, and asks
     the LLMClient to produce an artifact that satisfies the agent's output
     schema. Manager uses its own control-plane runtime because it emits

@@ -169,12 +169,8 @@ class StepRunner:
             state_path=self.global_state_path,
         )
 
-        self.validator = ArtifactReviewer(llm=None)
-        # 宿主自执行模式下不创建独立的 LLM checker。
-        # StopChecker 仅做确定性判定（P0 数量、schema 匹配）。
-        # 语义质量由 Worker 同一上下文自检；这里只保留确定性验证。
-        # LoopRunner 路径使用 StopChecker(llm=review_llm) 执行独立 LLM 合理性扫描，
-        # 两者应对的场景不同：前者宿主只有一个模型可用，后者 harness 自持多个 LLM client。
+        self.validator = ArtifactReviewer()
+        # 语义质量由 Worker 同一上下文自检；runtime 只保留确定性验证。
         self.stop_checker = StopChecker()
 
     # ---- public API ---------------------------------------------------------
@@ -270,7 +266,6 @@ class StepRunner:
         state["p0_open"] = [
             {
                 "id": str(failure.get("signature") or "runtime-failure"),
-                "rubric_id": str(failure.get("error_code") or "runtime-failure"),
                 "severity": "P0",
                 "dimension": str(failure.get("responsible_stage") or self.spec.id),
                 "message": str(failure.get("message") or "runtime validation failed"),
@@ -522,13 +517,16 @@ class StepRunner:
         self._write_state(state, "prepare_revise", f"revise round {state['round_index']} 指令已就绪")
 
         p0_msgs = [o.get("message", "") for o in objections_raw[:3]]
-        schema_p0s = [o for o in objections_raw if "schema-" in str(o.get("rubric_id", ""))]
-        llm_p0s = [o for o in objections_raw if "schema-" not in str(o.get("rubric_id", ""))]
+        schema_p0s = [
+            o for o in objections_raw
+            if "schema" in str(o.get("id") or o.get("rubric_id") or "").lower()
+        ]
+        other_p0s = [o for o in objections_raw if o not in schema_p0s]
         parts = []
         if schema_p0s:
             parts.append(f"schema 校验发现 {len(schema_p0s)} 个 P0")
-        if llm_p0s:
-            parts.append(f"runtime validation 发现 {len(llm_p0s)} 个 P0")
+        if other_p0s:
+            parts.append(f"runtime validation 发现 {len(other_p0s)} 个 P0")
         revision_reason = "；".join(parts) if parts else ("P0 问题：" + "；".join(p0_msgs) if p0_msgs else "返工修复")
 
         return {

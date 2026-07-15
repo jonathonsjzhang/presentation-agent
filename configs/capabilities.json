@@ -106,7 +106,6 @@
   },
   "prompt_budget": {
     "generation_instruction_tokens": 4000,
-    "review_rubric_tokens": 3000,
     "memory_tokens": 600
   }
 }

@@ -182,8 +182,7 @@
           "loop": {
             "trigger": "explicit_profile_runtime",
             "workflow_owner": "skill",
-            "reviewer": "clean_context_review_sub_agent",
-            "stop_checker": "schema_and_p0_gate",
+            "validation": "self_check_plus_file_validation",
             "human_review_required": true,
             "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
           },
@@ -204,7 +203,7 @@
           "harness": {
             "skill_package": "skills/analysis",
             "runtime_adapter": "generic_llm_skill_runtime",
-            "review_policy": "schema_validation + machine_check + llm_p1",
+            "review_policy": "self_check_plus_file_validation",
             "connectors": [
               "doc_reader",
               "docx_reader",
@@ -255,8 +254,7 @@
           "loop": {
             "trigger": "explicit_profile_runtime",
             "workflow_owner": "skill",
-            "reviewer": "clean_context_review_sub_agent",
-            "stop_checker": "schema_and_p0_gate",
+            "validation": "self_check_plus_file_validation",
             "human_review_required": true,
             "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
           },
@@ -278,7 +276,7 @@
           "harness": {
             "skill_package": "skills/storyline",
             "runtime_adapter": "generic_llm_skill_runtime",
-            "review_policy": "schema_validation + machine_check + llm_p1",
+            "review_policy": "self_check_plus_file_validation",
             "connectors": [],
             "implementation_status": "profile_runtime_ready"
           },
@@ -319,8 +317,7 @@
           "loop": {
             "trigger": "explicit_profile_runtime",
             "workflow_owner": "skill",
-            "reviewer": "clean_context_review_sub_agent",
-            "stop_checker": "schema_and_p0_gate",
+            "validation": "self_check_plus_file_validation",
             "human_review_required": true,
             "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
           },
@@ -343,7 +340,7 @@
           "harness": {
             "skill_package": "skills/report",
             "runtime_adapter": "generic_llm_skill_runtime",
-            "review_policy": "schema_validation + machine_check + llm_p1",
+            "review_policy": "self_check_plus_file_validation",
             "connectors": [],
             "implementation_status": "profile_runtime_ready"
           },
@@ -383,8 +380,7 @@
           "loop": {
             "trigger": "explicit_profile_runtime",
             "workflow_owner": "skill",
-            "reviewer": "clean_context_review_sub_agent",
-            "stop_checker": "schema_and_p0_gate",
+            "validation": "self_check_plus_file_validation",
             "human_review_required": true,
             "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
           },
@@ -406,7 +402,7 @@
           "harness": {
             "skill_package": "skills/format",
             "runtime_adapter": "generic_llm_skill_runtime",
-            "review_policy": "schema_validation + machine_check + llm_p1",
+            "review_policy": "self_check_plus_file_validation",
             "connectors": [
               "docx_writer",
               "pptx_writer",
@@ -458,17 +454,11 @@
             "战略取舍",
             "受众关注"
           ],
-          "rubrics": [
-            "问题必须抓住核心判断、证据链、替代解释、战略取舍或执行边界，不做浅层释义",
-            "问题必须附着在报告最后一部分，且位于附录之后",
-            "不得写答案、回答策略或补造上游没有的新论据"
-          ],
           "max_revision_rounds": 2,
           "loop": {
             "trigger": "default_main_chain",
             "workflow_owner": "skill",
-            "reviewer": "clean_context_review_sub_agent",
-            "stop_checker": "schema_and_p0_gate",
+            "validation": "self_check_plus_file_validation",
             "human_review_required": true,
             "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
           },
@@ -490,7 +480,7 @@
           "harness": {
             "skill_package": "skills/qa_preparation",
             "runtime_adapter": "generic_llm_skill_runtime",
-            "review_policy": "schema_validation + machine_check + llm_p1",
+            "review_policy": "self_check_plus_file_validation",
             "connectors": [],
             "implementation_status": "profile_runtime_ready"
           },
@@ -568,8 +558,7 @@
     },
     "memory_retrieval_limit": 6,
     "memory_soft_limit": 30,
-    "memory_dream_interval": 10,
-    "rubric_promotion_threshold": 3
+    "memory_dream_interval": 10
   },
   "loop_steps": [
     {
@@ -583,14 +572,14 @@
       "description": "读取输入契约、global state、环节 memory，并按 skill SOP 生成 artifact"
     },
     {
-      "id": "review",
-      "owner": "review_sub_agent",
-      "description": "干净上下文审查 artifact，输出 P0/P1 异议"
+      "id": "validation",
+      "owner": "runtime",
+      "description": "执行文件、Schema 与真实渲染检查"
     },
     {
-      "id": "stop_check",
-      "owner": "stop_checker",
-      "description": "L1 确定性硬门(P0/schema) + L2 独立 LLM 轻量 sanity check"
+      "id": "gate",
+      "owner": "runtime",
+      "description": "确定性错误清除后才进入下一阶段或人工方向确认"
     },
     {
       "id": "human_review",
@@ -650,17 +639,11 @@
         "Caveat",
         "多模态读取"
       ],
-      "rubrics": [
-        "所有 item 必须有真实 source_ref",
-        "无法读取或无法定位的内容写入 unresolved",
-        "不生成 thesis 或 recommendation"
-      ],
       "max_revision_rounds": 2,
       "loop": {
         "trigger": "before_brief_when_raw_materials_exist_without_reusable_catalog",
         "workflow_owner": "skill",
-        "reviewer": "clean_context_review_sub_agent",
-        "stop_checker": "schema_and_p0_gate",
+        "validation": "self_check_plus_file_validation",
         "human_review_required": false,
         "p0_revision_policy": "auto_revise_until_clear_or_max_rounds"
       },
@@ -680,7 +663,7 @@
       "harness": {
         "skill_package": "skills/evidence_harvester",
         "runtime_adapter": "generic_llm_skill_runtime",
-        "review_policy": "schema_validation + machine_check + llm_p1",
+        "review_policy": "self_check_plus_file_validation",
         "connectors": [
           "doc_reader",
           "docx_reader",

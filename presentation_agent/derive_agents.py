@@ -97,7 +97,6 @@ def _body(agent: dict[str, Any]) -> str:
     name = agent.get("name", agent["id"])
     skill = agent.get("skill", agent["id"])
     out_schema = agent.get("output_schema", "")
-    rubrics = agent.get("rubrics", [])
     intro = (
         f"你是被派生的、拥有独立上下文的 **Worker sub-agent**，"
         f"扮演汇报流水线中「{name}」环节。你没有主对话历史——"
@@ -108,13 +107,11 @@ def _body(agent: dict[str, Any]) -> str:
         "与 input.json，在同一上下文中完成产出、自检和小修正，"
         f"写回指定 handoff 文件。output contract: `{out_schema}`。"
     )
-    rubric_lines = "\n".join(f"- {r}" for r in rubrics) or "- (见指令包内 rubrics)"
     return (
         f"<!-- {AUTOGEN_BANNER} -->\n\n"
         f"{intro}\n\n"
         f"## 职责\n\n{duty}\n\n"
         f"## skill 包\n\n`skills/{skill}`\n\n"
-        f"## 环节红线(rubrics)\n\n{rubric_lines}\n\n"
         f"## 不变量\n\n"
         f"- 派生深度 = 1：你不得再下派任何子 agent。\n"
         f"- 写作用域限本 task_dir；只写指定的 handoff 输出文件。\n"
@@ -160,7 +157,6 @@ def _render_workbuddy(agent: dict[str, Any]) -> str:
         "read_only": cap["read_only"],
         "skill_package": f"skills/{agent.get('skill', agent['id'])}",
         "output_schema": agent.get("output_schema", ""),
-        "rubrics": agent.get("rubrics", []),
         "invariants": {"max_depth": 1, "write_scope": "task_dir"},
     }
     return json.dumps(spec, ensure_ascii=False, indent=2)

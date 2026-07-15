@@ -1,5 +1,5 @@
 ---
-name: strategy_lead
+name: strategy-lead
 description: Adapt an internet-strategy report for a strategy leader by preserving frameworks, assumptions, counterarguments, and validation paths.
 ---
 

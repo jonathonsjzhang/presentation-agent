@@ -7,7 +7,6 @@ from pathlib import Path
 from presentation_agent.connectors.registry import load_with_connector
 from presentation_agent.io import read_json
 from presentation_agent.models import AgentSpec
-from presentation_agent.review import ArtifactReviewer
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,38 +52,6 @@ class StrategyQualityGuardTests(unittest.TestCase):
             all(unit["source_unit_id"].startswith("SOURCE-") for unit in units)
         )
         self.assertEqual(loaded["source_unit_summary"]["unresolved"], 0)
-
-    def test_reviewer_snapshot_contains_evidence_index(self) -> None:
-        snapshot = ArtifactReviewer._signal_snapshot(
-            {
-                "upstream_signal": {"topic": "测试"},
-                "raw_brief": {
-                    "source_units": [
-                        {
-                            "source_unit_id": "DOC1-P001",
-                            "modality": "text",
-                            "inspection_status": "inspected",
-                        }
-                    ],
-                    "evidence_items": [
-                        {
-                            "evidence_id": "EV-001",
-                            "type": "quote",
-                            "source_unit_refs": ["DOC1-P001"],
-                            "scope": "individual_case",
-                        }
-                    ],
-                },
-            }
-        )
-        self.assertEqual(snapshot["evidence_index"]["evidence_items"]["count"], 1)
-        self.assertEqual(
-            snapshot["evidence_index"]["source_units"]["items"][0][
-                "source_unit_id"
-            ],
-            "DOC1-P001",
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,7 +20,6 @@ class AgentSpec:
     input_schema: str
     output_schema: str
     memory_dimensions: list[str]
-    rubrics: list[str] = field(default_factory=list)
     max_revision_rounds: int = 2
     description: str = ""
     previous_agent_id: str | None = None
@@ -42,7 +41,6 @@ class AgentSpec:
             input_schema=data["input_schema"],
             output_schema=data["output_schema"],
             memory_dimensions=list(data.get("memory_dimensions", [])),
-            rubrics=list(data.get("rubrics", [])),
             max_revision_rounds=int(data.get("max_revision_rounds", 2)),
             description=str(data.get("description", "")),
             previous_agent_id=data.get("previous_agent_id"),
@@ -69,7 +67,6 @@ class AgentSpec:
             "input_contract": self.input_contract,
             "output_contract": self.output_contract,
             "memory_dimensions": self.memory_dimensions,
-            "rubrics": self.rubrics,
             "max_revision_rounds": self.max_revision_rounds,
             "loop": self.loop_policy,
             "state": self.state_contract,

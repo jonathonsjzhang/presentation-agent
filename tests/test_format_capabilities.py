@@ -10,10 +10,8 @@ from presentation_agent.agent_profiles import load_agent_profile
 from presentation_agent.io import read_json
 from presentation_agent.models import AgentSpec
 from presentation_agent.renderers import render_material
-from presentation_agent.machine_check import run_machine_checks
 from presentation_agent.review import ArtifactReviewer
 from presentation_agent.memory import MemoryStore
-from presentation_agent.skill_package import load_skill_package
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -100,31 +98,6 @@ class FormatCapabilityTests(unittest.TestCase):
         self.assertTrue(any(obj.id == "P0-format-capability-mismatch" for obj in report.p0))
         self.assertEqual(result.status, "error")
         self.assertIn("delivery_target mismatch", result.detail)
-
-    def test_negated_kpi_policy_statement_does_not_trigger_forbidden_pattern(self) -> None:
-        package = load_skill_package(ROOT, "format")
-        artifact = {
-            "delivery_units": [
-                {
-                    "headline": "边界说明",
-                    "content": {
-                        "primary_text": "本报告不涉及 KPI、预算或时间表，也不得新增负责人。"
-                    },
-                    "visual_asset_refs": [],
-                }
-            ],
-        }
-
-        objections = run_machine_checks(artifact, package.rubrics)
-
-        self.assertFalse(
-            any(
-                item.dimension == "recommendation_scope"
-                for item in objections
-            ),
-            [item.to_dict() for item in objections],
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

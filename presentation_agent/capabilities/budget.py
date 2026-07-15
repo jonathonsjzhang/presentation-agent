@@ -9,12 +9,10 @@ def estimate_tokens(value: Any) -> int:
     return (len(text) + 3) // 4
 
 
-def prompt_budget(*, instructions: str, rubrics: list[Any], schemas: dict[str, Any]) -> dict[str, int]:
+def prompt_budget(*, instructions: str, schemas: dict[str, Any]) -> dict[str, int]:
     return {
         "instruction_chars": len(instructions),
         "instruction_tokens_estimate": estimate_tokens(instructions),
-        "rubric_chars": len(str(rubrics)),
-        "rubric_tokens_estimate": estimate_tokens(rubrics),
         "schema_chars": len(str(schemas)),
         "schema_tokens_estimate": estimate_tokens(schemas),
     }

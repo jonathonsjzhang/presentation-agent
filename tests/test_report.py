@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 
 from presentation_agent.llm.schema import validate
-from presentation_agent.skill_package import load_skill_package
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,29 +24,15 @@ class ReportCoreTests(unittest.TestCase):
 
     def test_report_skill_defines_a_real_markdown_author(self) -> None:
         skill = (ROOT / "skills" / "report" / "SKILL.md").read_text(encoding="utf-8")
-        rubrics = read_json(ROOT / "skills" / "report" / "rubrics.json")
         self.assertIn(
             "基于已批准的 Storyline，把论证骨架写成一篇完整",
             skill,
         )
         self.assertIn("report_markdown", skill)
         self.assertIn("唯一内容真相源", skill)
+        self.assertIn("本批访谈材料支持的核心判断是", skill)
+        self.assertIn("应直接改写为读者需要的边界", skill)
         self.assertNotIn("正文 block 必须", skill)
-        ids = {item["id"] for item in rubrics["rubrics"]}
-        self.assertTrue(
-            {
-                "REPORT-SCHEMA-001",
-                "REPORT-MANUSCRIPT-001",
-                "REPORT-PROSE-001",
-                "REPORT-TRACE-001",
-            }.issubset(ids)
-        )
-
-    def test_editorial_style_reference_is_bundled_for_generation(self) -> None:
-        instructions = load_skill_package(ROOT, "report").instructions
-        self.assertIn("BUNDLED REFERENCES", instructions)
-        self.assertIn("Reference: references/editorial_style.md", instructions)
-        self.assertIn("删除常见 AI 腔", instructions)
 
     def test_frozen_report_strictly_validates_as_report_v1(self) -> None:
         self.assertEqual(validate(self.report, self.schema), [])

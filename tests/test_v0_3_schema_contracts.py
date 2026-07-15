@@ -275,10 +275,6 @@ class FormatCoreCompilationTests(unittest.TestCase):
         self.assertNotIn("material_units[]", package.instructions)
         self.assertNotIn("pages[]", package.instructions)
         self.assertNotIn("style_tokens", package.instructions)
-        rubric_text = json.dumps(package.rubrics, ensure_ascii=False)
-        self.assertNotIn("material_units[]", rubric_text)
-        self.assertNotIn("pages[]", rubric_text)
-        self.assertNotIn("style_tokens", rubric_text)
         self.assertIn("formatted_material.v2", package.schemas)
 
     def test_each_delivery_target_selects_exactly_one_matching_capability(self) -> None:

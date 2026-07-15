@@ -1,5 +1,5 @@
 ---
-name: evidence_harvester
+name: evidence-harvester
 description: Build a complete, source-traceable evidence catalog before argument synthesis without forming strategic conclusions.
 ---
 

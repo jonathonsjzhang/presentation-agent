@@ -1,5 +1,5 @@
 ---
-name: business_team
+name: business-team
 description: Adapt an internet-strategy report for a business team by translating conclusions into priorities, metrics, owners, dependencies, and next actions.
 ---
 
