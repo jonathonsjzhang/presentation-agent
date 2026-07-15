@@ -130,6 +130,7 @@ def enrich_format_visuals_with_evidence_assets(
         chart_data = asset.get("chart_data") if asset else None
         table_data = asset.get("table_data") if asset else None
         enrichment_kind = ""
+        runtime_projection: dict[str, Any] = {}
         if visual_type == "chart" and isinstance(chart_data, dict) and chart_data:
             visual["data"] = chart_data
             enrichment_kind = "chart_data"
@@ -140,7 +141,7 @@ def enrich_format_visuals_with_evidence_assets(
             # inventing a chart or returning an empty visual.
             visual["type"] = "table"
             visual["data"] = table_data
-            visual["runtime_projection"] = {
+            runtime_projection = {
                 "from": visual_type,
                 "to": "table",
                 "reason": (
@@ -173,6 +174,7 @@ def enrich_format_visuals_with_evidence_assets(
                 "evidence_id": asset.get("evidence_id", "") if asset else "",
                 "asset_id": asset.get("asset_id", "") if asset else "",
                 "ref": asset.get("ref", "") if asset else "",
+                **({"runtime_projection": runtime_projection} if runtime_projection else {}),
             }
         )
     if enriched:

@@ -1036,9 +1036,6 @@ class StepRunner:
                     selected_capabilities=self.skill_package.selected_capabilities,
                     source_report=source_report,
                 )
-                self._apply_format_body_budget_audit(
-                    material, source_report, render_result
-                )
                 if visual_audit is not None and visual_audit["passed"] is not True:
                     detail = "；".join(
                         str(item.get("reason") or "可视化论据不完整")
@@ -1052,6 +1049,35 @@ class StepRunner:
                         else visual_detail
                     )
                 if self.contract_profile == "v0_4":
+                    from presentation_agent.renderers.visual_quality import (
+                        audit_render_output,
+                    )
+
+                    quality_audit = audit_render_output(
+                        material,
+                        render_result,
+                        self.run_dir,
+                        file_stem="report_formatted",
+                        require_page_snapshots=True,
+                    )
+                    render_result.metrics["visual_quality_audit"] = quality_audit
+                    quality_manifest_path = self.run_dir / "visual_quality_manifest.json"
+                    write_json(quality_manifest_path, quality_audit)
+                    artifact["visual_quality_manifest_path"] = str(
+                        quality_manifest_path
+                    )
+                    if quality_audit["passed"] is not True:
+                        summary = "；".join(
+                            str(item.get("message") or "未知视觉缺陷")
+                            for item in quality_audit.get("issues") or []
+                        )
+                        render_result.status = "error"
+                        quality_detail = f"Renderer 视觉质量检查未通过：{summary}"
+                        render_result.detail = (
+                            f"{render_result.detail}; {quality_detail}"
+                            if render_result.detail
+                            else quality_detail
+                        )
                     if render_result.warnings or render_result.degraded_units:
                         render_result.status = "error"
                         render_result.detail = (
@@ -1059,6 +1085,10 @@ class StepRunner:
                             if render_result.detail
                             else "strict render rejected degraded assets"
                         )
+                self._apply_format_body_budget_audit(
+                    material, source_report, render_result
+                )
+                if self.contract_profile == "v0_4":
                     manifest = render_result.to_dict()
                     manifest["generated_assets"] = sorted(
                         str(path)
@@ -1380,8 +1410,6 @@ class StepRunner:
             )
         if filename in {"output_gen.json", "output_revise.json"}:
             input_data = self._load_input(state)
-            if self.contract_profile == "v0_4" and self.spec.id == "format":
-                self._validate_v04_format_plan(data)
             self._attach_runtime_evidence_fields(data, input_data)
             if self.spec.id == "qa_preparation":
                 source_report = self._source_report_from_input(input_data) or {}
@@ -1399,56 +1427,21 @@ class StepRunner:
                 )
 
                 enrich_format_visuals_with_evidence_assets(data, input_data)
+                if self.contract_profile == "v0_4":
+                    # Evidence projection belongs to the runtime.  Validate the
+                    # effective renderer payload, not the worker's unresolved
+                    # source binding before deterministic enrichment.
+                    self._validate_v04_format_plan(data)
         return data
 
     @staticmethod
     def _validate_v04_format_plan(plan: dict[str, Any]) -> None:
         """Fail in the Format task before renderer fallback can hide bad assets."""
+        from presentation_agent.renderers.visual_quality import (
+            renderer_readiness_issues,
+        )
 
-        issues: list[str] = []
-        for index, visual in enumerate(plan.get("visuals") or [], 1):
-            if not isinstance(visual, dict):
-                issues.append(f"visual {index} 不是对象")
-                continue
-            visual_type = str(visual.get("type") or "")
-            data = visual.get("data") if isinstance(visual.get("data"), dict) else {}
-            if visual_type == "chart":
-                chart_type = str(data.get("chart_type") or "bar").lower()
-                if chart_type not in {"bar", "line"}:
-                    issues.append(f"visual {index} 使用 renderer 不支持的 chart_type={chart_type}")
-                categories = data.get("categories")
-                values = data.get("values")
-                series = data.get("series")
-                direct_ready = (
-                    isinstance(categories, list)
-                    and bool(categories)
-                    and isinstance(values, list)
-                    and len(categories) == len(values)
-                )
-                series_ready = (
-                    isinstance(categories, list)
-                    and bool(categories)
-                    and isinstance(series, list)
-                    and bool(series)
-                    and all(
-                        isinstance(row, dict)
-                        and isinstance(row.get("values"), list)
-                        and len(row["values"]) == len(categories)
-                        for row in series
-                    )
-                )
-                if not (direct_ready or series_ready):
-                    issues.append(
-                        f"visual {index} 的 chart data 必须提供等长 categories+values 或 categories+series[].values"
-                    )
-            elif visual_type == "table":
-                columns = data.get("columns") or data.get("headers")
-                if not isinstance(columns, list) or not columns or not isinstance(data.get("rows"), list):
-                    issues.append(f"visual {index} 的 table data 必须提供 columns/headers 和 rows")
-            elif visual_type == "matrix":
-                labels = data.get("dimensions") or data.get("labels")
-                if not isinstance(labels, list) or len(labels) < 4:
-                    issues.append(f"visual {index} 的 matrix data 至少需要 4 个 dimensions/labels")
+        issues = renderer_readiness_issues(plan.get("visuals"))
         if issues:
             raise StepError("Format 视觉预检未通过：" + "；".join(issues))
 

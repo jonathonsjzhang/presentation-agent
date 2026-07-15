@@ -185,6 +185,35 @@ class V04SimplifiedFlowTests(unittest.TestCase):
         }
         self.assertEqual(validate(valid, schema), [])
 
+    def test_format_schema_allows_runtime_projection_before_preflight(self) -> None:
+        schema = read_json(ROOT / "skills/format/schemas/format_plan.v1.json")
+        unresolved = {
+            "visuals": [
+                {
+                    "type": "chart",
+                    "title": "由证据资产物化",
+                    "source_refs": ["E1:T1-usage"],
+                }
+            ]
+        }
+        self.assertEqual(validate(unresolved, schema), [])
+        with self.assertRaisesRegex(StepError, "视觉预检未通过"):
+            StepRunner._validate_v04_format_plan(unresolved)
+
+    def test_format_schema_rejects_non_native_matrix_size(self) -> None:
+        schema = read_json(ROOT / "skills/format/schemas/format_plan.v1.json")
+        invalid = {
+            "visuals": [
+                {
+                    "type": "matrix",
+                    "title": "不是 2×2",
+                    "source_refs": ["E1"],
+                    "data": {"dimensions": ["A", "B", "C", "D", "E"]},
+                }
+            ]
+        }
+        self.assertTrue(validate(invalid, schema))
+
     def test_structured_failure_signature_is_stable_for_numeric_drift(self) -> None:
         first = classify_failure(
             "Format 视觉预检未通过：visual 1 的 chart data 不完整",
@@ -196,6 +225,15 @@ class V04SimplifiedFlowTests(unittest.TestCase):
         )
         self.assertEqual(first["error_code"], "invalid_data_shape")
         self.assertEqual(first["signature"], second["signature"])
+
+    def test_post_render_visual_failure_is_owned_by_runtime(self) -> None:
+        failure = classify_failure(
+            "Renderer 视觉质量检查未通过：渲染图像接近空白",
+            stage="format",
+        )
+        self.assertEqual(failure["error_code"], "visual_quality_failure")
+        self.assertEqual(failure["responsible_stage"], "runtime")
+        self.assertEqual(failure["repair_scope"], "renderer")
 
     def test_same_worker_failure_revises_once_then_circuit_breaks(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
