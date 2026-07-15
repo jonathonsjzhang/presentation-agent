@@ -44,6 +44,7 @@
           "upstream_schema": "storyline.v3",
           "required_fields": [
             "core_answer",
+            "executive_summary",
             "sections",
             "visual_evidence_plan"
           ],

@@ -4153,7 +4153,7 @@ class ManagerOrchestrator:
         lines = [
             "## Storyline 确认",
             "",
-            "Storyline 已基于确认后的 Analysis 方向整理出一版故事线。请确认这条主线是否可以进入 Report；如果不满意，请说明原因后让同一个 Storyline agent 重写；如果你希望自己修改，请直接写出修改方向或新版本。",
+            "Storyline 已基于确认后的 Analysis 方向整理出 Executive Summary 和一版完整故事线。请确认摘要与主线是否可以进入 Report；如果不满意，请说明原因后让同一个 Storyline agent 重写；如果你希望自己修改，请直接写出修改方向或新版本。",
         ]
         if error:
             lines.extend(["", f"需要补充：{error}"])
@@ -4175,10 +4175,10 @@ class ManagerOrchestrator:
                     if isinstance(item, dict) and item.get("statement"):
                         summary_lines.append(str(item["statement"]))
             if summary_lines:
-                lines.extend(["", "### 摘要要点"])
+                lines.extend(["", "### Executive Summary"])
                 lines.extend(f"- {item}" for item in summary_lines[:4])
         elif isinstance(executive_summary, str) and executive_summary.strip():
-            lines.extend(["", "### 摘要要点", executive_summary.strip()])
+            lines.extend(["", "### Executive Summary", executive_summary.strip()])
 
         sections = artifact.get("sections") or []
         if isinstance(sections, list) and sections:
@@ -4487,7 +4487,7 @@ class ManagerOrchestrator:
                 "suggestion": (
                     "不要新起 Storyline task。基于已确认的 Analysis 论点组、Analysis findings、"
                     "当前 Storyline 和用户反馈，重新输出一版 storyline.v3；只保留一条主线，"
-                    "更新 core_answer、sections、appendix_finding_refs/open_issues。"
+                    "更新 core_answer、executive_summary、sections、appendix_finding_refs/open_issues。"
                 ),
             }
         ]

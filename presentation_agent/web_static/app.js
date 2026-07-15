@@ -658,7 +658,7 @@ function fallbackOverview() {
   const stages = [
     ["manager", "汇报项目 Manager", "manager_context.v1", "manager_decision.v1", "定义任务、规划、派发 Worker、验收与返工"],
     ["analysis", "分析", "report_charter.v2", "analysis.v1", "形成发现、so what、反证、替代解释和置信度"],
-    ["storyline", "故事线", "analysis.v1", "storyline.v3", "形成 Executive Summary、message pyramid 与章节结构"],
+    ["storyline", "故事线", "analysis.v1", "storyline.v3", "形成 250–350 字 bullet 式 Executive Summary 与结论式章节、完整论证及证据链"],
     ["report", "报告产出", "storyline.v3", "report.v1", "生成完整、可独立阅读的战略分析报告"],
     ["qa_preparation", "Q&A 梳理", "report.v1", "report.v1", "在报告末尾追加听众可能提出的深度问题"],
     ["format", "可视化", "report.v1", "formatted_material.v2", "默认生成精装文档，再按用户选择转译 PPT / HTML"],

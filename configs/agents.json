@@ -44,7 +44,7 @@
           "name": "故事线",
           "stage": 2,
           "skill": "storyline",
-          "description": "把已确认分析收敛为一份完整故事线文档。",
+          "description": "把已确认的 Analysis 论点展开成完整故事线，并基于正文结构写成 250–350 字 bullet 式 Executive Summary。",
           "previous_agent_id": "analysis",
           "next_agent_id": "report",
           "input_schema": "markdown_artifact.v1",
@@ -53,7 +53,7 @@
             "artifact_format": "markdown",
             "artifact_kind": "storyline",
             "canonical_filename": "storyline.md",
-            "required_headings": ["核心答案", "故事线", "关键边界", "不进入主线的内容"]
+            "required_headings": ["核心答案", "Executive Summary", "故事线", "关键边界", "不进入主线的内容"]
           },
           "memory_dimensions": ["Executive Summary", "Message Pyramid", "论证结构", "章节设计", "证据边界"],
           "max_revision_rounds": 1,
@@ -219,7 +219,7 @@
           "name": "故事线",
           "stage": 2,
           "skill": "storyline",
-          "description": "基于 Analysis 收敛核心答案和递进章节；金字塔与 Executive Summary 是构思方法，不重复序列化。",
+          "description": "基于已确认的 Analysis 论点形成结论式章节、完整推理与证据链，并写成 250–350 字 bullet 式 Executive Summary。",
           "previous_agent_id": "analysis",
           "next_agent_id": "report",
           "input_schema": "analysis.v1",
@@ -235,6 +235,7 @@
           "output_contract": {
             "required_handoff_fields": [
               "core_answer",
+              "executive_summary",
               "sections",
               "visual_evidence_plan"
             ],
@@ -294,6 +295,7 @@
           "input_contract": {
             "required_inputs": [
               "core_answer",
+              "executive_summary",
               "sections"
             ]
           },

@@ -57,6 +57,9 @@ class V03SchemaContractTests(unittest.TestCase):
         self.assertTrue(all(section["chapter"] for section in fixture["sections"]))
         self.assertTrue(all(section["brief"] for section in fixture["sections"]))
         self.assertTrue(fixture["core_answer"])
+        self.assertIsInstance(fixture["executive_summary"], str)
+        self.assertLessEqual(250, len(fixture["executive_summary"]))
+        self.assertLessEqual(len(fixture["executive_summary"]), 350)
 
     def test_report_manifest_may_leave_non_authoritative_refs_empty(self) -> None:
         report_schema = read_json(ROOT / "skills/report/schemas/report.v1.json")

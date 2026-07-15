@@ -34,7 +34,7 @@ class PageBudgetTests(unittest.TestCase):
                 "body_char_target": 2550,
                 "body_char_warning": 2700,
                 "report_body_char_limit": 2700,
-                "executive_summary_char_min": 300,
+                "executive_summary_char_min": 250,
                 "executive_summary_char_max": 350,
                 "max_body_visuals": 3,
             },
@@ -69,7 +69,7 @@ class PageBudgetTests(unittest.TestCase):
             (six_pages["body_char_min"], six_pages["body_char_target"], six_pages["report_body_char_limit"]),
             (4800, 5100, 5400),
         )
-        self.assertEqual(five_pages["executive_summary_char_min"], 300)
+        self.assertEqual(five_pages["executive_summary_char_min"], 250)
         self.assertEqual(six_pages["executive_summary_char_max"], 350)
 
     def test_extracts_body_but_preserves_methods_and_qa_in_source(self) -> None:
@@ -97,6 +97,21 @@ class PageBudgetTests(unittest.TestCase):
         self.assertEqual(
             executive_summary_character_count(markdown), len("摘要内容。")
         )
+
+    def test_counts_bullet_summary_content_without_markdown_markers(self) -> None:
+        markdown = (
+            "# 标题\n\n## Executive Summary\n\n"
+            "- **用户时长接近翻倍：** 过去一年增长94%。\n"
+            "  - 使用频次提升66%。\n"
+            "- **增长来自复杂任务：** 办公和创作贡献更高时长。\n\n"
+            "## 一、主体判断\n\n正文内容。\n"
+        )
+        expected = len(
+            "用户时长接近翻倍：过去一年增长94%。"
+            "使用频次提升66%。"
+            "增长来自复杂任务：办公和创作贡献更高时长。"
+        )
+        self.assertEqual(executive_summary_character_count(markdown), expected)
 
     def test_audit_uses_body_only_report_and_filters_excluded_visuals(self) -> None:
         captured: dict = {}
