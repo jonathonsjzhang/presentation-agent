@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib.util
 import os
 from pathlib import Path
+import shutil
+import subprocess
+import tempfile
 from typing import Optional
 
 from presentation_agent.evaluation.adapters import evaluation_runtime_status
@@ -97,6 +101,8 @@ def workspace_status(workspace: Workspace, repo_root: Path) -> dict[str, object]
     checks.append(_check("artifacts", workspace.artifacts_dir.exists(), str(workspace.artifacts_dir)))
     checks.append(_check("repo_configs", (repo_root / "configs" / "agents.json").exists(), str(repo_root / "configs" / "agents.json")))
     checks.append(_check("repo_skills", (repo_root / "skills").exists(), str(repo_root / "skills")))
+    production = _production_runtime_status()
+    checks.extend(production["checks"])
     agents = _agent_ids(repo_root)
     missing_memory = [
         agent_id for agent_id in agents
@@ -135,8 +141,78 @@ def workspace_status(workspace: Workspace, repo_root: Path) -> dict[str, object]
         "repo": str(repo_root),
         "workspace": str(workspace.root),
         "checks": checks,
+        "production": production,
         "evaluation": evaluation,
     }
+
+
+def _production_runtime_status() -> dict[str, object]:
+    """Probe the real PDF/DOCX path used by Chinese report production."""
+
+    pdfplumber_ready = importlib.util.find_spec("pdfplumber") is not None
+    docx_ready = importlib.util.find_spec("docx") is not None
+    bundled_soffice = (
+        Path.home()
+        / ".cache/codex-runtimes/codex-primary-runtime/dependencies/bin/soffice"
+    )
+    soffice = (
+        os.environ.get("PRESENTATION_AGENT_SOFFICE")
+        or shutil.which("soffice")
+        or (str(bundled_soffice) if bundled_soffice.is_file() else None)
+    )
+    checks = [
+        _check(
+            "pdf_ingestion",
+            pdfplumber_ready,
+            "pdfplumber importable" if pdfplumber_ready else "pdfplumber is required to parse source PDFs",
+        ),
+        _check(
+            "docx_generation",
+            docx_ready,
+            "python-docx importable" if docx_ready else "python-docx is required to generate reports",
+        ),
+    ]
+    smoke_ok = False
+    smoke_detail = "not run because python-docx, pdfplumber, or soffice is unavailable"
+    if pdfplumber_ready and docx_ready and soffice:
+        smoke_ok, smoke_detail = _chinese_document_smoke_test(Path(soffice))
+    checks.append(_check("chinese_document_render", smoke_ok, smoke_detail))
+    return {
+        "ok": all(item["status"] == "ok" for item in checks),
+        "checks": checks,
+    }
+
+
+def _chinese_document_smoke_test(soffice: Path) -> tuple[bool, str]:
+    try:
+        import pdfplumber
+        from docx import Document
+
+        with tempfile.TemporaryDirectory(prefix="presentation-agent-doctor-") as raw_dir:
+            temp = Path(raw_dir)
+            source = temp / "chinese-smoke.docx"
+            document = Document()
+            document.add_heading("中文标题", level=1)
+            document.add_paragraph("战略分析中文渲染测试")
+            document.save(source)
+            completed = subprocess.run(
+                [str(soffice), "--headless", "--convert-to", "pdf", "--outdir", str(temp), str(source)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            pdf_path = temp / "chinese-smoke.pdf"
+            if completed.returncode != 0 or not pdf_path.exists():
+                detail = (completed.stderr or completed.stdout or "no PDF produced").strip()
+                return False, f"LibreOffice DOCX→PDF smoke test failed: {detail}"
+            with pdfplumber.open(pdf_path) as pdf:
+                rendered_text = "\n".join((page.extract_text() or "") for page in pdf.pages)
+            if "中文标题" not in rendered_text or "战略分析" not in rendered_text:
+                return False, "DOCX→PDF completed but Chinese glyph text was missing"
+            return True, "generated and rendered a Chinese DOCX successfully"
+    except Exception as exc:
+        return False, f"Chinese document smoke test failed: {exc}"
 
 
 def _write_config(workspace: Workspace, repo_root: Path, *, force: bool) -> bool:

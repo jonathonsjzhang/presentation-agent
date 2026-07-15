@@ -918,7 +918,6 @@ function renderInline() {
     init: "待 prepare 生成指令",
     awaiting_gen_output: "等待写入生成产物",
     gen_completed: "生成完成，待 prepare 审查",
-    awaiting_review_output: "等待写入审查意见",
     review_completed: "审查完成",
     awaiting_revise_output: "等待写入返工产物",
     done: "本环节已完成",
@@ -941,7 +940,7 @@ function renderInline() {
 
   // button enablement
   const has = !!inline.runName;
-  const awaitingOutput = step === "awaiting_gen_output" || step === "awaiting_review_output" || step === "awaiting_revise_output";
+  const awaitingOutput = step === "awaiting_gen_output" || step === "awaiting_revise_output";
   const canPrepare = has && (step === "init" || step === "gen_completed" || step === "review_completed");
   const canCommit = has && awaitingOutput;
   const canAdvance = has && step === "done" && !inlineIsLastStage();

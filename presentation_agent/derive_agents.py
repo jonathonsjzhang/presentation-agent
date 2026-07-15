@@ -1,16 +1,9 @@
 """Derive per-terminal sub-agent definition files from a single source of truth.
 
 ``configs/agents.json`` is the single source of truth for the pipeline. This
-module projects each of its stage agents into the three host dialects so the
-three-layer architecture (L1 Manager -> L2 worker -> L3 reviewer) is *declared*
-identically everywhere, while each host expresses capability bounds in its own
-way.
-
-For every stage agent we emit two definitions:
-
-- a **worker** (writable, content producer)
-- a **reviewer** (read-only checker; its read-only bound is what gives the
-  maker-checker isolation a physical guarantee, not a convention)
+module projects each Worker into the three host dialects. Quality checks happen
+inside the Worker context plus deterministic runtime validation; no separate
+process Reviewer agent is derived.
 
 Dialect mapping (terminal-agnostic contract -> per-host expression):
 
@@ -18,7 +11,6 @@ Dialect mapping (terminal-agnostic contract -> per-host expression):
 role          WorkBuddy          Claude Code            Codex
 ============  =================  =====================  =========================
 worker        general-purpose    tools: Read,Write,Bash worker (full sandbox)
-reviewer      Explore            tools: Read (no write) --sandbox read-only
 ============  =================  =====================  =========================
 
 Important: this generator only emits **stage-level sub-agents**. It never
@@ -44,17 +36,14 @@ AUTOGEN_BANNER = "AUTO-GENERATED from configs/agents.json — do not edit by han
 DIALECT = {
     "workbuddy": {
         "worker": {"subagent_type": "general-purpose", "read_only": False},
-        "reviewer": {"subagent_type": "Explore", "read_only": True},
     },
     "claude": {
         # Claude Code agent frontmatter `tools:` is an allow-list.
         "worker": {"tools": "Read, Write, Edit, Bash", "read_only": False},
-        "reviewer": {"tools": "Read, Grep, Glob", "read_only": True},
     },
     "codex": {
         # Codex expresses read-only via sandbox mode.
         "worker": {"sandbox": "workspace-write", "read_only": False},
-        "reviewer": {"sandbox": "read-only", "read_only": True},
     },
 }
 
@@ -104,33 +93,21 @@ def _yaml_frontmatter(fields: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
-def _body(agent: dict[str, Any], role: str) -> str:
+def _body(agent: dict[str, Any]) -> str:
     name = agent.get("name", agent["id"])
     skill = agent.get("skill", agent["id"])
     out_schema = agent.get("output_schema", "")
     rubrics = agent.get("rubrics", [])
-    if role == "worker":
-        intro = (
-            f"你是被派生的、拥有独立上下文的 **Worker sub-agent**，"
-            f"扮演汇报流水线中「{name}」环节。你没有主对话历史——"
-            f"全部任务输入都在 harness 交给你的指令包与 input 文件里。"
-        )
-        duty = (
-            "读取 harness 准备的指令包(内嵌完整 SKILL.md 角色/工作流/输出契约)"
-            "与 input.json，严格按 Output Contract 产出一个合法 JSON 对象，"
-            f"写回 handoff 的 output 文件。output schema: `{out_schema}`。"
-        )
-    else:
-        intro = (
-            f"你是被派生的、拥有独立干净上下文的 **只读 Reviewer sub-agent**"
-            f"(maker-checker 中的 checker)，审查「{name}」环节的产物。"
-            f"你与产出该产物的 worker 完全隔离，**只读不改产物**。"
-        )
-        duty = (
-            "读取 review 指令包(内嵌 rubrics 与被审产物)，逐条对照 P0/P1，"
-            '按精确格式写回 `{"objections":[{rubric_id,severity,dimension,'
-            'message,evidence,suggestion}]}`(无命中则空数组)到 review 输出文件。'
-        )
+    intro = (
+        f"你是被派生的、拥有独立上下文的 **Worker sub-agent**，"
+        f"扮演汇报流水线中「{name}」环节。你没有主对话历史——"
+        f"全部任务输入都在 harness 交给你的指令包与 input 文件里。"
+    )
+    duty = (
+        "读取 harness 准备的指令包（内嵌完整 SKILL.md 角色/核心准则/工作流/输出契约）"
+        "与 input.json，在同一上下文中完成产出、自检和小修正，"
+        f"写回指定 handoff 文件。output contract: `{out_schema}`。"
+    )
     rubric_lines = "\n".join(f"- {r}" for r in rubrics) or "- (见指令包内 rubrics)"
     return (
         f"<!-- {AUTOGEN_BANNER} -->\n\n"
@@ -144,24 +121,22 @@ def _body(agent: dict[str, Any], role: str) -> str:
     )
 
 
-def _render_claude(agent: dict[str, Any], role: str) -> str:
-    cap = DIALECT["claude"][role]
-    suffix = "" if role == "worker" else "-reviewer"
-    name = f"{agent['id']}{suffix}"
+def _render_claude(agent: dict[str, Any]) -> str:
+    cap = DIALECT["claude"]["worker"]
+    name = agent["id"]
     desc = (
         f"[{AUTOGEN_BANNER}] 汇报流水线「{agent.get('name', agent['id'])}」"
-        f"环节的{'内容生产 worker' if role == 'worker' else '只读审查 reviewer'}。"
+        "环节的内容生产 Worker。"
     )
     fm = _yaml_frontmatter(
         {"name": name, "description": desc, "tools": cap["tools"]}
     )
-    return f"{fm}\n\n{_body(agent, role)}"
+    return f"{fm}\n\n{_body(agent)}"
 
 
-def _render_codex(agent: dict[str, Any], role: str) -> str:
-    cap = DIALECT["codex"][role]
-    suffix = "" if role == "worker" else "-reviewer"
-    name = f"{agent['id']}{suffix}"
+def _render_codex(agent: dict[str, Any]) -> str:
+    cap = DIALECT["codex"]["worker"]
+    name = agent["id"]
     fm = _yaml_frontmatter(
         {
             "name": name,
@@ -169,17 +144,16 @@ def _render_codex(agent: dict[str, Any], role: str) -> str:
             "read_only": "true" if cap["read_only"] else "false",
         }
     )
-    return f"{fm}\n\n{_body(agent, role)}"
+    return f"{fm}\n\n{_body(agent)}"
 
 
-def _render_workbuddy(agent: dict[str, Any], role: str) -> str:
-    cap = DIALECT["workbuddy"][role]
-    suffix = "" if role == "worker" else "_reviewer"
+def _render_workbuddy(agent: dict[str, Any]) -> str:
+    cap = DIALECT["workbuddy"]["worker"]
     spec = {
         "_generated": AUTOGEN_BANNER,
-        "id": f"{agent['id']}{suffix}",
+        "id": agent["id"],
         "host": "workbuddy",
-        "role": role,
+        "role": "worker",
         "agent_id": agent["id"],
         "name": agent.get("name", agent["id"]),
         "subagent_type": cap["subagent_type"],
@@ -200,7 +174,7 @@ RENDERERS = {
 
 
 def derive_all(root: Path) -> list[DerivedFile]:
-    """Project every stage agent into worker+reviewer files for all three hosts.
+    """Project every stage Worker for all three hosts.
 
     Returns the list of derived files (not yet written). Pure function: callers
     decide whether to write.
@@ -212,20 +186,16 @@ def derive_all(root: Path) -> list[DerivedFile]:
     for host, (render, ext) in RENDERERS.items():
         out_root = OUTPUT_ROOTS[host]
         for agent in agents:
-            for role in ("worker", "reviewer"):
-                suffix = "" if role == "worker" else (
-                    "-reviewer" if host != "workbuddy" else "_reviewer"
+            filename = f"{agent['id']}{ext}"
+            derived.append(
+                DerivedFile(
+                    host=host,
+                    role="worker",
+                    agent_id=agent["id"],
+                    path=out_root / filename,
+                    content=render(agent),
                 )
-                filename = f"{agent['id']}{suffix}{ext}"
-                derived.append(
-                    DerivedFile(
-                        host=host,
-                        role=role,
-                        agent_id=agent["id"],
-                        path=out_root / filename,
-                        content=render(agent, role),
-                    )
-                )
+            )
     return derived
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import copy
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -78,9 +79,13 @@ class ContextAssembler:
         upstream_signal: dict[str, Any] = {}
         material_refs: list[dict[str, Any]] = []
         projection_records: list[dict[str, Any]] = []
-        projected_brief, brief_projected_fields = self._inline_projection(
-            raw_brief, required, worker_id=worker_id
-        )
+        if self.contract_profile == "v0_4":
+            projected_brief = copy.deepcopy(raw_brief)
+            brief_projected_fields = []
+        else:
+            projected_brief, brief_projected_fields = self._inline_projection(
+                raw_brief, required, worker_id=worker_id
+            )
         omitted_brief_fields = [
             key for key in raw_brief if required and key not in required
         ]
@@ -171,7 +176,17 @@ class ContextAssembler:
                 "projection_records": projection_records,
             },
         }
-        if self.contract_profile == "v0_3":
+        if self.contract_profile == "v0_4":
+            self._add_v04_canonical_inputs(
+                result,
+                worker_id=worker_id,
+                raw_brief=raw_brief,
+                artifacts=artifact_rows,
+                manager_task=manager_task,
+            )
+            result["input_readiness"]["status"] = "ready"
+            result["input_readiness"]["blocking_issues"] = []
+        elif self.contract_profile == "v0_3":
             self._add_v03_canonical_inputs(
                 result,
                 worker_id=worker_id,
@@ -194,6 +209,56 @@ class ContextAssembler:
             )
             result["input_readiness"]["blocking_issues"] = blocking_issues
         return result
+
+    @staticmethod
+    def _add_v04_canonical_inputs(
+        result: dict[str, Any],
+        *,
+        worker_id: str,
+        raw_brief: dict[str, Any],
+        artifacts: Iterable[tuple[Path, dict[str, Any]]],
+        manager_task: dict[str, Any],
+    ) -> None:
+        """Attach full canonical documents without projecting their semantics."""
+
+        result["brief"] = copy.deepcopy(raw_brief)
+        rows = list(artifacts)
+        for _, receipt in rows:
+            if receipt.get("schema") != "markdown_artifact.v1":
+                if receipt.get("schema") == "evidence_catalog.v1":
+                    result["evidence_catalog"] = receipt
+                continue
+            content_path = Path(str(receipt.get("content_path") or ""))
+            if not content_path.is_file():
+                continue
+            kind = str(receipt.get("artifact_kind") or "").strip()
+            if kind:
+                result[f"{kind}_markdown"] = content_path.read_text(
+                    encoding="utf-8"
+                )
+                result[f"{kind}_path"] = str(content_path)
+        approval = manager_task.get("selected_analysis_thesis")
+        if approval not in (None, "", [], {}):
+            result["analysis_approval"] = approval
+        storyline_approval = manager_task.get("storyline_approval")
+        if storyline_approval not in (None, "", [], {}):
+            result["storyline_approval"] = storyline_approval
+        if worker_id == "analysis":
+            catalog = raw_brief.get("evidence_catalog")
+            if isinstance(catalog, dict):
+                result["evidence_catalog"] = catalog
+            materials = raw_brief.get("raw_materials") or raw_brief.get("materials")
+            if materials:
+                result["raw_materials"] = materials
+        if worker_id == "format":
+            result["delivery_target"] = (
+                manager_task.get("delivery_target")
+                or manager_task.get("context", {}).get("delivery_target")
+                or "document"
+            )
+        result.update(
+            evidence_runtime_fields(raw_brief, *[data for _, data in rows])
+        )
 
     @staticmethod
     def _has_full_canonical_input(result: dict[str, Any], field: str) -> bool:

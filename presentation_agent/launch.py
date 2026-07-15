@@ -181,7 +181,7 @@ def normalize_brief(
     if not str(normalized.get("report_length", "")).strip():
         normalized["report_length"] = _default_report_length(requested_targets)
 
-    if selected_profile == "v0_3":
+    if selected_profile in {"v0_3", "v0_4"}:
         allowed = {"document", "ppt", "html"}
         requested_targets = [
             item for item in requested_targets if item in allowed

@@ -175,7 +175,8 @@ def _normalize_value(dimension: str, value: Any, config: Mapping[str, Any]) -> s
 
 
 def _normalize_delivery_target(value: Any, config: Mapping[str, Any]) -> str:
-    profile = config.get("contract_profiles", {}).get("v0_3", {})
+    profiles = config.get("contract_profiles", {})
+    profile = profiles.get("v0_4") or profiles.get("v0_3", {})
     normalized = str(value or "").strip()
     aliases = profile.get("delivery_target_aliases", {})
     if normalized in aliases:

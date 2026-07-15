@@ -51,10 +51,10 @@ def _root() -> Path:
 
 
 class DeriveAgentsTests(unittest.TestCase):
-    def test_count_is_stages_times_roles_times_hosts(self) -> None:
+    def test_count_is_stages_times_hosts(self) -> None:
         derived = derive_all(_root())
-        # 2 stages * 2 roles (worker/reviewer) * 3 hosts = 12
-        self.assertEqual(len(derived), 12)
+        # 2 stages * 1 Worker role * 3 hosts = 6
+        self.assertEqual(len(derived), 6)
 
     def test_agent_not_in_stages_is_excluded(self) -> None:
         derived = derive_all(_root())
@@ -62,22 +62,20 @@ class DeriveAgentsTests(unittest.TestCase):
         self.assertNotIn("unused", ids)
         self.assertEqual(ids, {"analysis", "format"})
 
-    def test_claude_worker_is_writable_reviewer_is_read_only(self) -> None:
+    def test_only_writable_claude_workers_are_derived(self) -> None:
         derived = derive_all(_root())
-        claude = {(d.role): d for d in derived if d.host == "claude" and d.agent_id == "format"}
-        self.assertIn("Write", claude["worker"].content)
-        # Reviewer must NOT be granted Write/Edit/Bash.
-        self.assertNotIn("Write", claude["reviewer"].content.split("---")[1])
-        self.assertIn("tools: Read", claude["reviewer"].content)
+        claude = [d for d in derived if d.host == "claude" and d.agent_id == "format"]
+        self.assertEqual([d.role for d in claude], ["worker"])
+        self.assertIn("Write", claude[0].content)
 
-    def test_codex_reviewer_sandbox_read_only(self) -> None:
+    def test_codex_worker_uses_workspace_write(self) -> None:
         derived = derive_all(_root())
-        rev = next(
+        worker = next(
             d for d in derived
-            if d.host == "codex" and d.role == "reviewer" and d.agent_id == "format"
+            if d.host == "codex" and d.role == "worker" and d.agent_id == "format"
         )
-        self.assertIn("sandbox: read-only", rev.content)
-        self.assertIn("read_only: true", rev.content)
+        self.assertIn("sandbox: workspace-write", worker.content)
+        self.assertIn("read_only: false", worker.content)
 
     def test_workbuddy_subagent_types(self) -> None:
         derived = derive_all(_root())
@@ -87,8 +85,7 @@ class DeriveAgentsTests(unittest.TestCase):
             if d.host == "workbuddy" and d.agent_id == "analysis"
         }
         self.assertEqual(wb["worker"]["subagent_type"], "general-purpose")
-        self.assertEqual(wb["reviewer"]["subagent_type"], "Explore")
-        self.assertTrue(wb["reviewer"]["read_only"])
+        self.assertEqual(set(wb), {"worker"})
         self.assertEqual(wb["worker"]["invariants"]["max_depth"], 1)
 
     def test_all_files_carry_autogen_banner(self) -> None:
@@ -100,7 +97,7 @@ class DeriveAgentsTests(unittest.TestCase):
         root = _root()
         derived = derive_all(root)
         written = write_derived(root, derived)
-        self.assertEqual(len(written), 12)
+        self.assertEqual(len(written), 6)
         for p in written:
             self.assertTrue(p.exists())
         # Stage sub-agents must live under dedicated subdirs, never colliding

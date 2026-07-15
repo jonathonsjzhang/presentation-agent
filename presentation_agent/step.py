@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -93,10 +95,9 @@ class StepRunner:
     commit.
 
     State machine (current_step values):
-      init → awaiting_gen_output → gen_completed →
-        awaiting_review_output → review_completed →
-          [P0] → awaiting_revise_output → gen_completed   (loop)
-          [no P0] → done
+      init → awaiting_gen_output → deterministic_validation →
+        [invalid] awaiting_revise_output → deterministic_validation
+        [valid] done
     """
 
     def __init__(
@@ -168,10 +169,10 @@ class StepRunner:
             state_path=self.global_state_path,
         )
 
-        self.reviewer = ArtifactReviewer(llm=None)  # deterministic-only in inline mode
+        self.validator = ArtifactReviewer(llm=None)
         # 宿主自执行模式下不创建独立的 LLM checker。
         # StopChecker 仅做确定性判定（P0 数量、schema 匹配）。
-        # LLM sanity check 由宿主在 review 阶段通过 _compose_review_instruction 完成。
+        # 语义质量由 Worker 同一上下文自检；这里只保留确定性验证。
         # LoopRunner 路径使用 StopChecker(llm=review_llm) 执行独立 LLM 合理性扫描，
         # 两者应对的场景不同：前者宿主只有一个模型可用，后者 harness 自持多个 LLM client。
         self.stop_checker = StopChecker()
@@ -211,7 +212,7 @@ class StepRunner:
                 "已处于 awaiting_evidence_output，指令文件 "
                 f"{subtask_dir / 'handoff' / 'instruction_gen.md'} 已就绪，请先 commit"
             )
-        if step in ("awaiting_gen_output", "awaiting_review_output", "awaiting_revise_output"):
+        if step in ("awaiting_gen_output", "awaiting_revise_output"):
             instr_path = self._instruction_path_for(step)
             raise StepError(
                 f"已处于 {step}，指令文件 {instr_path.name} 已就绪，请先 commit"
@@ -223,7 +224,7 @@ class StepRunner:
                 if evidence_step is not None:
                     return evidence_step
             return self._prepare_gen(state)
-        if step == "review_completed":
+        if step == "validation_completed":
             if state.get("p0_open"):
                 return self._prepare_revise(state)
             return self._finalize(state)
@@ -237,7 +238,6 @@ class StepRunner:
         handlers = {
             "awaiting_evidence_output": self._commit_analysis_evidence,
             "awaiting_gen_output": self._commit_gen,
-            "awaiting_review_output": self._commit_review,
             "awaiting_revise_output": self._commit_revise,
         }
         if step in handlers:
@@ -253,14 +253,44 @@ class StepRunner:
         self._write_state(state, "abort", "人工中止")
         return {"status": "aborted", "agent_id": self.spec.id}
 
+    def prepare_revision_for_failure(
+        self, failure: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Turn a deterministic commit failure into one same-task revise turn."""
+
+        state = self._load_state()
+        if state.get("current_step") not in {
+            "awaiting_gen_output",
+            "awaiting_revise_output",
+            "validation_completed",
+        }:
+            raise StepError(
+                f"当前状态 {state.get('current_step')} 不能准备失败修订"
+            )
+        state["p0_open"] = [
+            {
+                "id": str(failure.get("signature") or "runtime-failure"),
+                "rubric_id": str(failure.get("error_code") or "runtime-failure"),
+                "severity": "P0",
+                "dimension": str(failure.get("responsible_stage") or self.spec.id),
+                "message": str(failure.get("message") or "runtime validation failed"),
+                "evidence": str(failure.get("stable_detail") or ""),
+                "suggestion": "仅修正本错误，保留已确认内容。",
+            }
+        ]
+        state["last_runtime_failure"] = failure
+        state["current_step"] = "validation_completed"
+        self._write_state(
+            state,
+            "runtime_failure_revision",
+            f"{failure.get('error_code')}: prepare same-task revision",
+        )
+        return self.prepare()
+
     # ---- internal: prepare --------------------------------------------------
 
     def _uses_analysis_evidence_runtime(self) -> bool:
         return self.contract_profile == "v0_3" and self.spec.id == "analysis"
-
-    @staticmethod
-    def _review_subagents_enabled(state: dict[str, Any]) -> bool:
-        return bool(state.get("review_subagents_enabled", True))
 
     def _prepare_analysis_evidence(
         self, state: dict[str, Any]
@@ -383,6 +413,11 @@ class StepRunner:
             artifact_path = self.run_dir / f"draft_round_{round_idx - 1}.json"
             if artifact_path.exists():
                 previous_artifact = read_json(artifact_path)
+                content_path = Path(str(previous_artifact.get("content_path") or ""))
+                if content_path.is_file():
+                    previous_artifact = {
+                        "content_markdown": content_path.read_text(encoding="utf-8")
+                    }
                 objections_raw = state.get("p0_open", [])
                 objections = [
                     Objection(
@@ -429,7 +464,7 @@ class StepRunner:
             )
 
         instruction_path = self.handoff_dir / "instruction_gen.md"
-        output_path = self.handoff_dir / "output_gen.json"
+        output_path = self._handoff_output_path("gen")
         self._write_instruction(instruction_path, output_path, request, kind="gen")
 
         state["current_step"] = "awaiting_gen_output"
@@ -438,30 +473,6 @@ class StepRunner:
         return {
             "step": "gen",
             "round_index": round_idx,
-            "instruction_path": str(instruction_path),
-            "output_path": str(output_path),
-        }
-
-    def _prepare_review(self, state: dict[str, Any]) -> dict[str, Any]:
-        artifact_path = self.run_dir / f"draft_round_{state['round_index']}.json"
-        artifact = read_json(artifact_path)
-        input_data = self._load_input(state)
-
-        instruction = self._compose_review_instruction(artifact, input_data)
-        state.setdefault("prompt_budget", {})[f"review_round_{state['round_index']}"] = {
-            "total_chars": len(instruction),
-            "total_tokens_estimate": estimate_tokens(instruction),
-        }
-        instruction_path = self.handoff_dir / "instruction_review.md"
-        output_path = self.handoff_dir / "output_review.json"
-        instruction_path.write_text(instruction, encoding="utf-8")
-
-        state["current_step"] = "awaiting_review_output"
-        self._write_state(state, "prepare_review", "review 指令已就绪，等待宿主模型写入审查意见")
-
-        return {
-            "step": "review",
-            "round_index": state["round_index"],
             "instruction_path": str(instruction_path),
             "output_path": str(output_path),
         }
@@ -476,6 +487,11 @@ class StepRunner:
         prev_path = self.run_dir / f"draft_round_{round_idx}.json"
         if prev_path.exists():
             previous_artifact = read_json(prev_path)
+            content_path = Path(str(previous_artifact.get("content_path") or ""))
+            if content_path.is_file():
+                previous_artifact = {
+                    "content_markdown": content_path.read_text(encoding="utf-8")
+                }
 
         objections_raw = state.get("p0_open", [])
         objections = [
@@ -498,7 +514,7 @@ class StepRunner:
         )
 
         instruction_path = self.handoff_dir / "instruction_revise.md"
-        output_path = self.handoff_dir / "output_revise.json"
+        output_path = self._handoff_output_path("revise")
         self._write_instruction(instruction_path, output_path, request, kind="revise")
 
         state["round_index"] = round_idx + 1
@@ -512,7 +528,7 @@ class StepRunner:
         if schema_p0s:
             parts.append(f"schema 校验发现 {len(schema_p0s)} 个 P0")
         if llm_p0s:
-            parts.append(f"LLM review 发现 {len(llm_p0s)} 个 P0")
+            parts.append(f"runtime validation 发现 {len(llm_p0s)} 个 P0")
         revision_reason = "；".join(parts) if parts else ("P0 问题：" + "；".join(p0_msgs) if p0_msgs else "返工修复")
 
         return {
@@ -526,6 +542,8 @@ class StepRunner:
     # ---- internal: commit ---------------------------------------------------
 
     def _commit_gen(self, state: dict[str, Any]) -> dict[str, Any]:
+        if self._is_markdown_artifact():
+            return self._commit_markdown(state, kind="gen")
         artifact = self._read_and_validate_output("output_gen.json", state)
 
         round_idx = state["round_index"]
@@ -539,135 +557,54 @@ class StepRunner:
         state["current_step"] = "gen_completed"
         self._save_state(state)
 
-        result = (
-            self._prepare_review(state)
-            if self._review_subagents_enabled(state)
-            else self._run_schema_only_review(state)
-        )
+        result = self._run_deterministic_validation(state)
         if memory_note:
             result["memory_notes"] = memory_note
         return result
 
-    def _commit_review(self, state: dict[str, Any]) -> dict[str, Any]:
-        review_data = self._read_and_validate_output("output_review.json", state)
+    def _run_deterministic_validation(self, state: dict[str, Any]) -> dict[str, Any]:
+        """Validate the current file in-process; no Reviewer task is created."""
 
-        objections_raw = review_data.get("objections", [])
-        objections: list[Objection] = []
-        for idx, raw in enumerate(objections_raw, start=1):
-            severity = raw.get("severity")
-            if severity not in ("P0", "P1"):
-                continue
-            objections.append(Objection(
-                id=f"{severity}-{raw.get('rubric_id', f'host-{idx}')}",
-                severity=severity,
-                dimension=str(raw.get("dimension", "")),
-                message=str(raw.get("message", "")),
-                evidence=str(raw.get("evidence", raw.get("rubric_id", ""))),
-                suggestion=str(raw.get("suggestion", "")),
-            ))
-
-        review = ReviewReport(reviewer="host_model", objections=objections)
-        review_path = self.run_dir / f"review_round_{state['round_index']}.json"
-        write_json(review_path, review.to_dict())
-        state["produced_artifacts"].append(str(review_path))
-
-        # Also run deterministic schema gate
         artifact_path = self.run_dir / f"draft_round_{state['round_index']}.json"
         artifact = read_json(artifact_path)
-        schema_objections = self.reviewer._schema_gate(
+        objections = self.validator._schema_gate(
             self.spec, artifact, self.skill_package.to_dict()
         )
-        all_p0 = review.p0 + [o for o in schema_objections if o.severity == "P0"]
-        all_p1 = review.p1 + [o for o in schema_objections if o.severity == "P1"]
-        merged = ReviewReport(
-            reviewer="host_model+schema_gate",
-            objections=all_p0 + all_p1,
+        validation = apply_schema_gate_mode(
+            ReviewReport(reviewer="runtime_validator", objections=objections),
+            self.schema_gate_mode,
         )
-        merged = apply_schema_gate_mode(merged, self.schema_gate_mode)
+        validation_path = self.run_dir / f"validation_round_{state['round_index']}.json"
+        write_json(validation_path, validation.to_dict())
+        state["produced_artifacts"].append(str(validation_path))
+        state["p0_open"] = [item.to_dict() for item in validation.p0]
+        state["p1_open"] = [item.to_dict() for item in validation.p1]
 
-        state["p0_open"] = [o.to_dict() for o in merged.p0]
-        state["p1_open"] = [o.to_dict() for o in merged.p1]
-        new_learning = [o for o in merged.objections if not o.id.startswith("P1-memory-")]
-        log_ids = self.memory.record_objections(state.get("run_id", self.run_dir.name), new_learning)
-        state.setdefault("feedback_logged", []).extend(log_ids)
-
-        decision = self.stop_checker.check(self.spec, artifact, merged)
+        decision = self.stop_checker.check(self.spec, artifact, validation)
         stop_path = self.run_dir / f"stop_decision_round_{state['round_index']}.json"
         write_json(stop_path, decision.to_dict())
         state["produced_artifacts"].append(str(stop_path))
         state["stop_decision"] = decision.to_dict()
-
-        self._write_state(state, "commit_review",
-            f"review round {state['round_index']}: P0={len(merged.p0)}, P1={len(merged.p1)}")
-
-        state["current_step"] = "review_completed"
-        self._save_state(state)
-
-        review_summary = self._objections_to_summary(merged, state["round_index"])
-        memory_note = f"审查完成，P0={len(merged.p0)}，P1={len(merged.p1)}；已记录 {len(log_ids)} 条学习日志"
-
-        if decision.can_stop:
-            result = self._finalize(state)
-            result["review_summary"] = review_summary
-            result["memory_notes"] = (result.get("memory_notes", "") + "; " + memory_note).strip("; ")
-            return result
-
-        if state["round_index"] >= self.max_revision_rounds:
-            self._write_state(state, "commit_review",
-                f"达到最大返工轮数 {self.max_revision_rounds}，强制结束")
-            state["current_step"] = "review_completed"
-            self._save_state(state)
-            result = self._finalize(state)
-            result["review_summary"] = review_summary
-            result["memory_notes"] = (result.get("memory_notes", "") + "; 已达最大返工轮数，强制结束").strip("; ")
-            return result
-
-        result = self._prepare_revise(state)
-        result["review_summary"] = review_summary
-        result["memory_notes"] = memory_note
-        return result
-
-    def _run_schema_only_review(self, state: dict[str, Any]) -> dict[str, Any]:
-        """Apply deterministic schema/P0 gates without an LLM Reviewer."""
-
-        artifact_path = self.run_dir / f"draft_round_{state['round_index']}.json"
-        artifact = read_json(artifact_path)
-        objections = self.reviewer._schema_gate(
-            self.spec, artifact, self.skill_package.to_dict()
-        )
-        review = ReviewReport(reviewer="schema_gate_only", objections=objections)
-        review = apply_schema_gate_mode(review, self.schema_gate_mode)
-        review_path = self.run_dir / f"review_round_{state['round_index']}.json"
-        write_json(review_path, review.to_dict())
-        state["produced_artifacts"].append(str(review_path))
-        state["p0_open"] = [item.to_dict() for item in review.p0]
-        state["p1_open"] = [item.to_dict() for item in review.p1]
-
-        decision = self.stop_checker.check(self.spec, artifact, review)
-        stop_path = self.run_dir / f"stop_decision_round_{state['round_index']}.json"
-        write_json(stop_path, decision.to_dict())
-        state["produced_artifacts"].append(str(stop_path))
-        state["stop_decision"] = decision.to_dict()
-        state["current_step"] = "review_completed"
+        state["current_step"] = "validation_completed"
         self._write_state(
             state,
-            "schema_only_review",
-            f"schema-only review: P0={len(review.p0)}, P1={len(review.p1)}",
+            "deterministic_validation",
+            f"validation: P0={len(validation.p0)}, P1={len(validation.p1)}",
         )
         self._save_state(state)
 
-        summary = self._objections_to_summary(review, state["round_index"])
+        summary = self._objections_to_summary(validation, state["round_index"])
         if decision.can_stop or state["round_index"] >= self.max_revision_rounds:
             result = self._finalize(state)
-            result["review_summary"] = summary
-            result["review_mode"] = "schema_only"
+            result["validation_summary"] = summary
             return result
         result = self._prepare_revise(state)
-        result["review_summary"] = summary
-        result["review_mode"] = "schema_only"
+        result["validation_summary"] = summary
         return result
 
     def _commit_revise(self, state: dict[str, Any]) -> dict[str, Any]:
+        if self._is_markdown_artifact():
+            return self._commit_markdown(state, kind="revise")
         artifact = self._read_and_validate_output("output_revise.json", state)
 
         round_idx = state["round_index"]
@@ -680,11 +617,98 @@ class StepRunner:
         state["current_step"] = "gen_completed"
         self._save_state(state)
 
-        return (
-            self._prepare_review(state)
-            if self._review_subagents_enabled(state)
-            else self._run_schema_only_review(state)
+        return self._run_deterministic_validation(state)
+
+    def _commit_markdown(
+        self, state: dict[str, Any], *, kind: str
+    ) -> dict[str, Any]:
+        """Commit a canonical Markdown artifact and generate a tiny receipt.
+
+        Semantic content stays in the .md file. ``artifact.json`` is only a
+        runtime envelope so Manager bookkeeping and old artifact catalogs can
+        keep resolving paths without duplicating the document.
+        """
+
+        output_path = self._handoff_output_path(kind)
+        if not output_path.is_file():
+            raise StepError(
+                f"handoff 输出文件不存在: {output_path}。"
+                "宿主模型应先读指令并把完整 Markdown 写入该路径。"
+            )
+        markdown = output_path.read_text(encoding="utf-8").strip()
+        self._validate_markdown(markdown)
+        round_idx = int(state.get("round_index") or 0)
+        version_path = self.run_dir / f"{self.spec.id}.v{round_idx + 1}.md"
+        version_path.write_text(markdown + "\n", encoding="utf-8")
+        canonical_name = str(
+            self.spec.output_contract.get("canonical_filename")
+            or f"{self.spec.id}.md"
         )
+        canonical_path = self.run_dir / canonical_name
+        canonical_path.write_text(markdown + "\n", encoding="utf-8")
+        receipt = {
+            "schema": "markdown_artifact.v1",
+            "agent_id": self.spec.id,
+            "artifact_kind": str(
+                self.spec.output_contract.get("artifact_kind") or self.spec.id
+            ),
+            "content_path": str(canonical_path),
+            "content_sha256": hashlib.sha256(
+                (markdown + "\n").encode("utf-8")
+            ).hexdigest(),
+        }
+        draft_path = self.run_dir / f"draft_round_{round_idx}.json"
+        write_json(draft_path, receipt)
+        state.setdefault("produced_artifacts", []).extend(
+            [str(version_path), str(draft_path)]
+        )
+        state["p0_open"] = []
+        state["p1_open"] = []
+        state["current_step"] = "validation_completed"
+        state["stop_decision"] = {
+            "can_stop": True,
+            "reason": "Markdown file and deterministic references validated",
+            "checked_at": now_iso(),
+        }
+        self._write_state(
+            state,
+            f"commit_{kind}_markdown",
+            f"canonical Markdown committed: {canonical_name}",
+        )
+        self._save_state(state)
+        result = self._finalize(state)
+        result["validation_mode"] = "self_check_plus_file_validation"
+        return result
+
+    def _validate_markdown(self, markdown: str) -> None:
+        if len(markdown) < 120:
+            raise StepError("Markdown 产物过短，未形成可独立阅读的完整内容")
+        if not re.search(r"^#\s+\S+", markdown, flags=re.MULTILINE):
+            raise StepError("Markdown 产物缺少一级标题")
+        missing = [
+            heading
+            for heading in self.spec.output_contract.get("required_headings", [])
+            if not re.search(
+                rf"^##\s+.*{re.escape(str(heading))}",
+                markdown,
+                flags=re.MULTILINE,
+            )
+        ]
+        if missing:
+            raise StepError("Markdown 缺少必要章节: " + "、".join(missing))
+        if re.search(r"\bTODO\b|待补充|占位", markdown, flags=re.IGNORECASE):
+            raise StepError("Markdown 含 TODO/待补充占位，请在当前 Worker 内处理")
+        input_data = self._load_input(self._load_state())
+        catalog = input_data.get("evidence_catalog")
+        if isinstance(catalog, dict):
+            known = {
+                str(item.get("id") or item.get("evidence_id") or "")
+                for item in (catalog.get("items") or catalog.get("evidence_items") or [])
+                if isinstance(item, dict)
+            }
+            unknown = sorted(set(re.findall(r"\[(EV-[A-Za-z0-9_-]+)\]", markdown)) - known)
+            if unknown:
+                raise StepError("Markdown 引用了不存在的 Evidence ID: " + ", ".join(unknown))
 
     # ---- internal: helpers --------------------------------------------------
 
@@ -693,12 +717,12 @@ class StepRunner:
         artifact_path = self.run_dir / f"draft_round_{round_idx}.json"
         artifact = read_json(artifact_path)
 
-        review_path_latest = self.run_dir / f"review_round_{round_idx}.json"
-        if review_path_latest.exists():
-            review_json = read_json(review_path_latest)
+        validation_path_latest = self.run_dir / f"validation_round_{round_idx}.json"
+        if validation_path_latest.exists():
+            validation_json = read_json(validation_path_latest)
         else:
-            review_json = {"objections": []}
-        write_json(self.run_dir / "review.json", review_json)
+            validation_json = {"objections": []}
+        write_json(self.run_dir / "validation.json", validation_json)
 
         p0_blocked = bool(state.get("p0_open"))
         analysis_blocked = self._analysis_is_blocked(artifact)
@@ -750,14 +774,14 @@ class StepRunner:
 
         global_writes_applied = self._apply_global_writes(artifact)
 
-        self._write_human_review(artifact, review_json)
+        self._write_human_review(artifact, validation_json)
 
         preview = self._artifact_preview(artifact)
-        review_summary = self._review_summary(review_json)
+        validation_summary = self._validation_summary(validation_json)
         memory_notes = self._memory_diff(global_writes_applied)
         render_note = render_result.present_line() if render_result else ""
         present = self._compose_stage_done_present(
-            preview, review_summary, memory_notes, render_note
+            preview, validation_summary, memory_notes, render_note
         )
 
         result = {
@@ -768,7 +792,7 @@ class StepRunner:
             "stage": self.spec.stage,
             "round_index": round_idx,
             "artifact_path": str(self.run_dir / "artifact.json"),
-            "review_summary": review_summary,
+            "validation_summary": validation_summary,
             "memory_notes": memory_notes,
             "present_to_user": present,
         }
@@ -796,7 +820,47 @@ class StepRunner:
         }
 
     def _uses_v03_format_renderer(self) -> bool:
-        return self.contract_profile == "v0_3" and self.spec.id == "format"
+        return (
+            self.contract_profile in {"v0_3", "v0_4"}
+            and self.spec.id == "format"
+        )
+
+    def _adapt_v04_format_plan(
+        self,
+        plan: dict[str, Any],
+        input_data: dict[str, Any],
+        source_report: dict[str, Any],
+    ) -> dict[str, Any]:
+        headings = [
+            line[3:].strip()
+            for line in str(source_report.get("report_markdown") or "").splitlines()
+            if line.startswith("## ")
+        ]
+        fallback = headings[0] if headings else "Executive Summary"
+        visuals = []
+        for index, item in enumerate(plan.get("visuals") or [], 1):
+            if not isinstance(item, dict):
+                continue
+            requested = str(item.get("after_heading") or "").strip()
+            visuals.append(
+                {
+                    "visual_evidence_id": f"VIS-{index:02d}",
+                    "section_heading": requested if requested in headings else fallback,
+                    "type": item.get("type"),
+                    "title": item.get("title"),
+                    "source_refs": item.get("source_refs") or [],
+                    "required": False,
+                    "placement": "section",
+                    "data": item.get("data") or {},
+                }
+            )
+        return {
+            "schema": "formatted_material.v2",
+            "agent_id": "format",
+            "delivery_target": str(input_data.get("delivery_target") or "document"),
+            "strict_render": True,
+            "visuals": visuals,
+        }
 
     @staticmethod
     def _report_render_succeeded(render_result: Any) -> bool:
@@ -938,39 +1002,48 @@ class StepRunner:
             try:
                 from presentation_agent.renderers import render_material
                 from presentation_agent.renderers.base import RenderResult
-                from presentation_agent.visual_evidence import (
-                    audit_required_visual_evidence,
-                    revision_requests_from_audit,
-                )
 
                 input_data = self._load_input(self._load_state())
                 source_report = self._source_report_from_input(input_data)
-                visual_audit = audit_required_visual_evidence(artifact, source_report)
-                artifact["visual_evidence_check"] = visual_audit
-                if visual_audit["passed"] is not True:
-                    artifact["upstream_revision_requests"] = (
-                        revision_requests_from_audit(visual_audit)
-                    )
-                    detail = "；".join(
-                        str(item.get("reason") or "可视化论据不完整")
-                        for item in visual_audit.get("issues") or []
+                material = artifact
+                visual_audit = None
+                if self.contract_profile == "v0_4":
+                    material = self._adapt_v04_format_plan(
+                        artifact, input_data, source_report or {}
                     )
                 else:
-                    detail = ""
-                    artifact.pop("upstream_revision_requests", None)
+                    from presentation_agent.visual_evidence import (
+                        audit_required_visual_evidence,
+                        revision_requests_from_audit,
+                    )
+
+                    visual_audit = audit_required_visual_evidence(
+                        artifact, source_report
+                    )
+                    artifact["visual_evidence_check"] = visual_audit
+                    if visual_audit["passed"] is not True:
+                        artifact["upstream_revision_requests"] = (
+                            revision_requests_from_audit(visual_audit)
+                        )
+                    else:
+                        artifact.pop("upstream_revision_requests", None)
                 render_result = render_material(
-                    artifact,
+                    material,
                     self.run_dir,
                     fidelity="formatted",
                     file_stem="report_formatted",
-                    expected_format=str(artifact.get("delivery_target") or ""),
+                    expected_format=str(material.get("delivery_target") or ""),
                     selected_capabilities=self.skill_package.selected_capabilities,
                     source_report=source_report,
                 )
                 self._apply_format_body_budget_audit(
-                    artifact, source_report, render_result
+                    material, source_report, render_result
                 )
-                if visual_audit["passed"] is not True:
+                if visual_audit is not None and visual_audit["passed"] is not True:
+                    detail = "；".join(
+                        str(item.get("reason") or "可视化论据不完整")
+                        for item in visual_audit.get("issues") or []
+                    )
                     visual_detail = f"可视化论据检查未通过：{detail}"
                     render_result.status = "error"
                     render_result.detail = (
@@ -978,6 +1051,26 @@ class StepRunner:
                         if render_result.detail
                         else visual_detail
                     )
+                if self.contract_profile == "v0_4":
+                    if render_result.warnings or render_result.degraded_units:
+                        render_result.status = "error"
+                        render_result.detail = (
+                            f"{render_result.detail}; strict render rejected degraded assets"
+                            if render_result.detail
+                            else "strict render rejected degraded assets"
+                        )
+                    manifest = render_result.to_dict()
+                    manifest["generated_assets"] = sorted(
+                        str(path)
+                        for path in self.run_dir.glob("report_formatted_assets/*")
+                        if path.is_file()
+                    )
+                    manifest["degraded_assets"] = list(
+                        render_result.degraded_units
+                    )
+                    manifest_path = self.run_dir / "render_manifest.json"
+                    write_json(manifest_path, manifest)
+                    artifact["render_manifest_path"] = str(manifest_path)
                 return render_result
             except Exception as exc:
                 from presentation_agent.renderers.base import RenderResult
@@ -1115,6 +1208,20 @@ class StepRunner:
         direct = input_data.get("report")
         if isinstance(direct, dict) and direct.get("schema") == "report.v1":
             return direct
+        markdown = input_data.get("report_markdown")
+        if isinstance(markdown, str) and markdown.strip():
+            qa = input_data.get("qa_markdown")
+            combined = markdown.rstrip()
+            if isinstance(qa, str) and qa.strip():
+                combined += "\n\n" + qa.strip()
+            return {
+                "schema": "report.v1",
+                "agent_id": "report",
+                "report_markdown": combined + "\n",
+                "report_metadata": input_data.get("brief")
+                or input_data.get("raw_brief")
+                or {},
+            }
         inputs = input_data.get("inputs")
         if isinstance(inputs, dict):
             for value in inputs.values():
@@ -1262,8 +1369,6 @@ class StepRunner:
         data["schema"] = self.spec.output_schema
         # Guard: a gen artifact that is only schema+agent_id (and nothing
         # substantive) is a model failure — reject it before it propagates.
-        # output_review.json is exempt; reviewers may legitimately return
-        # short verdicts.
         # Note: `len(data) <= 2` means ONLY schema + agent_id, no content
         # fields at all.  A valid report has {report_markdown, schema,
         # agent_id} = 3 keys; a valid analysis has {findings, schema,
@@ -1275,6 +1380,8 @@ class StepRunner:
             )
         if filename in {"output_gen.json", "output_revise.json"}:
             input_data = self._load_input(state)
+            if self.contract_profile == "v0_4" and self.spec.id == "format":
+                self._validate_v04_format_plan(data)
             self._attach_runtime_evidence_fields(data, input_data)
             if self.spec.id == "qa_preparation":
                 source_report = self._source_report_from_input(input_data) or {}
@@ -1295,6 +1402,57 @@ class StepRunner:
         return data
 
     @staticmethod
+    def _validate_v04_format_plan(plan: dict[str, Any]) -> None:
+        """Fail in the Format task before renderer fallback can hide bad assets."""
+
+        issues: list[str] = []
+        for index, visual in enumerate(plan.get("visuals") or [], 1):
+            if not isinstance(visual, dict):
+                issues.append(f"visual {index} 不是对象")
+                continue
+            visual_type = str(visual.get("type") or "")
+            data = visual.get("data") if isinstance(visual.get("data"), dict) else {}
+            if visual_type == "chart":
+                chart_type = str(data.get("chart_type") or "bar").lower()
+                if chart_type not in {"bar", "line"}:
+                    issues.append(f"visual {index} 使用 renderer 不支持的 chart_type={chart_type}")
+                categories = data.get("categories")
+                values = data.get("values")
+                series = data.get("series")
+                direct_ready = (
+                    isinstance(categories, list)
+                    and bool(categories)
+                    and isinstance(values, list)
+                    and len(categories) == len(values)
+                )
+                series_ready = (
+                    isinstance(categories, list)
+                    and bool(categories)
+                    and isinstance(series, list)
+                    and bool(series)
+                    and all(
+                        isinstance(row, dict)
+                        and isinstance(row.get("values"), list)
+                        and len(row["values"]) == len(categories)
+                        for row in series
+                    )
+                )
+                if not (direct_ready or series_ready):
+                    issues.append(
+                        f"visual {index} 的 chart data 必须提供等长 categories+values 或 categories+series[].values"
+                    )
+            elif visual_type == "table":
+                columns = data.get("columns") or data.get("headers")
+                if not isinstance(columns, list) or not columns or not isinstance(data.get("rows"), list):
+                    issues.append(f"visual {index} 的 table data 必须提供 columns/headers 和 rows")
+            elif visual_type == "matrix":
+                labels = data.get("dimensions") or data.get("labels")
+                if not isinstance(labels, list) or len(labels) < 4:
+                    issues.append(f"visual {index} 的 matrix data 至少需要 4 个 dimensions/labels")
+        if issues:
+            raise StepError("Format 视觉预检未通过：" + "；".join(issues))
+
+    @staticmethod
     def _attach_runtime_evidence_fields(
         artifact: dict[str, Any],
         input_data: dict[str, Any],
@@ -1312,7 +1470,8 @@ class StepRunner:
         request: Any,
         kind: str,
     ) -> None:
-        schema_ref = self._schema_quick_ref() if kind == "gen" else ""
+        markdown_output = self._is_markdown_artifact()
+        schema_ref = self._schema_quick_ref() if kind == "gen" and not markdown_output else ""
         lines = [
             f"# Worker Agent：{self.spec.name} · {kind}",
             "",
@@ -1326,7 +1485,11 @@ class StepRunner:
             "",
             "## 输出操作",
             "",
-            f"按上述要求产出 **严格符合 {self.spec.output_schema}** 的单个 JSON 对象。",
+            (
+                "按上述要求产出一份完整、可独立阅读的 Markdown 文档。"
+                if markdown_output
+                else f"按上述要求产出 **严格符合 {self.spec.output_schema}** 的单个 JSON 对象。"
+            ),
             f"直接写入: `{output_path}`",
             "",
         ]
@@ -1342,17 +1505,35 @@ class StepRunner:
                 "> 不要仅凭指令文字描述推断字段类型。",
                 "",
             ])
-        lines.extend([
-            "## JSON 安全写作指引",
-            "",
-            "- 产出含中文文案的 JSON 时，中文里的双引号使用 `「」` 或 `『』`，",
-            "  绝不使用 ASCII `\"` —— 它会和 JSON 结构引号冲突导致解析失败。",
-            "- 确保所有 JSON 数组和对象正确闭合（`]` / `}`）。",
-            "- 建议：全部构造完成后在脑中用 `json.loads()` 校验一遍。",
-            "",
-            "只写 JSON，不要任何解释、前言或结语。",
-        ])
+        if markdown_output:
+            lines.extend([
+                "## Markdown 提交要求",
+                "",
+                "- 直接写 Markdown 正文，不要代码围栏或 JSON 外壳。",
+                "- 使用 Skill 规定的规范章节，完整保留论证上下文。",
+                "- 提交前在同一上下文内完成自检和小修正。",
+            ])
+        else:
+            lines.extend([
+                "## JSON 安全写作指引",
+                "",
+                "- 产出含中文文案的 JSON 时，中文里的双引号使用 `「」` 或 `『』`。",
+                "- 确保所有 JSON 数组和对象正确闭合（`]` / `}`）。",
+                "",
+                "只写 JSON，不要任何解释、前言或结语。",
+            ])
         instruction_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _is_markdown_artifact(self) -> bool:
+        return (
+            self.contract_profile == "v0_4"
+            and str(self.spec.output_contract.get("artifact_format") or "")
+            == "markdown"
+        )
+
+    def _handoff_output_path(self, kind: str) -> Path:
+        suffix = ".md" if self._is_markdown_artifact() else ".json"
+        return self.handoff_dir / f"output_{kind}{suffix}"
 
     def _schema_quick_ref(self) -> str:
         """Extract required fields + types from the output schema for worker guidance."""
@@ -1401,98 +1582,6 @@ class StepRunner:
                 lines.append(f"- `{key}`: **{ptype}**{sub}")
 
         return "\n".join(lines)
-
-    def _compose_review_instruction(self, artifact: dict[str, Any], input_data: dict[str, Any]) -> str:
-        all_rubrics = self.skill_package.to_dict().get("rubrics", [])
-        if not isinstance(all_rubrics, list):
-            all_rubrics = []
-        # Rubrics with a machine_check are already evaluated deterministically
-        # by the schema gate; exclude them so the host model doesn't redo (and
-        # possibly contradict) mechanical checks. Also strip the machine_check
-        # block from the rest — it's noise for a human-style reviewer.
-        machine_ids = {
-            r.get("id")
-            for r in all_rubrics
-            if isinstance(r.get("machine_check"), dict) and r.get("id")
-        }
-        rubrics = [
-            {k: v for k, v in r.items() if k != "machine_check"}
-            for r in all_rubrics
-            if r.get("id") not in machine_ids
-            and not (
-                self.schema_gate_mode == "advisory"
-                and (
-                    "SCHEMA" in str(r.get("id", "")).upper()
-                    or r.get("dimension") in ("接口", "schema_contract")
-                )
-            )
-        ]
-        machine_note = (
-            f"（以下 rubric 已由确定性机械校验覆盖，无需你重复判断：{sorted(machine_ids)}）"
-            if machine_ids
-            else ""
-        )
-        lines = [
-            f"# {self.spec.name} · 审查（review）",
-            "",
-            "## 角色",
-            "你是独立审查者，以干净视角逐条对照 rubrics 判断产物质量。",
-            "P0 只用于事实无依据、引用不存在、schema/字段无法交接、Worker 明显越权或最终材料不可用；结构、表达、节奏、锐度、可读性等改进一般报 P1。只报真实影响交付的问题，不要凑数。",
-            (
-                "当前为 loop-first 模式：详细 Schema 偏差由 runtime 记录为 P1，"
-                "不要把字段名、必填字段或枚举偏差重复报告为 P0。"
-                if self.schema_gate_mode == "advisory"
-                else ""
-            ),
-            machine_note,
-            "",
-            "## 审查 rubrics（逐条对照）",
-            "```json",
-            json.dumps(rubrics, ensure_ascii=False, indent=2),
-            "```",
-            "",
-            "## 待审查的 artifact",
-            "```json",
-            json.dumps(artifact, ensure_ascii=False, indent=2),
-            "```",
-        ]
-
-        # Upstream signal check: detect contradictions / degradation / missing
-        # inheritance from the upstream artifact's key premises.
-        if input_data:
-            signal = self._signal_snapshot(input_data)
-            lines.extend([
-                "",
-                "## 上游信号检查（upstream signal）",
-                "```json",
-                json.dumps(signal, ensure_ascii=False, indent=2),
-                "```",
-                "",
-                "检查上游 artifact 的关键信号是否在当前 artifact 中被正确地继承或演化：",
-                "- **矛盾**：当前 artifact 的结论、预设受众、方向是否与上游的明确信号正面冲突？",
-                "- **强度漂移**：当前 artifact 是否无依据升级，或无理由弱化上游判断？",
-                "- **上游越界处置**：若上游判断超过证据边界，当前 artifact 是否提交 revision request，而不是静默继承或静默改写？",
-                "- **缺失继承**：上游明确提出的约束（受众类型、页数上限、目标 action）是否被忽略？",
-                "",
-                "如果发现上述任一问题，以 rubric_id=UPSTREAM-SIG-001、dimension=上游信号 "
-                "报一条 P1 objection。没有发现任何问题时无需报。",
-            ])
-
-        lines.extend([
-            "",
-            "## 输出要求",
-            "产出一个 JSON 对象，格式:",
-            '{"objections": [{"rubric_id","severity","dimension","message","evidence","suggestion"}]}',
-            "没有任何命中时输出 {\"objections\": []}。",
-            "",
-            f"直接写入: `{self.handoff_dir / 'output_review.json'}`",
-        ])
-        return "\n".join(lines) + "\n"
-
-    @staticmethod
-    def _signal_snapshot(upstream: dict[str, Any]) -> dict[str, Any]:
-        """Extract the signal-relevant fields from an upstream artifact."""
-        return ArtifactReviewer._signal_snapshot(upstream)
 
     def _write_human_review(self, artifact: dict[str, Any], review: dict[str, Any]) -> None:
         lines = [
@@ -1578,8 +1667,8 @@ class StepRunner:
             return "{" + ", ".join(keys[:4]) + ("..." if len(val) > 4 else "") + "}"
         return str(val)[:limit]
 
-    def _review_summary(self, review_json: dict[str, Any]) -> str:
-        objections = review_json.get("objections", [])
+    def _validation_summary(self, validation_json: dict[str, Any]) -> str:
+        objections = validation_json.get("objections", [])
         p0_list = [o for o in objections if o.get("severity") == "P0"]
         p1_list = [o for o in objections if o.get("severity") == "P1"]
         if not objections:
@@ -1636,7 +1725,7 @@ class StepRunner:
     def _compose_stage_done_present(
         self,
         preview: str,
-        review_summary: str,
+        validation_summary: str,
         memory_notes: str,
         render_note: str = "",
     ) -> str:
@@ -1649,7 +1738,7 @@ class StepRunner:
             "",
             "### 审查结果",
             "",
-            review_summary,
+            validation_summary,
         ]
         if render_note:
             lines.extend(["", "### 交付文件", "", render_note])
@@ -1682,18 +1771,17 @@ class StepRunner:
 
     @staticmethod
     def _instruction_path_for(step: str) -> Path:
-        kind = {"awaiting_gen_output": "gen", "awaiting_review_output": "review", "awaiting_revise_output": "revise"}.get(step, "gen")
+        kind = {"awaiting_gen_output": "gen", "awaiting_revise_output": "revise"}.get(step, "gen")
         return Path(f"handoff/instruction_{kind}.md")
 
     def _last_instruction_path(self, state: dict[str, Any]) -> Optional[str]:
         step = state.get("current_step", "")
         if step in (
-            "awaiting_gen_output", "awaiting_review_output", "awaiting_revise_output",
+            "awaiting_gen_output", "awaiting_revise_output",
             "awaiting_evidence_output",
         ):
             kind = {
                 "awaiting_gen_output": "gen",
-                "awaiting_review_output": "review",
                 "awaiting_revise_output": "revise",
                 "awaiting_evidence_output": "gen",  # Evidence subtask uses gen handoff
             }.get(step, "gen")
@@ -1704,13 +1792,12 @@ class StepRunner:
         step = state.get("current_step", "")
         kind_map = {
             "awaiting_gen_output": "gen",
-            "awaiting_review_output": "review",
             "awaiting_revise_output": "revise",
             "awaiting_evidence_output": "gen",  # Evidence subtask outputs to gen
         }
         kind = kind_map.get(step)
         if kind:
-            return str(self.handoff_dir / f"output_{kind}.json")
+            return str(self._handoff_output_path(kind))
         return None
 
 

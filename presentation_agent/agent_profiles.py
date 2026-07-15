@@ -8,7 +8,7 @@ from presentation_agent.io import read_json
 from presentation_agent.models import AgentSpec
 
 
-DEFAULT_CONTRACT_PROFILE = "v0_3"
+DEFAULT_CONTRACT_PROFILE = "v0_4"
 
 
 class AgentProfileError(ValueError):

@@ -195,7 +195,6 @@ class ManagerEvidenceIntakeTests(unittest.TestCase):
                 },
                 charter,
                 run_dir / "raw_brief.json",
-                review_subagents_enabled=False,
             )
             StepRunner(
                 ROOT,
@@ -244,8 +243,6 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
     def _runner(
         self,
         input_data: dict,
-        *,
-        review_subagents_enabled: bool = True,
     ) -> tuple[StepRunner, Path]:
         task_dir = self.tmp / f"task-{len(list(self.tmp.glob('task-*')))}"
         task_dir.mkdir()
@@ -268,7 +265,6 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
                 "p1_open": [],
                 "produced_artifacts": [],
                 "history": [],
-                "review_subagents_enabled": review_subagents_enabled,
             },
         )
         return (
@@ -353,7 +349,7 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         self.assertEqual(injected["evidence_catalog"]["schema"], "evidence_catalog.v1")
         self.assertTrue(Path(state["evidence_catalog_ref"]).exists())
         self.assertTrue(
-            (task_dir / "subtasks" / "evidence_harvester" / "review.json").exists()
+            (task_dir / "subtasks" / "evidence_harvester" / "validation.json").exists()
         )
         instruction = Path(analysis["instruction_path"]).read_text(
             encoding="utf-8"
@@ -683,11 +679,11 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         self.assertEqual(catalog["agent_id"], "evidence_harvester")
         self.assertEqual(catalog["unresolved"], [])
         self.assertTrue(catalog["schema_warnings"])
-        review = read_json(
-            task_dir / "subtasks" / "evidence_harvester" / "review.json"
+        validation = read_json(
+            task_dir / "subtasks" / "evidence_harvester" / "validation.json"
         )
-        self.assertEqual(review["mode"], "advisory")
-        self.assertTrue(review["schema_warnings"])
+        self.assertEqual(validation["mode"], "advisory")
+        self.assertTrue(validation["schema_warnings"])
 
     def test_evidence_minimum_gate_still_blocks_non_array_payloads(self) -> None:
         runner, _ = self._runner(
@@ -713,16 +709,11 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         artifact["material_readiness"]["status"] = "blocked"
         artifact["evidence_execution"]["blocking_impact"] = "blocking"
         write_json(Path(generation["output_path"]), artifact)
-        review = runner.commit()
-        write_json(Path(review["output_path"]), {"objections": []})
         done = runner.commit()
         self.assertEqual(done["status"], "blocked")
 
-    def test_schema_only_mode_skips_reviewer_subagent_but_keeps_gate(self) -> None:
-        runner, task_dir = self._runner(
-            {"analysis_objective": "test"},
-            review_subagents_enabled=False,
-        )
+    def test_runtime_validation_skips_reviewer_subagent(self) -> None:
+        runner, task_dir = self._runner({"analysis_objective": "test"})
         generation = runner.prepare()
         artifact = json.loads(
             (FIXTURES / "analysis.v1.valid.json").read_text(encoding="utf-8")
@@ -732,14 +723,14 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         done = runner.commit()
 
         self.assertEqual(done["step"], "done")
-        self.assertEqual(done["review_mode"], "schema_only")
+        self.assertIn("validation_summary", done)
         self.assertFalse(
             (task_dir / "handoff" / "instruction_review.md").exists()
         )
-        review = read_json(task_dir / "review_round_0.json")
+        review = read_json(task_dir / "validation_round_0.json")
         self.assertEqual(
             review["reviewer"],
-            "schema_gate_only+schema_advisory",
+            "runtime_validator+schema_advisory",
         )
         self.assertEqual(review["objections"], [])
 
@@ -752,9 +743,6 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         )
         artifact.pop("findings")
         write_json(Path(generation["output_path"]), artifact)
-        review = runner.commit()
-        write_json(Path(review["output_path"]), {"objections": []})
-
         done = runner.commit()
 
         state = read_json(task_dir / "run_state.json")
@@ -763,51 +751,36 @@ class AnalysisEvidenceRuntimeTests(unittest.TestCase):
         self.assertFalse(state["p0_open"])
         self.assertTrue(state["p1_open"])
 
-    def test_default_mode_still_prepares_independent_reviewer(self) -> None:
-        runner, _ = self._runner({"analysis_objective": "test"})
+    def test_default_mode_finishes_without_independent_reviewer(self) -> None:
+        runner, task_dir = self._runner({"analysis_objective": "test"})
         generation = runner.prepare()
         artifact = json.loads(
             (FIXTURES / "analysis.v1.valid.json").read_text(encoding="utf-8")
         )
         write_json(Path(generation["output_path"]), artifact)
 
-        review = runner.commit()
+        done = runner.commit()
 
-        self.assertEqual(review["step"], "review")
-        self.assertTrue(Path(review["instruction_path"]).exists())
+        self.assertEqual(done["step"], "done")
+        self.assertFalse((task_dir / "handoff" / "instruction_review.md").exists())
 
-    def test_revise_is_followed_by_a_fresh_independent_review(self) -> None:
-        runner, _ = self._runner({"analysis_objective": "test"})
+    def test_revise_is_followed_by_fresh_deterministic_validation(self) -> None:
+        runner, task_dir = self._runner({"analysis_objective": "test"})
+        runner.schema_gate_mode = "strict"
         generation = runner.prepare()
         artifact = json.loads(
             (FIXTURES / "analysis.v1.valid.json").read_text(encoding="utf-8")
         )
-        write_json(Path(generation["output_path"]), artifact)
-        review = runner.commit()
-        write_json(
-            Path(review["output_path"]),
-            {
-                "objections": [
-                    {
-                        "severity": "P0",
-                        "rubric_id": "test-revise",
-                        "dimension": "logic",
-                        "message": "需要返工验证",
-                        "evidence": "unit test",
-                        "suggestion": "修正后重新审查",
-                    }
-                ]
-            },
-        )
-
+        invalid = dict(artifact)
+        invalid.pop("findings")
+        write_json(Path(generation["output_path"]), invalid)
         revise = runner.commit()
         self.assertEqual(revise["step"], "revise")
         write_json(Path(revise["output_path"]), artifact)
 
-        second_review = runner.commit()
-        self.assertEqual(second_review["step"], "review")
-        self.assertEqual(second_review["round_index"], 1)
-        self.assertTrue(Path(second_review["instruction_path"]).exists())
+        done = runner.commit()
+        self.assertEqual(done["step"], "done")
+        self.assertTrue((task_dir / "validation_round_1.json").exists())
 
 
 if __name__ == "__main__":

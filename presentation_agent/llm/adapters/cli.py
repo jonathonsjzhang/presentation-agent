@@ -94,5 +94,10 @@ class CLIAdapter:
 
     @staticmethod
     def _compose_prompt(request: LLMRequest) -> str:
-        parts = [request.system.strip(), "", request.user.strip(), _JSON_INSTRUCTION]
+        suffix = (
+            "\n\n请直接输出完整 Markdown 正文，不要 JSON 外壳或代码围栏。"
+            if request.metadata.get("response_format") == "markdown"
+            else _JSON_INSTRUCTION
+        )
+        parts = [request.system.strip(), "", request.user.strip(), suffix]
         return "\n".join(parts)

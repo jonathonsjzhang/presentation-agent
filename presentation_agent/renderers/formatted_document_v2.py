@@ -374,7 +374,9 @@ def _matrix_png(asset: dict[str, Any], path: Path) -> Path:
     return path
 
 
-def _render_visual_asset(doc: Any, asset: dict[str, Any], asset_dir: Path) -> None:
+def _render_visual_asset(
+    doc: Any, asset: dict[str, Any], asset_dir: Path, *, strict: bool = False
+) -> None:
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Inches
 
@@ -400,6 +402,8 @@ def _render_visual_asset(doc: Any, asset: dict[str, Any], asset_dir: Path) -> No
     elif asset_type == "callout":
         _add_note_box(doc, title, str(asset.get("reader_takeaway") or ""))
     elif asset_type == "chart" and not _chart_data_ready(asset):
+        if strict:
+            raise ValueError(f"{asset.get('asset_id')}: chart data is not renderer-ready")
         _add_note_box(
             doc,
             title,
@@ -424,6 +428,8 @@ def _render_visual_asset(doc: Any, asset: dict[str, Any], asset_dir: Path) -> No
             run = caption.add_run(f"{title} — {asset.get('reader_takeaway', '')}")
             _set_run_font(run, size=9.5, color="1F4D78", bold=True)
         except Exception:
+            if strict:
+                raise
             _add_note_box(
                 doc,
                 title,
@@ -528,6 +534,8 @@ def _render_markdown_body(
     lines: list[str],
     marker_assets: dict[str, dict[str, Any]] | None = None,
     asset_dir: Path | None = None,
+    *,
+    strict: bool = False,
 ) -> set[str]:
     """Render a conservative Markdown subset without rewriting its wording."""
 
@@ -544,7 +552,7 @@ def _render_markdown_body(
             evidence_id = marker_match.group(1)
             asset = marker_assets.get(evidence_id)
             if asset is not None and asset_dir is not None:
-                _render_visual_asset(doc, asset, asset_dir)
+                _render_visual_asset(doc, asset, asset_dir, strict=strict)
                 rendered_assets.add(str(asset.get("asset_id") or evidence_id))
             index += 1
             continue
@@ -690,6 +698,7 @@ def render_formatted_document_v2(
             if sid and h:
                 section_id_map[_normalize_heading(h)] = sid
         markdown_sections = _markdown_sections(markdown)
+        strict_render = bool(formatted.get("strict_render"))
         render_warnings: list[str] = []
         for section_index, (heading, body) in enumerate(markdown_sections):
             heading_paragraph = _add_heading(doc, heading, 1)
@@ -700,6 +709,7 @@ def render_formatted_document_v2(
                 body,
                 marker_assets,
                 out_dir / f"{file_stem}_assets",
+                strict=strict_render,
             )
             norm = _normalize_heading(heading)
             sid = section_id_map.get(norm, "")
@@ -709,7 +719,12 @@ def render_formatted_document_v2(
                 if str(asset.get("asset_id") or "") in rendered_assets:
                     continue
                 try:
-                    _render_visual_asset(doc, asset, out_dir / f"{file_stem}_assets")
+                    _render_visual_asset(
+                        doc,
+                        asset,
+                        out_dir / f"{file_stem}_assets",
+                        strict=strict_render,
+                    )
                 except Exception as exc:
                     render_warnings.append(
                         f"{asset.get('asset_id', '?')} ({asset.get('asset_type', '?')}): {exc}"

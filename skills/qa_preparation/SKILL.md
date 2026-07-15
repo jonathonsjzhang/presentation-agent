@@ -113,3 +113,9 @@ description: Read a complete Markdown strategy report as a thoughtful audience w
 ```
 
 可以额外提供 `qa_question_list` 作为结构化调试字段，但最终交付以 `report_markdown` 中的 Markdown 问题清单为准。
+
+## v0.4 简化交接（覆盖提交载体，不覆盖上述方法论）
+
+当 runtime 声明 `contract_profile=v0_4` 时，完整保留上述压力阅读方法与问题质量标准，但只提交独立的 `qa.md`：以 `# 听众可能追问的问题` 为标题，输出编号问题清单，不复制或改写 Report 正文。Format 会把该清单追加到最终材料。Report 或 Format 的局部返工可以由 runtime 跳过本阶段并复用最近一次 `qa.md`；只有主论点、Storyline 或正文实质内容变化时才重新运行 QA。
+
+`v0_3` 继续使用上面的 JSON 提交要求，仅用于兼容旧运行。

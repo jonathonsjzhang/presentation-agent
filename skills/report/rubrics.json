@@ -4,73 +4,73 @@
       "id": "REPORT-SCHEMA-001",
       "severity": "P0",
       "dimension": "submission_contract",
-      "criterion": "模型提交只包含完整 report_markdown；runtime 字段不由作者填写。",
-      "check": "校验 report.v1 submission schema。",
-      "fix": "保留完整原稿，删除模型生成的 metadata、manifest、registry 与 handoff。"
+      "criterion": "v0.3 提交只包含完整 report_markdown 与 visual_evidence_placements；runtime 字段不由作者填写。",
+      "check": "校验 report.v1 submission schema，并确认正文没有被拆成 blocks。",
+      "fix": "保留完整原稿与可视化交接，删除模型生成的 metadata、manifest、registry 与 handoff。"
     },
     {
       "id": "REPORT-MANUSCRIPT-001",
       "severity": "P1",
       "dimension": "完整报告",
-      "criterion": "report_markdown 是有开头、推进和收束、可独立通读的完整报告，不是提纲或 blocks 拼接。",
-      "check": "脱离上游 artifact 从头到尾通读。",
-      "fix": "重写为连续文章，补齐必要的论证与收束。"
+      "criterion": "report_markdown 应有清楚开头、连续推进和自然收束，可脱离上游 artifact 独立通读。",
+      "check": "从最终读者视角通读，判断它是文章还是提纲、brief 扩写或材料拼接。",
+      "fix": "重写为连续文章，只补齐理解已批准主线所必需的表达。"
     },
     {
       "id": "REPORT-STRUCTURE-001",
       "severity": "P1",
-      "dimension": "写作框架",
-      "criterion": "全文由统一分析框架和核心答案统领；标题链形成递进论证，每节只完成一个主要判断。",
-      "check": "只读标题链，检查能否用因此、但问题是、所以连接。",
-      "fix": "重组并列章节，删除偏离核心答案的旁支。"
+      "dimension": "Storyline 保真",
+      "criterion": "报告应保留已批准的 core_answer、章节顺序和各节证明任务；编辑可以压缩表达，但不能重新设计分析框架。",
+      "check": "对照 Storyline 检查是否改选主张、重排论证或把附录旁支带回正文。",
+      "fix": "恢复批准骨架；结构本身有断链时退回 Storyline。"
     },
     {
       "id": "REPORT-REASONING-001",
       "severity": "P1",
-      "dimension": "推导分析",
-      "criterion": "每节完成判断—证据—解释—含义闭环；因果表述有对照或识别依据。",
-      "check": "检查数字后是否有解释、节间是否累进、因果判断能否回答和谁比。",
-      "fix": "补足推导或将因果降级为相关性。"
+      "dimension": "推导表达",
+      "criterion": "正文应把 Storyline 已批准的证据—判断关系解释清楚，但不得自行发明机制、下一层瓶颈、战略含义或因果关系。",
+      "check": "检查关键数字后是否说明其相关性，并区分上游已有推导与 Report 新增推导。",
+      "fix": "补清已有桥梁或删除新增解释；关键桥梁缺失时退回 Storyline。"
     },
     {
       "id": "REPORT-EVIDENCE-001",
       "severity": "P1",
-      "dimension": "论据充分",
-      "criterion": "关键判断应有代表性原始证据，来源、口径、单位和时间窗尽量清楚；只处理会改变主判断的异常与替代解释。",
-      "check": "检查核心判断是否缺少证据，或正文是否把普通方法限制反复展开。",
-      "fix": "补充最关键证据，收窄无支撑判断，把普通边界集中处理。"
+      "dimension": "证据呈现",
+      "criterion": "每个关键判断应使用最有区分力的代表性证据；上游提供的来源、时间窗、单位和口径应可读，证据强度不得升级。",
+      "check": "检查是否缺少关键落点、堆叠同类证据、暴露内部 ID，或补造上游没有的细节。",
+      "fix": "保留最能支持判断的证据并准确标注；无支持内容收窄或退回上游。"
     },
     {
       "id": "REPORT-DENSITY-001",
       "severity": "P1",
       "dimension": "信息密度",
-      "criterion": "每节都有具体 so what，并推进到下一层问题；结尾向上收束而非重复摘要。",
-      "check": "删除段尾后若信息不减，说明落脚点为空。",
-      "fix": "写清决策含义，删除万能收尾。"
+      "criterion": "每个段落都应增加判断、证据、必要解释或实质边界；不强制段尾 so what、下一步问题或重复收束。",
+      "check": "删除一句或一段后，若信息、推导和边界均无损失，则内容冗余。",
+      "fix": "删除重复、旁支和万能收尾，合并承担相近任务的段落。"
     },
     {
       "id": "REPORT-PROSE-001",
       "severity": "P1",
       "dimension": "文字措辞",
-      "criterion": "语言克制、清楚、证据强度匹配，已删除研究过程话语、情绪化形容词与同义反复。",
-      "check": "检查摘要、标题、段首、段尾之间的重复及过强措辞。",
-      "fix": "用中性判断句替代空话和形容词。"
+      "criterion": "语言应具体、克制、准确，主语与业务对象清楚，术语可理解，措辞强度匹配证据。",
+      "check": "检查过程话语、抽象概念、情绪化程度词、无信息量过渡和同义反复。",
+      "fix": "改写为中性、可验证的判断句，删除不增加信息的修辞。"
     },
     {
       "id": "REPORT-TRACE-001",
       "severity": "P0",
       "dimension": "上游保真",
-      "criterion": "报告不得新增无支持事实、KPI、owner、预算、路线图，或把上游低置信判断升级为确定结论。",
-      "check": "对照 Storyline 与 Analysis 检查是否存在实质越界；不要因标题改写或表达压缩判 P0。",
-      "fix": "删除越界内容，恢复证据允许的表述。"
+      "criterion": "报告不得新增无支持事实、观点、KPI、owner、预算、时间线或效果承诺，也不得把低置信判断升级为确定结论。",
+      "check": "对照 Storyline 与其引用的 Analysis 证据检查实质越界；标题压缩和自然改写不算越界。",
+      "fix": "删除越界内容并恢复证据允许的表述；上游缺口无法通过编辑解决时退回相应 worker。"
     },
     {
       "id": "REPORT-BUDGET-001",
       "severity": "P1",
-      "dimension": "正文篇幅",
-      "criterion": "正文应服从 delivery_budget；Report统一按每页800-900中文字符规划，以每页850字符为目标、900字符为硬上限；Executive Summary固定为300-350字符，不随总页数变化。",
-      "check": "只统计标题、Executive Summary和主体章节；排除方法与边界及QA。Report字符硬上限与Format最终实际渲染页数均须通过。",
-      "fix": "合并相邻判断，删除摘要、标题、段首和段尾之间的重复，减少次级证据与普通caveat。"
+      "dimension": "交付预算",
+      "criterion": "报告应服从 delivery_budget 中已声明的正文与摘要上限，并把具体字符和分页审计交给 runtime 与 Format。",
+      "check": "检查是否超出声明预算，或把正文转移到方法、附录、问答来规避限制。",
+      "fix": "先删重复解释、次级证据和普通 caveat，再合并相近段落；不缩小字体或隐藏正文。"
     }
   ]
 }

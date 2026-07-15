@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema": "format_plan.v1",
+  "title": "Minimal carrier plan for rendering a canonical report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["visuals"],
+  "properties": {
+    "visuals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "title", "source_refs", "data"],
+        "properties": {
+          "type": {"type": "string", "enum": ["chart", "table", "matrix", "callout"]},
+          "title": {"type": "string", "minLength": 1},
+          "source_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+          "after_heading": {"type": "string"},
+          "data": {"type": "object"}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"type": {"const": "chart"}}},
+            "then": {
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": ["categories"],
+                  "properties": {
+                    "chart_type": {"type": "string", "enum": ["bar", "line"]},
+                    "categories": {"type": "array", "minItems": 1},
+                    "values": {"type": "array", "minItems": 1},
+                    "series": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "object",
+                        "required": ["values"],
+                        "properties": {
+                          "name": {"type": "string"},
+                          "values": {"type": "array", "minItems": 1}
+                        }
+                      }
+                    }
+                  },
+                  "oneOf": [
+                    {"required": ["values"], "not": {"required": ["series"]}},
+                    {"required": ["series"], "not": {"required": ["values"]}}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {"properties": {"type": {"const": "table"}}},
+            "then": {
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": ["rows"],
+                  "properties": {
+                    "columns": {"type": "array", "minItems": 1},
+                    "headers": {"type": "array", "minItems": 1},
+                    "rows": {"type": "array", "minItems": 1}
+                  },
+                  "anyOf": [
+                    {"required": ["columns"]},
+                    {"required": ["headers"]}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {"properties": {"type": {"const": "matrix"}}},
+            "then": {
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "anyOf": [
+                    {"properties": {"dimensions": {"type": "array", "minItems": 4}}, "required": ["dimensions"]},
+                    {"properties": {"labels": {"type": "array", "minItems": 4}}, "required": ["labels"]}
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

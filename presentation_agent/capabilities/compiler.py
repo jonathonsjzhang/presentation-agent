@@ -142,6 +142,9 @@ def _is_report_v1_format(spec: AgentSpec, input_data: dict[str, Any]) -> bool:
     report = input_data.get("report")
     schema = report.get("schema") if isinstance(report, dict) else input_data.get("schema")
     return spec.id == "format" and (
+        spec.output_schema == "format_plan.v1"
+        or spec.input_schema == "markdown_artifact.v1"
+        or
         spec.input_schema == "report.v1" or schema == "report.v1"
     )
 
