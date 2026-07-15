@@ -62,7 +62,18 @@ class V04SimplifiedFlowTests(unittest.TestCase):
         analysis_skill = (ROOT / "skills/analysis/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("先广泛发现，再开始收敛", analysis_skill)
         self.assertIn("## Workflow", analysis_skill)
-        self.assertIn("v0.4 简化交接", analysis_skill)
+        self.assertIn("analysis.md", analysis_skill)
+        for relative_path in (
+            "skills/analysis/SKILL.md",
+            "skills/storyline/SKILL.md",
+            "skills/report/SKILL.md",
+            "skills/qa_preparation/SKILL.md",
+            "skills/format/SKILL.md",
+            "skills/manager/SKILL.md",
+        ):
+            skill_text = (ROOT / relative_path).read_text(encoding="utf-8")
+            self.assertNotIn("v0.3", skill_text)
+            self.assertNotIn("v0_3", skill_text)
 
     def test_step_runner_commits_canonical_markdown_and_tiny_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

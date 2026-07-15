@@ -261,14 +261,15 @@ class FormatCoreCompilationTests(unittest.TestCase):
             {"report": self.report, "delivery_target": target},
         )
 
-    def test_report_fixture_compiles_v2_skill_with_one_target_capability(self) -> None:
+    def test_report_fixture_compiles_current_format_skill_with_one_target_capability(self) -> None:
         package = self.compile()
         selected = [
             item for item in package.selected_capabilities if item.startswith("format.")
         ]
         self.assertFalse(package.legacy)
         self.assertEqual(selected, ["format.document"])
-        self.assertIn("formatted_material.v2", package.instructions)
+        self.assertIn("format_plan.v1", package.instructions)
+        self.assertNotIn("formatted_material.v2", package.instructions)
         self.assertIn("delivery_target=document", package.instructions)
         self.assertNotIn("page_content → formatted_material.v1", package.instructions)
         self.assertNotIn("material_units[]", package.instructions)

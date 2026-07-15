@@ -284,7 +284,7 @@ Delivery options gate：
 
 输入文件若包含 `parsed_artifact_path` / `raw_access` / `table_data_access`，说明原始 XLSX/CSV 已由 runtime connector 处理。sub-agent 不要重新直接读取二进制文件，也不要把完整 sidecar 一次性打印到对话；先用内联画像和 source units，只有具体论据需要时才读取对应字段或 sheet。
 
-v0.4 中，Analysis 和 Storyline 仍进入用户确认 Gate；Report 与 QA 正常完成后由 runtime 自动推进，不再创建一轮无实质判断的 Manager acceptance。用户反馈或 blocked 时，Manager 必须显式给出 `stage`。v0.3 的 Manager acceptance 仍按旧兼容协议执行。固定下一 Worker、task_id 和正式 artifact 路径由 runtime 管理；宿主不要自行拼接 handoff 路径。
+Analysis 和 Storyline 仍进入用户确认 Gate；Report 与 QA 正常完成后由 runtime 自动推进，不再创建一轮无实质判断的 Manager acceptance。用户反馈或 blocked 时，Manager 必须显式给出 `stage`。固定下一 Worker、task_id 和正式 artifact 路径由 runtime 管理；宿主不要自行拼接 handoff 路径。
 
 用户在任一人工 Gate 明确要求修改某阶段时，直接调用：
 
