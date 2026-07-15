@@ -60,7 +60,8 @@ class V04SimplifiedFlowTests(unittest.TestCase):
                 "markdown",
             )
         analysis_skill = (ROOT / "skills/analysis/SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("先广泛发现，再开始收敛", analysis_skill)
+        self.assertIn("证据综合与候选论点设计者", analysis_skill)
+        self.assertIn("候选论点金字塔", analysis_skill)
         self.assertIn("## Workflow", analysis_skill)
         self.assertIn("analysis.md", analysis_skill)
         for relative_path in (
@@ -138,6 +139,10 @@ class V04SimplifiedFlowTests(unittest.TestCase):
 ### 方案 B：聚焦能力约束
 
 另一组完整主张保留不同的决策张力。
+
+## 核心视觉证据候选
+
+核心比较可以直接呈现，帮助读者判断两组论点的证据基础。
 
 ## 待验证问题
 
@@ -394,6 +399,10 @@ class V04SimplifiedFlowTests(unittest.TestCase):
 ### 方案 B：聚焦能力约束
 
 保留另一个具有决策张力的完整解释。
+
+## 核心视觉证据候选
+
+核心比较可以直接呈现，帮助读者判断两组论点的证据基础。
 
 ## 待验证问题
 

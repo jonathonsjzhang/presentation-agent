@@ -23,7 +23,7 @@
           "name": "分析",
           "stage": 1,
           "skill": "analysis",
-          "description": "形成一份完整、可独立阅读、可追溯的分析底稿，并提出候选主论点。",
+          "description": "把证据综合为少量完整发现，并形成 2–3 组可供选择的 Minto 金字塔式候选论点。",
           "previous_agent_id": "manager",
           "next_agent_id": "storyline",
           "input_schema": "report_charter.v2",
@@ -32,7 +32,7 @@
             "artifact_format": "markdown",
             "artifact_kind": "analysis",
             "canonical_filename": "analysis.md",
-            "required_headings": ["核心发现", "竞争性解释与边界", "候选论点组", "待验证问题"]
+            "required_headings": ["核心发现", "竞争性解释与边界", "候选论点组", "核心视觉证据候选", "待验证问题"]
           },
           "memory_dimensions": ["证据完整性", "发现", "替代解释", "So What", "决策张力"],
           "max_revision_rounds": 1,
