@@ -1,6 +1,6 @@
 ---
 name: qa_preparation
-description: Read a complete Markdown strategy report as a thoughtful audience would, then append a concise list of important, deep questions after the appendices. Use after Report and before Format.
+description: Read a complete Markdown strategy report as a thoughtful audience would, then produce a concise independent list of important, deep questions for Format to append. Use after Report and before Format.
 ---
 
 # Q&A Question List Core
@@ -11,7 +11,7 @@ description: Read a complete Markdown strategy report as a thoughtful audience w
 
 这里的 Q&A 不是答辩话术准备，也不是把报告内容改写成 FAQ。你的任务更像一位资深分析师在正式交稿前做最后一遍压力阅读：哪些判断会被挑战，哪些证据链还可能被追问，哪些替代解释、战略取舍或执行边界值得拿到会上讨论。
 
-你只在报告最后追加一组问题，不写答案，不补数据，不替汇报人做承诺，也不改正文。追加后的 `report_markdown` 会成为 Format 的唯一内容真相源，因此问题清单必须直接写入 Markdown，而不是另交一份独立 JSON 包。
+你只生成一组独立问题，不写答案，不补数据，不替汇报人做承诺，也不改写或复制正文。Format 会把问题清单追加到最终材料。
 
 ---
 
@@ -46,11 +46,9 @@ description: Read a complete Markdown strategy report as a thoughtful audience w
 
 但你不能因此新增报告没有说过的事实、数据、竞品判断、执行方案或结论方向。问题可以指出缺口，不能替缺口编答案。
 
-### 四、问题清单是报告的一部分
+### 四、问题清单可直接进入最终材料
 
-问题清单放在报告最后，且必须在“附录”之后。如果原稿没有附录，就放在所有正文、方法与边界之后。
-
-建议标题使用：
+问题清单最终由 Format 放在报告末尾、附录之后。你提交独立 Markdown，标题使用：
 
 ```markdown
 ## 听众可能追问的问题
@@ -62,11 +60,10 @@ description: Read a complete Markdown strategy report as a thoughtful audience w
 
 ## 输入边界
 
-- 上游 `report.v1.report_markdown` 是完整报告原稿。你必须保留原文顺序、标题、段落、措辞和 `[可视化论据：...]` 标记，只在末尾追加问题清单。
-- 上游 `visual_evidence_placements` 必须逐项原样复制到输出，不能删除、改名或重新排序。
+- 上游 `report.md` 是完整报告原稿，只用于压力阅读；不要在输出中复制或改写它。
 - `report_charter`、`raw_brief` 和 `upstream_signal` 用于理解汇报目的、听众和预期行动，不用于新增事实。
 - 不重读 Raw Materials，不补做 Analysis，不改变 Storyline，不新增图表或版式指令。
-- 如果报告已有同名问题清单，先判断它是否符合本轮要求；需要修订时整体替换该清单，但不要改动前面的报告正文。
+- 如果已有 `qa.md`，先判断它是否符合本轮要求；需要修订时整体替换问题清单。
 
 ## Workflow
 
@@ -82,7 +79,7 @@ description: Read a complete Markdown strategy report as a thoughtful audience w
 
 优先保留会改变讨论走向的问题。删除礼貌型、解释型、复述型问题。不要为了覆盖所有章节而逐章凑问题；有些章节没有高价值追问，可以不问。
 
-### 3. 把问题写成可直接附在报告里的清单
+### 3. 把问题写成可直接附在报告里的独立清单
 
 问题要自然、具体、可被汇报人带到会前准备。每个问题最好能指向报告中的一个关键判断或关键缺口，但不要写成“第 X 页/第 X 节说……”的审稿口吻。
 
@@ -95,27 +92,14 @@ description: Read a complete Markdown strategy report as a thoughtful audience w
 - 哪些边界会影响结论能否推广到更大范围？
 - 是否存在汇报对象特别在意、但报告只做了轻处理的问题？
 
-### 4. 只追加，不重写
+### 4. 只交问题，不重写报告
 
-生成最终 `report_markdown` 时，先完整保留原稿，再追加问题清单。不要给问题写答案、回答策略、证据引用、风险等级或会后 follow-up。不要新增“汇报人提示”“建议话术”“待补材料”等内部说明。
+不要给问题写答案、回答策略、证据引用、风险等级或会后 follow-up。不要新增“汇报人提示”“建议话术”“待补材料”等内部说明。
 
-提交前从头检查一遍：原文是否未被改动；问题清单是否在最后；问题是否都足够重要；是否混入了答案或新事实。
+提交前检查：问题是否都足够重要；是否一问一意；是否混入了答案、新事实或 Report 正文。
 
 ## Output
 
-严格按 `report.v1` schema 提交一个 JSON 对象。正文只能完整放在 `report_markdown` 中：
+只提交独立的 `qa.md`：以 `# 听众可能追问的问题` 为标题，输出编号问题清单，不复制或改写 Report 正文。Format 会把该清单追加到最终材料。
 
-```json
-{
-  "report_markdown": "# 报告标题\n\n## Executive Summary\n\n……\n\n## 附录\n\n……\n\n## 听众可能追问的问题\n\n1. ……？\n2. ……？",
-  "visual_evidence_placements": []
-}
-```
-
-可以额外提供 `qa_question_list` 作为结构化调试字段，但最终交付以 `report_markdown` 中的 Markdown 问题清单为准。
-
-## v0.4 简化交接（覆盖提交载体，不覆盖上述方法论）
-
-当 runtime 声明 `contract_profile=v0_4` 时，完整保留上述压力阅读方法与问题质量标准，但只提交独立的 `qa.md`：以 `# 听众可能追问的问题` 为标题，输出编号问题清单，不复制或改写 Report 正文。Format 会把该清单追加到最终材料。Report 或 Format 的局部返工可以由 runtime 跳过本阶段并复用最近一次 `qa.md`；只有主论点、Storyline 或正文实质内容变化时才重新运行 QA。
-
-`v0_3` 继续使用上面的 JSON 提交要求，仅用于兼容旧运行。
+Report 或 Format 的局部返工可以由 runtime 跳过本阶段并复用最近一次 `qa.md`；只有主论点、Storyline 或正文实质内容变化时才重新运行 QA。

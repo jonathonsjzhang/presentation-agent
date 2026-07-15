@@ -52,7 +52,7 @@ Storyline 决定讲什么、先后顺序、章节故事和标题，但不替 Rep
 
 ## Input authority
 
-- `selected_analysis_thesis` 决定主线方向；`analysis.v1.findings[]` 决定可以使用的观点和证据边界。
+- 用户确认的 `analysis.md` 论点组决定主线方向；其中的完整发现与证据决定可以使用的观点和证据边界。
 - `evidence_refs`、`confidence`、`challenges` 和 `open_issues` 决定措辞强度。Challenge 若足以改变主张，应体现在 `core_answer`、标题或 brief 中，而不是只留在末尾。
 - `visual_evidence_candidates` 只提供可视化论据候选。Storyline 决定哪些服务主线及其位置、顺序，不决定 chart type 或样式。
 - 用户对上一版 Storyline 的反馈可以调整表达、顺序和章节粒度，但不能绕过 Analysis 新增主张。
@@ -83,20 +83,6 @@ Storyline 决定讲什么、先后顺序、章节故事和标题，但不替 Rep
 
 ## Output
 
-### v0.3
+直接提交一份可供用户确认的 `storyline.md`，至少包含：`# Storyline`、`## 核心答案`、`## 故事线`、`## 关键边界`、`## 不进入主线的内容`。故事线按顺序写出章节、Leadline、核心论证和必要引用，不把一个完整故事拆成大量编排字段。
 
-严格按 `storyline.v3` schema 提交一个 JSON 对象，核心字段为：
-
-- `core_answer`
-- `sections[]`：`chapter`、`heading`、`brief`、`finding_refs`，以及需要时的 `visual_evidence_refs`
-- `visual_evidence_plan[]`
-- `executive_summary`：可选的故事摘要，不是最终报告原稿
-- `appendix_finding_refs[]`、`open_issues[]`：可选
-
-禁止输出 pages、page_no、slide、layout、颜色或具体 chart type。章节 leadline 统一写入 `heading`，不要建立重复字段。Message pyramid、finding 分类表和 transition checklist 只用于内部思考，不进入最终输出。
-
-### v0.4 简化交接
-
-当 runtime 声明 `contract_profile=v0_4` 时，直接提交一份可供用户确认的 `storyline.md`，至少包含：`# Storyline`、`## 核心答案`、`## 故事线`、`## 关键边界`、`## 不进入主线的内容`。故事线按顺序写出章节、Leadline、核心论证和必要引用，不提交 `storyline.v3` JSON，也不把一个完整故事拆成大量编排字段。
-
-`v0_3` 继续使用上面的 JSON 契约，仅用于兼容旧运行。
+禁止输出 pages、page_no、slide、layout、颜色或具体 chart type。Message pyramid、finding 分类表和 transition checklist 只用于内部思考，不进入最终输出。

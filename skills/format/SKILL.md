@@ -47,9 +47,8 @@ Report 是内容真相源；Format 不再写稿，也不负责真实分页、字
 
 ## Input authority
 
-- 唯一内容权威是已批准的 `report.v1` 或 canonical `report.md`。
-- v0.3 的 `visual_evidence_placements` 是必须保留的视觉意图、位置和 ID。
-- v0.4 只处理报告中明确存在的可视化提示、数据/表格证据和已批准任务要求；不为填充版面扩张视觉范围。
+- 唯一内容权威是已批准的 `report.md`。
+- 只处理报告中明确存在的可视化提示、数据/表格证据和已批准任务要求；不为填充版面扩张视觉范围。
 - `evidence_assets` / `evidence_index` 只用于物化报告已经采用的证据，不用于发现新观点。
 - 本轮 `delivery_target` 和 active format capability 决定唯一载体，不混用其他载体规则。
 
@@ -75,8 +74,6 @@ runtime 依次执行：证据投影 → renderer capability preflight → 文件
 
 ## Output
 
-### v0.4
-
 严格按 `format_plan.v1` 只提交 `visuals[]`：
 
 - `type`：chart / table / matrix / callout
@@ -86,9 +83,3 @@ runtime 依次执行：证据投影 → renderer capability preflight → 文件
 - `data`：有 renderer-ready 数据时提供；若依赖 runtime 证据投影可暂不提供
 
 只有确实没有任何获批视觉意图或需要视觉化的证据时，才提交 `{"visuals": []}`。
-
-### v0.3
-
-严格按 `formatted_material.v2` 提交 `visuals[]`，保留上游的 `visual_evidence_id`、`section_heading`、`required` 和 `placement`，并遵守同一套来源与 renderer-ready 原则。
-
-`v0.3` 仅用于兼容旧运行。
