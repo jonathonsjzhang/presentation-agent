@@ -1374,7 +1374,18 @@ class ManagerOrchestrator:
             published = self._publish_deliverables(
                 self._format_rendered_files(worker_result)
                 + [
-                    str((worker_result.get("artifact") or {}).get("render_manifest_path") or "")
+                    str(
+                        (worker_result.get("artifact") or {}).get(
+                            "render_manifest_path"
+                        )
+                        or ""
+                    ),
+                    str(
+                        (worker_result.get("artifact") or {}).get(
+                            "visual_quality_manifest_path"
+                        )
+                        or ""
+                    ),
                 ]
             )
             state["published_files"] = published

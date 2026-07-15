@@ -4,33 +4,33 @@
       "id": "FORMAT-HIERARCHY-001",
       "severity": "P1",
       "dimension": "信息层级",
-      "criterion": "视觉选择帮助读者更快识别判断、证据和边界，而非制造新的内容结构。",
-      "check": "检查视觉是否对应原稿中最需要比较或强调的步骤。",
-      "fix": "删除无助于理解的视觉。"
+      "criterion": "每个视觉都让读者更快完成比较、识别变化、精确读取或理解关系中的一种任务。",
+      "check": "说明每个视觉回答的单一阅读问题；不能说明则不应创建。",
+      "fix": "删除装饰视觉，或收敛为一个明确的阅读任务。"
     },
     {
       "id": "FORMAT-FIDELITY-001",
       "severity": "P0",
       "dimension": "内容保真",
-      "criterion": "Format 不改写、不删减、不扩写、不调序 report_markdown。",
-      "check": "确认提交中没有正文副本、压缩或 omission 决策。",
-      "fix": "只保留 visual 选择，把正文交给 renderer。"
+      "criterion": "视觉计划不改写、不删减、不扩写、不调序正文，也不升级判断或丢失 caveat。",
+      "check": "确认提交中没有正文副本、内容取舍或新增视觉命题。",
+      "fix": "只保留获批视觉意图，把内容编辑退回 Report。"
     },
     {
       "id": "FORMAT-VISUAL-001",
-      "severity": "P1",
-      "dimension": "视觉叙事",
-      "criterion": "每个 visual 承担比较、关系或强调任务；换回文字会产生明确的信息损失。",
-      "check": "检查图表类型是否匹配证据要表达的问题。",
-      "fix": "删除装饰图或选择更匹配的表达。"
+      "severity": "P0",
+      "dimension": "Renderer 可执行性",
+      "criterion": "每个 visual 都能编译为当前 renderer 支持的原子类型与数据模型；真实视觉质量由渲染后审计决定。",
+      "check": "核对 chart、table、2×2 matrix、callout 的有效数据形状，不接受依赖 renderer 猜测的任意业务 JSON。",
+      "fix": "改为 renderer 原生模型；若缺数据，保留真实 source_refs 交由 runtime 投影或阻断。"
     },
     {
       "id": "FORMAT-SOURCE-001",
       "severity": "P0",
       "dimension": "真实性与溯源",
-      "criterion": "每个 visual 都能回到报告真实来源，数据与表述没有被补造或升级。",
-      "check": "逐项核对 section_heading、source_refs 和 data。",
-      "fix": "删除无来源视觉或修正为原稿数据。"
+      "criterion": "每个 visual 都能回到报告真实来源，数据、引语、强度和边界没有被补造或升级。",
+      "check": "逐项核对 source_refs、title 和 data；v0.3 同时核对上游视觉 ID 与位置。",
+      "fix": "修正为真实来源与原稿强度；证据缺失时不得模拟。"
     }
   ]
 }

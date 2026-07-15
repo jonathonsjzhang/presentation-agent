@@ -23,6 +23,10 @@ def classify_failure(
         code = "missing_source_data"
         responsible_stage = "evidence_harvester"
         repair_scope = "evidence"
+    elif "renderer 视觉质量" in lowered or "visual quality" in lowered:
+        code = "visual_quality_failure"
+        responsible_stage = "runtime"
+        repair_scope = "renderer"
     elif "renderer 不支持" in text or "unsupported" in lowered and "chart" in lowered:
         code = "unsupported_visual_type"
         responsible_stage = "format"

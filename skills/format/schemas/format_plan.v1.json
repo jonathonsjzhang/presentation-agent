@@ -11,7 +11,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["type", "title", "source_refs", "data"],
+        "required": ["type", "title", "source_refs"],
         "properties": {
           "type": {"type": "string", "enum": ["chart", "table", "matrix", "callout"]},
           "title": {"type": "string", "minLength": 1},
@@ -79,8 +79,26 @@
                 "data": {
                   "type": "object",
                   "anyOf": [
-                    {"properties": {"dimensions": {"type": "array", "minItems": 4}}, "required": ["dimensions"]},
-                    {"properties": {"labels": {"type": "array", "minItems": 4}}, "required": ["labels"]}
+                    {"properties": {"dimensions": {"type": "array", "minItems": 4, "maxItems": 4}}, "required": ["dimensions"]},
+                    {"properties": {"labels": {"type": "array", "minItems": 4, "maxItems": 4}}, "required": ["labels"]}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {"properties": {"type": {"const": "callout"}}},
+            "then": {
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "text": {"type": "string", "minLength": 1},
+                    "quote": {"type": "string", "minLength": 1}
+                  },
+                  "anyOf": [
+                    {"required": ["text"]},
+                    {"required": ["quote"]}
                   ]
                 }
               }

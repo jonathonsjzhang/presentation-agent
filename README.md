@@ -27,7 +27,7 @@
 - **保留专业 Skill**：原有核心准则、Workflow、Self-edit Checklist 和专业验收标准全部保留；简化仅作用于交接载体与运行时控制面。
 - **简化 happy path**：Brief 确认后直接进入 Analysis；Analysis、Storyline 保留用户 Gate；Report、QA 正常完成后自动推进到 Format。
 - **显式局部返工**：Manager 使用 `stage` 指定责任阶段；Report/Format 局部修改可跳过 QA 并复用旧产物，不按固定链整段回放。
-- **真实渲染优先**：Format 只提交轻量视觉计划；数据形状在 Format 内前置检查，renderer 降级会进入 render manifest 并阻止静默通过。
+- **真实渲染优先**：Format 只提交轻量视觉计划；runtime 在证据投影后按 renderer 的真实数据模型 preflight，并在文件生成后检查视觉资产和逐页快照。空白、纯黑、缺失资产或无法生成页面快照都会进入 quality manifest 并阻止静默通过。
 - **Evidence/doctor 快速失败**：目录中不支持的文件显式列出并使 intake 不完整；doctor 检查 PDF 解析、DOCX 生成和中文 DOCX→PDF 冒烟路径。
 
 #### v0.3（2026-07-02）
@@ -75,7 +75,7 @@
 | Worker | Storyline（故事线设计） | 从已确认 Analysis 中选择核心主张，取舍信息并组织成一条递进、可说服的完整论证链 | `storyline.md` + 轻量回执 |
 | Worker | Report（正式写作） | 基于完整 Brief、Evidence、Analysis 与已批准 Storyline 写成连续 Markdown 报告 | `report.md` + 轻量回执 |
 | Worker | Q&A 梳理 | 独立压力阅读完整报告，形成重要、深度、关乎逻辑与底层论据的听众追问；不写答案 | `qa.md` + 轻量回执 |
-| Worker | Format（载体化表达） | 以 `report.md` 和可选 `qa.md` 为内容真相源，只改变载体表达，不重写或删减报告 | `format_plan.v1`、render manifest、DOCX/PPTX/HTML |
+| Worker | Format（载体化表达） | 以 `report.md` 和可选 `qa.md` 为内容真相源，只编译视觉意图，不重写或删减报告 | `format_plan.v1`、render/visual quality manifest、DOCX/PPTX/HTML |
 
 每个 Agent 在配置里声明：
 
@@ -157,7 +157,7 @@ skills/<agent_id>/
 
 这种设计的好处是：修改 Agent 行为时，优先改 skill 包，而不是改 Python runtime。SOP、rubrics、schema 都可以独立演进。
 
-五个 Worker 对应两次内容收敛、一次原稿写作、一次会场追问补强和一次表达加工：Analysis 先从大量材料中发散并验证可能的发现、解释和假设，再收敛为观点池和 2-3 组可确认的主论点方案；Storyline 从用户确认的论点组和观点池中选择唯一主线，形成 Executive Summary、动态 message pyramid 和章节论证顺序；Report 把故事线写成完整正文，展开主张—证据链、方法、反方、caveat、来源与附录；Q&A 站在听众视角追加会真正挑战逻辑和底层论据的深度问题；Format 再把语义完整的报告转译为目标载体，完成信息层级、图表和版式设计。简言之，Analysis 负责把材料想明白并给出可选论点组，Storyline 负责把被确认的观点讲成故事，Report 负责把故事写成报告，Q&A 负责补上重要追问，Format 负责把报告做成可交付材料。任何下游 Worker 都不能静默补做上游工作；证据或观点无法支撑时必须明确返回上一环补齐。
+五个 Worker 对应两次内容收敛、一次原稿写作、一次会场追问补强和一次表达加工：Analysis 先从大量材料中发散并验证可能的发现、解释和假设，再收敛为观点池和 2-3 组可确认的主论点方案；Storyline 从用户确认的论点组和观点池中选择唯一主线，形成 Executive Summary、动态 message pyramid 和章节论证顺序；Report 把故事线写成完整正文，展开主张—证据链、方法、反方、caveat、来源与附录；Q&A 站在听众视角追加会真正挑战逻辑和底层论据的深度问题；Format 只把已批准的视觉意图映射为 renderer 支持的图表、表格、矩阵或 callout，真实版式、分页和文件质量由 renderer/runtime 负责。任何下游 Worker 都不能静默补做上游工作；证据或观点无法支撑时必须明确返回上一环补齐。
 
 可视化论据沿同一条链路传递：Evidence 保留完整数据和数据资产引用，Analysis 判断哪些核心论据必须被看见，Storyline 决定放在开头还是具体章节，Report 写入位置标记，Q&A 原样保留，Format 选择图表或表格并生成。Runtime 会逐项检查必需项目；缺图、位置错误或缺少可绘制数据时停止交付，并把任务返回到真正需要补充的环节。
 
@@ -200,8 +200,9 @@ Renderers 是 skill 可调用的材料生成能力，位于 `presentation_agent/
 - `ppt.py`：把 Format delivery units 渲染为 PPT。
 - `html.py`：把 Format delivery units 渲染为 HTML。
 - `base.py`：定义统一 `RenderResult` 和渲染入口。
+- `visual_quality.py`：在渲染前校验 renderer-native 数据模型，并在渲染后检查真实资产、页面快照和载体结构。
 
-Report 先物化内容正确的 `report.md`；Q&A 只在末尾追加深度追问清单；Format Worker 完成自身 schema/review loop 后，runtime 先按 evidence asset 引用补齐图表数据、投影非规则表格或复用已登记图片，再把增强后的同一原稿排版为 DOCX、PPT 或 HTML，并执行最终页数审计。即使必需视觉仍缺数据，runtime 也会生成可诊断的草稿和页数结果，再以 visual evidence error 阻止正式完成，避免把上游数据问题误报为页数失败。`render_result` 与 `rendered_files` 随后交给 Manager 验收；Manager complete 的硬条件是正式文件真实存在，而不是所有语义检查都零告警。项目中还包含 `presentation_agent/vendor/mck_ppt/`，用于提供 PPT 布局、风格常量、deck builder 和视觉 QA 能力。
+Report 先物化内容正确的 `report.md`；Q&A 只在末尾追加深度追问清单；Format Worker 完成最小视觉计划后，runtime 先按 evidence asset 引用补齐图表数据、投影非规则表格或复用已登记图片，再对补齐后的有效计划执行 renderer capability preflight。真实文件生成后，runtime 强制物化逐页快照，核对预期视觉资产，并为 PPT 追加结构化 layout QA；结果写入 `visual_quality_manifest.json` 和 `render_manifest.json`。Manager complete 的硬条件因此是文件存在、无降级且真实视觉检查通过，而不是 prompt 或 Worker 自报“可读”。项目中还包含 `presentation_agent/vendor/mck_ppt/`，用于提供 PPT 布局、风格常量、deck builder 和视觉 QA 能力。
 
 这一层是系统从“结构化中间产物”走向“可交付材料”的关键。
 

@@ -174,9 +174,12 @@ class ArtifactReviewer:
                     "delivery_target",
                     "render_result",
                     "render_manifest_path",
+                    "visual_quality_manifest_path",
                     "artifact_manifest",
+                    "evidence_index",
                     "evidence_assets",
                     "evidence_asset_enrichment",
+                    "material_resolution",
                     "body_budget_audit",
                 }
             }

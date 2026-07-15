@@ -339,6 +339,18 @@ def _matrix_png(asset: dict[str, Any], path: Path) -> Path:
     labels = _labels(data)
     dimensions = data.get("dimensions") or labels
     limitations = data.get("limitations") or []
+    if not isinstance(dimensions, list) or len(dimensions) != 4 or any(
+        not str(value).strip() for value in dimensions
+    ):
+        raise ValueError(
+            f"{asset.get('asset_id')}: matrix requires exactly four non-empty dimensions/labels"
+        )
+    if limitations and (
+        not isinstance(limitations, list) or len(limitations) != 4
+    ):
+        raise ValueError(
+            f"{asset.get('asset_id')}: matrix limitations must contain exactly four items"
+        )
     image = Image.new("RGB", (1200, 780), "white")
     draw = ImageDraw.Draw(image)
     title = _wrapped_title(asset.get("title"), 34)
@@ -463,11 +475,15 @@ def _assets_by_section(formatted: dict[str, Any]) -> dict[str, list[dict[str, An
         for index, visual in enumerate(formatted.get("visuals") or [], 1):
             if not isinstance(visual, dict):
                 continue
+            data = visual.get("data") if isinstance(visual.get("data"), dict) else {}
             prepared = {
                 "asset_id": str(visual.get("visual_evidence_id") or f"VIS-{index:02d}"),
                 "asset_type": visual.get("type"),
                 "title": visual.get("title"),
-                "data": visual.get("data", {}),
+                "reader_takeaway": str(
+                    data.get("text") or data.get("quote") or visual.get("title") or ""
+                ),
+                "data": data,
                 "source_evidence_refs": visual.get("source_refs", []),
                 "source_section_ids": [visual.get("section_heading")],
                 "source_claim_ids": [],
