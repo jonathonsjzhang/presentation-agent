@@ -54,7 +54,6 @@ class MemoryRetriever:
                 flatten_text(global_state),
                 spec.name,
                 spec.description,
-                " ".join(spec.rubrics),
             ]
         )
         context_tokens = self._tokens(text)

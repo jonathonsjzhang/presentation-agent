@@ -71,6 +71,5 @@ class CapabilityRegistry:
             if (package_dir / "SKILL.md").exists()
             else "",
             "rules": read_json(package_dir / "rules.json", default={"rules": []}).get("rules", []),
-            "rubrics": read_json(package_dir / "rubrics.json", default={"rubrics": []}).get("rubrics", []),
             "tools": read_json(package_dir / "tools.json", default={"tools": []}).get("tools", []),
         }

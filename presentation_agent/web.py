@@ -73,8 +73,6 @@ class WebApp:
             return self.json(self.record_feedback_text(body))
         if path == "/api/human-review":
             return self.json(self.record_human_review(body))
-        if path == "/api/memory/promote":
-            return self.json(self.promote_memory(body))
         if path == "/api/memory/dream":
             return self.json(self.dream_memory(body))
         if path == "/api/memory/success":
@@ -127,7 +125,6 @@ class WebApp:
                 "skill_package": {
                     "exists": manager_package.exists,
                     "path": self.to_rel(manager_package.path),
-                    "rubric_count": len(manager_package.rubrics),
                     "schema_count": len(manager_package.schemas),
                 },
                 "implemented": True,
@@ -141,7 +138,6 @@ class WebApp:
             agent["skill_package"] = {
                 "exists": skill_package.exists,
                 "path": self.to_rel(skill_package.path) if skill_package.exists else f"skills/{spec.id}",
-                "rubric_count": len(skill_package.rubrics),
                 "schema_count": len(skill_package.schemas),
             }
             agent["implemented"] = True
@@ -172,7 +168,6 @@ class WebApp:
         agents: list[dict[str, Any]] = []
         recent_logs: list[dict[str, Any]] = []
         total_memory = 0
-        total_candidates = 0
         event_log = self._read_event_log()
         event_counts: dict[str, int] = {}
         for event in event_log:
@@ -199,14 +194,8 @@ class WebApp:
             store = MemoryStore(self.root, agent_id)
             items = [item.to_dict() for item in store.load_items()]
             logs = self._read_learning_log(store.log_path)
-            candidates = []
-            for item in store.promotion_candidates():
-                candidate = item.to_dict()
-                candidate["promotion_target"] = store.promotion_target(item)
-                candidates.append(candidate)
             lint = store.lint()
             total_memory += len(items)
-            total_candidates += len(candidates)
             for entry in logs:
                 entry.setdefault("agent_id", agent_id)
                 recent_logs.append(entry)
@@ -218,7 +207,6 @@ class WebApp:
                     "memory_dimensions": dimensions,
                     "memory_count": len(items),
                     "learning_log_count": len(logs),
-                    "promotion_candidates": candidates,
                     "lint": lint,
                     "recent_memory": items[-5:],
                     "recent_logs": logs[-5:],
@@ -232,7 +220,6 @@ class WebApp:
             "state_policy": runner.config.get("state_policy", {}),
             "totals": {
                 "memory_items": total_memory,
-                "promotion_candidates": total_candidates,
                 "learning_logs": len(recent_logs),
                 "learning_events": len(event_log),
             },
@@ -428,18 +415,6 @@ class WebApp:
             "run_state": run_state,
             "learning": self.learning_overview(),
         }
-
-    def promote_memory(self, body: dict[str, Any]) -> dict[str, Any]:
-        agent_id = str(body.get("agent_id") or "").strip()
-        item_ids = [str(item).strip() for item in body.get("item_ids", []) if str(item).strip()]
-        if not agent_id:
-            raise BadRequest("Missing agent_id")
-        if not item_ids:
-            raise BadRequest("Missing item_ids")
-        store = MemoryStore(self.root, agent_id)
-        result = store.apply_promotion(item_ids)
-        result["learning"] = self.learning_overview()
-        return result
 
     def dream_memory(self, body: dict[str, Any]) -> dict[str, Any]:
         apply = bool(body.get("apply", False))

@@ -152,7 +152,7 @@ function renderHealth() {
   const latest = state.runs[0]?.status || "no run";
   $("healthStrip").innerHTML = [
     healthItem("Runtime Ready", `${implemented}/${state.overview.agents.length}`, planned ? `${planned} planned` : "all ready"),
-    healthItem("Skills", String(skillFiles), "rubrics / schemas / SOP"),
+    healthItem("Skills", String(skillFiles), "SKILL.md / schemas"),
     healthItem("Capabilities", String(capabilityPackages.length), "6 core + 11 atomic"),
     healthItem("Memory", String(memoryFiles), "agent memory files"),
     healthItem("Latest Run", latest, state.runs[0]?.name || "waiting"),
@@ -190,8 +190,8 @@ function renderLoopSteps() {
   const container = $("loopSteps");
   container.innerHTML = "";
   const learningSteps = [
-    { id: "learning_capture", owner: "human + reviewer", description: "收集 sub-agent review 异议和人工 review 反馈，形成结构化学习事件" },
-    { id: "memory_update", owner: "memory_store", description: "写入 learning_log，更新 hot memory；高频经验进入 rubric promotion 队列" },
+    { id: "learning_capture", owner: "human", description: "收集人工反馈、成功案例与版本对比，形成结构化学习事件" },
+    { id: "memory_update", owner: "memory_store", description: "写入 learning_log，整理为按场景召回的 hot memory" },
   ];
   [...state.overview.loop_steps, ...learningSteps].forEach((step, index) => {
     const item = document.createElement("div");
@@ -221,7 +221,7 @@ function renderSelectedAgentSummary() {
     </div>
     <div class="summary-grid">
       ${summaryBlock("输入关注", agent.input_contract?.input_preparation_focus || "读取上游产物与素材")}
-      ${summaryBlock("放行标准", (agent.rubrics || []).slice(0, 2).join("；") || "通过 schema 与 P0 检查")}
+      ${summaryBlock("放行标准", "通过文件、Schema 与 renderer 确定性检查")}
       ${summaryBlock("Harness", `${agent.harness?.skill_package || "-"} · ${statusLabel(agent)}`)}
     </div>
   `;
@@ -272,7 +272,6 @@ function renderLearning() {
     healthItem("Hot Memory", String(learning.totals?.memory_items || 0), "used in generation/review"),
     healthItem("Learning Logs", String(learning.totals?.learning_logs || 0), "cold feedback records"),
     healthItem("Events", String(learning.totals?.learning_events || 0), "feedback / success / comparison"),
-    healthItem("Promotion Queue", String(learning.totals?.promotion_candidates || 0), "ready for rubrics"),
   ].join("");
   const counts = learning.event_counts || {};
   $("eventCounts").innerHTML = Object.keys(counts).length
@@ -289,7 +288,6 @@ function renderLearning() {
     agents.forEach((agent) => {
       const item = document.createElement("article");
       item.className = "memory-agent-card";
-      const candidates = agent.promotion_candidates || [];
       item.innerHTML = `
         <div class="memory-agent-head">
           <div>
@@ -299,24 +297,11 @@ function renderLearning() {
           <div class="memory-counts">
             <b>${agent.memory_count || 0}</b><small>memory</small>
             <b>${agent.learning_log_count || 0}</b><small>logs</small>
-            <b>${candidates.length}</b><small>promote</small>
           </div>
         </div>
         <div class="memory-dimensions">${(agent.memory_dimensions || []).map((dim) => `<span>${dim}</span>`).join("")}</div>
         <div class="memory-dimensions">${(agent.recent_memory || []).map((memory) => `<span>${memory.owner || `core.${agent.id}`} · ${Object.entries(memory.applies_to || {}).map(([key, values]) => `${key}:${(values || []).join("|")}`).join(" ")}</span>`).join("")}</div>
-        <div class="promotion-list">
-          ${candidates.slice(0, 3).map((candidate) => `
-            <button class="promotion-item" data-agent="${agent.id}" data-memory-id="${candidate.id}" type="button">
-              <span>${candidate.id} · hits=${candidate.hit_count}</span>
-              <span>${candidate.owner || "core"} · ${candidate.promotion_target || ""}</span>
-              <strong>${candidate.suggestion}</strong>
-            </button>
-          `).join("") || "<p>暂无可升级 memory</p>"}
-        </div>
       `;
-      item.querySelectorAll(".promotion-item").forEach((button) => {
-        button.addEventListener("click", () => promoteMemory(button.dataset.agent, button.dataset.memoryId));
-      });
       memoryList.appendChild(item);
     });
   }
@@ -367,7 +352,6 @@ function renderAgentDetail() {
     contract: renderAgentContract,
     state: renderAgentState,
     harness: renderAgentHarness,
-    rubrics: renderAgentRubrics,
   };
   $("agentDetail").innerHTML = (renderers[state.agentTab] || renderAgentOverview)(agent);
 }
@@ -424,19 +408,6 @@ function renderAgentHarness(agent) {
       ${detailCard("Review Policy", [agent.harness?.review_policy || "-"])}
       ${detailCard("Connectors", agent.harness?.connectors || [])}
       ${detailCard("Composable Capabilities", capabilityPackages)}
-    </div>
-  `;
-}
-
-function renderAgentRubrics(agent) {
-  return `
-    <div class="rubric-list">
-      ${(agent.rubrics || []).map((item, index) => `
-        <section class="rubric-item">
-          <span>${index + 1}</span>
-          <p>${item}</p>
-        </section>
-      `).join("")}
     </div>
   `;
 }
@@ -626,24 +597,6 @@ async function submitHumanReview(event) {
   }
 }
 
-async function promoteMemory(agentId, memoryId) {
-  if (!agentId || !memoryId) return;
-  setStatus("Promoting");
-  try {
-    const result = await api("/api/memory/promote", {
-      method: "POST",
-      body: JSON.stringify({ agent_id: agentId, item_ids: [memoryId] }),
-    });
-    state.learning = result.learning;
-    renderLearning();
-    setStatus("Promoted", "ok");
-    showToast(`${memoryId} 已升级到 rubrics`, "ok");
-  } catch (error) {
-    setStatus("Promote failed", "bad");
-    showToast(error.message, "bad");
-  }
-}
-
 function selectAgent(agentId) {
   state.selectedAgentId = agentId;
   renderPipeline();
@@ -722,7 +675,7 @@ function fallbackOverview() {
       { id: "planning", owner: "manager", description: "Manager 定义 report charter 和执行计划" },
       { id: "dispatch", owner: "manager", description: "Manager 下发带验收标准的 task packet" },
       { id: "workflow", owner: "skill", description: "skill 读取 schema、global state、memory 和输入素材" },
-      { id: "review", owner: "review_sub_agent", description: "干净上下文审查产物，输出 P0/P1 异议" },
+      { id: "validation", owner: "runtime", description: "执行文件、Schema 与真实渲染检查" },
       { id: "acceptance", owner: "manager", description: "Manager 决定 dispatch、revise、ask_human 或 complete" },
     ],
     agents: stages.map((stage, index) => ({
@@ -755,11 +708,10 @@ function fallbackOverview() {
       harness: {
         skill_package: `skills/${stage[0]}`,
         runtime_adapter: "generic_llm_skill_runtime",
-        review_policy: "schema_validation + rubric_p0 + llm_p1",
+        review_policy: "self_check_plus_deterministic_validation",
         connectors: ["doc", "docx", "xlsx", "csv"],
         implementation_status: index === 2 ? "sample_runtime_available" : "skill_package_ready_runtime_pending",
       },
-      rubrics: ["按 schema 交接", "清除 P0 后进入人工 review", "反馈沉淀到本环节 memory"],
     })),
     latest_runs: [],
   };
@@ -770,13 +722,11 @@ function fallbackLearning() {
     global_state: {},
     state_policy: {
       memory_soft_limit: 30,
-      rubric_promotion_threshold: 3,
     },
     totals: {
       memory_items: 0,
       learning_logs: 0,
       learning_events: 0,
-      promotion_candidates: 0,
     },
     event_counts: {},
     recent_events: [],

@@ -1,5 +1,5 @@
 ---
-name: exec_office
+name: exec-office
 description: Adapt an internet-strategy report for an executive office by foregrounding decisions, coordination, blockers, ownership, and escalation needs.
 ---
 

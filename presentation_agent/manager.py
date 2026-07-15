@@ -67,7 +67,6 @@ class ManagerAgentRuntime:
         output_path = self.handoff_dir / f"output_{phase}.json"
         memory_guidance = self.memory.generation_guidance(MANAGER_MEMORY_DIMENSIONS, limit=6)
         schema = self._schema("manager_decision.v1")
-        rubrics = self.package.rubrics
 
         lines = [
             f"# 汇报项目 Manager · {phase}",
@@ -96,12 +95,6 @@ class ManagerAgentRuntime:
             ])
         lines.extend(self._required_fields_reference())
         lines.extend([
-            "",
-            "## Manager Rubrics",
-            "",
-            "```json",
-            json.dumps(rubrics, ensure_ascii=False, indent=2),
-            "```",
             "",
             "## 输出 Schema（完整 JSON Schema）",
             "",

@@ -1,5 +1,5 @@
 ---
-name: deep_dive
+name: deep-dive
 description: Shape a deep analytical report with a decision question, complete reasoning chain, evidence, counterarguments, boundaries, and action.
 ---
 

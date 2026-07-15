@@ -1,5 +1,5 @@
 ---
-name: qa_preparation
+name: qa-preparation
 description: Read a complete Markdown strategy report as a thoughtful audience would, then produce a concise independent list of important, deep questions for Format to append. Use after Report and before Format.
 ---
 

@@ -39,13 +39,9 @@ def compile_skill_package(
         )
         core_instructions = core.instructions
         instruction_sections = [core_instructions]
-        rubrics = list(core.rubrics)
         tools: list[str] = []
         context_requirements: list[str] = []
         atomic_specs = []
-        seen_rubric_ids = {
-            row.get("id") for row in rubrics if isinstance(row, dict) and row.get("id")
-        }
         property_owners: dict[str, tuple[str, str]] = {}
 
         for kind, value in atomic_keys:
@@ -60,17 +56,9 @@ def compile_skill_package(
                 matching_rules = [_canonical_format_rule(profile.delivery_target)]
             lines = [str(rule.get("instruction", "")).strip() for rule in matching_rules]
             lines = [line for line in lines if line]
-            # 原子 SKILL.md 正文 = 载体独有的核心准则与 gotcha（生成期须内化）。
-            # 与 rules 注入相互独立：canonical_format 只替换 rules（契约字段），
-            # 不影响 SKILL.md 准则的注入，从而实现 B1 共存。
+            # Atomic SKILL.md carries only concise, cross-stage carrier semantics.
+            # Renderer implementation details stay in runtime rather than prompts.
             skill_body = str(package.get("instructions", "")).strip()
-            if canonical_format and kind == "format":
-                # v0.3 Format receives report.v1 and only submits visuals[].
-                # Older carrier capability bodies still describe page/material_unit
-                # planning, renderer contracts, and style token implementation.
-                # Keep the selected capability for target awareness, but do not
-                # inject those legacy instructions into the worker prompt.
-                skill_body = ""
             if skill_body or lines:
                 section = [f"## Active capability: {atomic_spec.id}"]
                 if skill_body:
@@ -83,28 +71,6 @@ def compile_skill_package(
                 context_requirements.extend(
                     str(item) for item in rule.get("context_requirements", [])
                 )
-            applicable_rubrics = [
-                rubric for rubric in package["rubrics"] if _applies(rubric, spec.id)
-            ]
-            if canonical_format and kind == "format":
-                applicable_rubrics = [
-                    _rubric_from_rule(rule, atomic_spec.id)
-                    for rule in matching_rules
-                    if "review" in rule.get("phase", [])
-                ]
-            if not applicable_rubrics:
-                applicable_rubrics = [
-                    _rubric_from_rule(rule, atomic_spec.id)
-                    for rule in matching_rules
-                    if "review" in rule.get("phase", [])
-                ]
-            for rubric in applicable_rubrics:
-                rubric_id = rubric.get("id")
-                if rubric_id and rubric_id in seen_rubric_ids:
-                    raise CapabilityError(f"Duplicate rubric id: {rubric_id}")
-                if rubric_id:
-                    seen_rubric_ids.add(rubric_id)
-                rubrics.append(rubric)
             tools.extend(str(tool) for tool in package["tools"])
 
         selected_ids = set(selection.capability_ids)
@@ -116,21 +82,18 @@ def compile_skill_package(
                 )
 
         instructions = "\n\n".join(section for section in instruction_sections if section)
-        fingerprint = _fingerprint(
-            selection.to_dict(), instructions, rubrics, core.schemas, tools
-        )
+        fingerprint = _fingerprint(selection.to_dict(), instructions, core.schemas, tools)
         return SkillPackage(
             agent_id=spec.id,
             path=core.path,
             instructions=instructions,
-            rubrics=rubrics,
             schemas=core.schemas,
             selected_capabilities=list(selection.capability_ids),
             tools=list(dict.fromkeys(tools)),
             context_requirements=list(dict.fromkeys(context_requirements)),
             fingerprint=fingerprint,
             budget=prompt_budget(
-                instructions=instructions, rubrics=rubrics, schemas=core.schemas
+                instructions=instructions, schemas=core.schemas
             ),
             legacy=False,
         )
@@ -171,7 +134,7 @@ def _canonical_format_rule(delivery_target: str) -> dict[str, Any]:
     return {
         "id": f"FMT-V03-{delivery_target.upper()}",
         "applies_to": ["format"],
-        "phase": ["generation", "review"],
+        "phase": ["generation"],
         "level": "P1",
         "property": "delivery_target_contract",
         "instruction": (
@@ -209,23 +172,6 @@ def _check_property_conflict(
             f"Conflicting P0 capability rules for {prop}: {previous[0]} vs {owner}"
         )
     property_owners[prop] = (owner, instruction)
-
-
-def _rubric_from_rule(rule: dict[str, Any], owner: str) -> dict[str, Any]:
-    return {
-        "id": f"{rule.get('id', owner)}-REVIEW",
-        "severity": str(rule.get("level", "P1")).upper(),
-        "dimension": str(rule.get("property", owner)),
-        "criterion": str(rule.get("instruction", "")),
-        "check": str(
-            rule.get(
-                "check",
-                "检查产物是否遵循当前 capability 的场景要求，只有真实违反时才报异议。",
-            )
-        ),
-        "fix": str(rule.get("fix", "按当前 capability 要求调整相关产物。")),
-        "owner": owner,
-    }
 
 
 def _fingerprint(*parts: Any) -> str:

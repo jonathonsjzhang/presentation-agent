@@ -40,9 +40,8 @@ class LoopRunner:
         )
         self.specs = self.agent_profile.specs
         self.generate_llm = build_llm_client(root, purpose="generate", provider_override=provider_override)
-        self.review_llm = build_llm_client(root, purpose="review", provider_override=provider_override)
-        self.reviewer = ArtifactReviewer(llm=self.review_llm)
-        self.stop_checker = StopChecker(llm=self.review_llm)
+        self.reviewer = ArtifactReviewer()
+        self.stop_checker = StopChecker()
 
     def list_agents(self) -> list[AgentSpec]:
         if self.contract_profile == "v0_3":
@@ -169,10 +168,6 @@ class LoopRunner:
             review = self.reviewer.review(spec, artifact, memory, skill_package.to_dict(),
                                            upstream_artifact=input_data)
             review = apply_schema_gate_mode(review, self.schema_gate_mode)
-            if self.reviewer.last_prompt_budget:
-                run_state.setdefault("prompt_budget", {})[
-                    f"review_round_{round_index}"
-                ] = dict(self.reviewer.last_prompt_budget)
             review_path = output_dir / f"review_round_{round_index}.json"
             write_json(review_path, review.to_dict())
             run_state["produced_artifacts"].append(str(review_path))
@@ -320,7 +315,7 @@ class LoopRunner:
         run_state["multi_candidate"] = {
             "enabled": True,
             "count": count,
-            "selection_owner": config.get("selection_owner", "review_sub_agent_then_human"),
+            "selection_owner": config.get("selection_owner", "runtime_validation_then_human"),
             "candidates": [
                 {"index": c["index"], "p0": c["p0"], "p1": c["p1"], "path": c["path"]} for c in scored
             ],

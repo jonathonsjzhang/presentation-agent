@@ -59,7 +59,7 @@ Worker 可能以 sub-agent 或 inline 方式执行——这不改变你的职责
 
 ### 1. 角色与 P0 合规
 
-Worker 是否完成了本阶段职责？runtime reviewer 的 P0 是否已经清零？
+Worker 是否完成了本阶段职责？runtime 的确定性文件与 Schema 校验是否通过？
 
 ### 2. 上游继承
 

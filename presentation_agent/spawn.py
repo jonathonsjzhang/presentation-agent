@@ -342,7 +342,7 @@ def commit_evidence_subtask(
     if isinstance(input_data.get("material_resolution"), dict):
         catalog["material_resolution"] = input_data["material_resolution"]
     package = compile_skill_package(root, spec, input_data)
-    objections = ArtifactReviewer(llm=None)._schema_gate(
+    objections = ArtifactReviewer()._schema_gate(
         spec, catalog, package.to_dict()
     )
     schema_warnings = [o.to_dict() for o in objections]

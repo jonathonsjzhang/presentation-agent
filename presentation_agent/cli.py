@@ -305,20 +305,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     maintain = sub.add_parser(
         "memory-maintain",
-        help="Promote frequent memory to rubrics and/or lint hot memory for one agent.",
+        help="Lint and optionally clean hot memory for one agent.",
     )
     maintain.add_argument("agent_id")
-    maintain.add_argument("--promote", action="store_true", help="Show promotion candidates.")
     maintain.add_argument("--lint", action="store_true", help="Show lint diagnosis.")
     maintain.add_argument(
         "--apply",
         action="store_true",
-        help="Apply the selected maintenance (promote confirmed ids / lint cleanup).",
-    )
-    maintain.add_argument(
-        "--ids",
-        default="",
-        help="Comma-separated memory ids to promote (required with --promote --apply).",
+        help="Apply deterministic lint cleanup.",
     )
 
     dream = sub.add_parser(
@@ -678,26 +672,6 @@ def main() -> None:
 
     if args.command == "memory-maintain":
         store = MemoryStore(root, args.agent_id)
-        if args.promote:
-            if args.apply:
-                ids = [i.strip() for i in args.ids.split(",") if i.strip()]
-                if not ids:
-                    print("promote --apply requires --ids (confirm which candidates to promote)")
-                    return
-                result = store.apply_promotion(ids)
-                print(f"promoted: {result['promoted']}; skipped: {result['skipped']}")
-                print(f"scoped/manual: {result.get('skipped_scoped', [])}")
-                print(f"rubrics: {result.get('rubrics_paths', {})}")
-            else:
-                candidates = store.promotion_candidates()
-                if not candidates:
-                    print(f"no promotion candidates (threshold={store.promotion_threshold()})")
-                for item in candidates:
-                    print(
-                        f"  {item.id} [{item.dimension}] hits={item.hit_count} "
-                        f"owner={item.owner} target={store.promotion_target(item)}: "
-                        f"{item.suggestion}"
-                    )
         if args.lint:
             if args.apply:
                 result = store.apply_lint()

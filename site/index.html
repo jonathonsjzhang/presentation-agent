@@ -72,12 +72,12 @@
             <div class="arch-skill">
               <span>Skill-based Workflow</span>
               <strong>基于 Skill Package 执行</strong>
-              <em>SKILL.md 定义工作方式，rubrics 定义质量边界，schemas 保证上下游交接。</em>
+              <em>SKILL.md 定义工作方式，schemas 保证上下游交接，runtime 负责确定性验证。</em>
             </div>
             <div class="arch-review">
               <span>Review Gate</span>
               <strong>Sub-agent & Human Review</strong>
-              <em>机器先按 schema、rubric、memory scan 拦截硬伤，人再判断材料是否可用。</em>
+              <em>runtime 先按文件、schema 与真实渲染结果拦截硬伤，人再判断材料是否可用。</em>
             </div>
             <div class="arch-memory">
               <span>Self Improvement</span>
@@ -102,7 +102,7 @@
             <div><b>04</b><strong>Q&A 梳理</strong><span>在报告末尾追加听众可能提出的深度问题，不写答案。</span><em>产物：report.v1</em></div>
             <div><b>05</b><strong>Format</strong><span>按目标载体选择视觉并由 runtime 渲染为正式材料。</span><em>产物：formatted_material.v2</em></div>
           </div>
-          <p>核心定义集中在 <code>configs/agents.json</code>：每个 Agent 声明输入输出 schema、上下游交接、memory 维度、rubrics 摘要、global state 读写范围、review policy 与可选能力。</p>
+          <p>核心定义集中在 <code>configs/agents.json</code>：每个 Agent 声明输入输出 schema、上下游交接、memory 维度、global state 读写范围、validation policy 与可选能力。</p>
         </section>
 
         <section class="framework-section loop-panel panel">
@@ -117,7 +117,7 @@
               </div>
               <div class="loop-phase phase-start"><b>01</b><strong>start</strong><span>接收人或上游 artifact</span></div>
               <div class="loop-phase phase-workflow"><b>02</b><strong>workflow</strong><span>按 skill 生成产物</span></div>
-              <div class="loop-phase phase-review"><b>03</b><strong>review</strong><span>schema / rubric / memory scan</span></div>
+              <div class="loop-phase phase-review"><b>03</b><strong>validation</strong><span>file / schema / real render</span></div>
               <div class="loop-phase phase-stop"><b>04</b><strong>stop_check</strong><span>P0 清除才放行</span></div>
               <div class="loop-phase phase-human"><b>05</b><strong>human_review</strong><span>人决定 approve / revise / stop</span></div>
             </div>
@@ -146,11 +146,11 @@
             </div>
             <div>
               <strong>Skill 模块</strong>
-              <span><code>skills/&lt;agent_id&gt;/</code> 定义角色、SOP、rubrics 与 schema。修改 Agent 行为时优先改 skill 包。</span>
+              <span><code>skills/&lt;agent_id&gt;/</code> 用 SKILL.md 定义角色与 SOP，用 schema 定义交接契约。</span>
             </div>
             <div>
-              <strong>Review / Stop Check</strong>
-              <span><code>review.py</code> 与 <code>machine_check.py</code> 负责 schema gate、机械检查、rubric 问题和 memory scan。</span>
+              <strong>Runtime Validation</strong>
+              <span><code>step.py</code> 与 renderer 负责文件、schema、载体契约和真实渲染检查。</span>
             </div>
             <div>
               <strong>Human-in-the-loop</strong>
@@ -165,8 +165,6 @@
           <div class="framework-file-block">
             <code>skills/&lt;agent_id&gt;/SKILL.md</code>
             <span>定义 Agent 的角色、工作流 SOP、输入理解方式、输出要求和注意事项。</span>
-            <code>skills/&lt;agent_id&gt;/rubrics.json</code>
-            <span>定义 P0/P1 审查标准，是 review 的核心质量边界。</span>
             <code>skills/&lt;agent_id&gt;/schemas/*.json</code>
             <span>定义输入/输出 JSON 结构契约，保证上下游交接稳定。</span>
           </div>

@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 
 from presentation_agent.llm.schema import validate
-from presentation_agent.machine_check import run_machine_checks
 from presentation_agent.skill_package import load_skill_package
 
 
@@ -25,29 +24,18 @@ class AnalysisSkillTests(unittest.TestCase):
         self.schema = read_json(SCHEMA)
         self.package = load_skill_package(ROOT, "analysis")
 
-    def test_skill_package_contains_instructions_rubrics_schema_and_reference(self) -> None:
+    def test_skill_package_contains_complete_instructions_and_schema(self) -> None:
         self.assertIn("证据准备度", self.package.instructions)
         self.assertIn("比较和追问", self.package.instructions)
+        self.assertIn("证据观察 → 有边界的推断", self.package.instructions)
+        self.assertIn("样本选择、指标口径与时间窗", self.package.instructions)
         self.assertIn("analysis.v1", self.package.schemas)
-        rubric_ids = {rubric["id"] for rubric in self.package.rubrics}
-        self.assertTrue(
-            {
-                "ANALYSIS-DISCOVERY-001",
-                "ANALYSIS-INSIGHT-001",
-                "ANALYSIS-EVIDENCE-001",
-                "ANALYSIS-CHALLENGE-001",
-                "ANALYSIS-CONVERGENCE-001",
-            }.issubset(rubric_ids)
-        )
+        self.assertNotIn("BUNDLED REFERENCES", self.package.instructions)
 
-    def test_frozen_fixture_is_strict_analysis_v1_and_passes_machine_review(self) -> None:
+    def test_frozen_fixture_is_strict_analysis_v1(self) -> None:
         self.assertEqual(self.artifact["agent_id"], "analysis")
         self.assertEqual(self.artifact["schema"], "analysis.v1")
         self.assertEqual(validate(self.artifact, self.schema), [])
-        self.assertEqual(
-            run_machine_checks(self.artifact, self.package.rubrics),
-            [],
-        )
 
     def test_fixture_covers_minimal_analysis_submission(self) -> None:
         self.assertTrue(self.artifact["findings"])

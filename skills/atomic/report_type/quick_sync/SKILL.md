@@ -1,5 +1,5 @@
 ---
-name: quick_sync
+name: quick-sync
 description: Shape a fast information sync around the change, its impact, whether action is needed, and what to monitor next.
 ---
 

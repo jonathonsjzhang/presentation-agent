@@ -1,5 +1,5 @@
 ---
-name: business_progress
+name: business-progress
 description: Shape a business progress report around commitments, actual progress, variance, causes, risks, support requests, and next steps.
 ---
 
