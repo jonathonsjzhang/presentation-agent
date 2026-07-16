@@ -20,7 +20,7 @@ def _spec(agent_id: str) -> AgentSpec:
 class StrategyQualityGuardTests(unittest.TestCase):
     def test_regression_contract_freezes_all_quality_dimensions(self) -> None:
         contract = read_json(
-            ROOT / "evals" / "regression" / "strategy_quality_v1.json"
+            ROOT / "tests" / "fixtures" / "strategy_quality_v1.json"
         )
         self.assertEqual(
             {case["id"] for case in contract["cases"]},

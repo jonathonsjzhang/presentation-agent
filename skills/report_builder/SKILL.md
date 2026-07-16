@@ -3,10 +3,10 @@ name: report-builder
 description: >-
   互联网战略分析汇报助手【宿主入口 · GitHub 分发 · CLI 调度】。当用户说"安装汇报助手"、
   "更新汇报助手"、"帮我做一份战略汇报 / 复盘 / 高管汇报 / 汇报 PPT / storyline /
-  分析报告"，或要求对最终 PPT、DOCX、HTML 材料做 E2E 评测、打分、质量验收时使用。
+  分析报告"时使用。
   宿主 Agent 负责自动 clone/pull 官方仓库、初始化 workspace，并通过 presentation-agent
-  report 或 eval 命令推进对应协议。触发词：战略汇报、复盘报告、汇报PPT、高管汇报、
-  storyline、分析报告、最终材料评测、E2E评测、材料打分、安装汇报助手、更新汇报助手。
+  report 命令推进对应协议。触发词：战略汇报、复盘报告、汇报PPT、高管汇报、
+  storyline、分析报告、安装汇报助手、更新汇报助手。
 ---
 
 # 汇报助手 · Host Adapter Skill
@@ -131,7 +131,7 @@ Worker 默认启用独立 sub-agent。宿主应根据自身运行环境自动选
 | Claude Code | `claude` |
 | 不支持 sub-agent 的宿主 | `inline`（仅兼容降级，需明确告知用户） |
 
-Worker sub-agent 默认使用隔离上下文，并在本轮内自检后提交。流程中不再额外派发 Reviewer sub-agent；如需最终独立质量验收，在交付后使用 E2E Eval，不嵌入生产链返工。
+Worker sub-agent 默认使用隔离上下文，并在本轮内自检后提交。流程中不再额外派发 Reviewer sub-agent；最终文件由 runtime 的真实渲染质量门禁与用户 Gate 验收。
 
 启动：
 
@@ -365,29 +365,7 @@ Manager `report submit` 在应用决策时失败后，runtime 会自动回滚到
 - 非 inline run 不在主对话代写 Worker 输出
 - Worker 只能写当前 task_dir 与指定 handoff 输出；具体 subagent 类型以 `spawn.detail` 为准
 
-## 5. 最终材料 E2E 自动评测
-
-用户要求“评测 / 打分 / 验收最终 PPT、DOCX 或 HTML 是否够格”时，走独立 eval，不要启动新的 report，也不要把生产流程里的 worker review 当作最终评分。
-
-先检查依赖：
-
-```bash
-cd "$HOME/PresentationAgent/repo"
-"$HOME/PresentationAgent/repo/.venv/bin/python" -m presentation_agent.cli \
-  --workspace "$HOME/PresentationAgent/workspaces/default" \
-  doctor
-```
-
-读取 `doctor` 返回的 `evaluation.formats`。目标格式 `ready=false` 时，告诉用户缺失的 runtime；不要用纯文本评分冒充视觉评测。依赖就绪后，读取并遵循仓库内 `skills/evaluator/SKILL.md` 的 `eval start → next/submit → result` 协议。
-
-路由边界：
-
-- 生成 / 修改材料 → `report` loop
-- 检查某个生产环节产物 → 当前 worker 的 review/revise
-- 评价最终 PPT / DOCX / HTML 是否够格 → 独立 eval run
-- 同时要求生成和评分 → 先完成 report，再以最终文件启动 eval
-
-## 6. 反馈与长期记忆
+## 5. 反馈与长期记忆
 
 用户对当前 run 的修改意见：
 
@@ -434,7 +412,7 @@ cd "$HOME/PresentationAgent/repo"
 - 最终材料路径
 - `published_files`（稳定发布目录 `workspace/artifacts/deliverables/<run_id>/`）
 - 关键中间产物路径
-- 是否还有 PPT/HTML delivery option 或 E2E eval 可追加
+- 是否还有 PPT/HTML delivery option 可追加
 
 ## 边界
 
