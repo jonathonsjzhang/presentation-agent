@@ -63,7 +63,7 @@ def main() -> None:
 
 def _spec(root: Path, agent_id: str) -> AgentSpec:
     config = read_json(root / "configs" / "agents.json")
-    profile_id = str(config.get("active_contract_profile") or "v0_3")
+    profile_id = str(config.get("active_contract_profile") or "v0_4")
     workers = config["contract_profiles"][profile_id]["workers"]
     return AgentSpec.from_dict(next(item for item in workers if item["id"] == agent_id))
 

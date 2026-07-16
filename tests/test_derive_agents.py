@@ -16,9 +16,9 @@ from presentation_agent.io import write_json
 def _config_with_two_stages() -> dict:
     return {
         "version": "agent-definition.v2",
-        "active_contract_profile": "v0_3",
+        "active_contract_profile": "v0_4",
         "contract_profiles": {
-            "v0_3": {
+            "v0_4": {
                 "canonical_stages": ["analysis", "format"],
                 "workers": [
                     {

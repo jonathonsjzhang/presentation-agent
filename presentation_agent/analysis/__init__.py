@@ -1,6 +1,6 @@
 """Pure Analysis-stage helpers.
 
-The v0.3 runtime is intentionally not activated here.  This package contains
+The active runtime performs Evidence Intake before the Brief gate. This package contains
 only deterministic logic that can be wired into a later Analysis executor.
 """
 

@@ -129,7 +129,7 @@ class MemoryRouter:
         current_agent_id: Optional[str],
         active_capabilities: Optional[list[str]],
     ) -> list[tuple[str, str, tuple[str, ...], str]]:
-        """Return the single v0.3 owner table."""
+        """Return the single active-protocol owner table."""
         return cls.ROUTES
 
     def route_from_run_state(

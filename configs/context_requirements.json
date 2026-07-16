@@ -12,69 +12,6 @@
         "qa_preparation": {"required_fields": ["storyline_markdown", "report_markdown"], "output_schema": "markdown_artifact.v1"},
         "format": {"required_fields": ["report_markdown", "qa_markdown", "evidence_catalog", "evidence_assets"], "task_fields": ["delivery_target"], "output_schema": "format_plan.v1"}
       }
-    },
-    "v0_3": {
-      "status": "legacy",
-      "activation": "active_user_default",
-      "projection_policy": "namespace_upstream_artifacts_and_inline_only_declared_fields",
-      "workers": {
-        "analysis": {
-          "required_fields": [
-            "report_charter",
-            "decision_question"
-          ],
-          "conditional_full_fields": [
-            "raw_materials",
-            "evidence_catalog"
-          ],
-          "output_schema": "analysis.v1"
-        },
-        "storyline": {
-          "upstream_schema": "analysis.v1",
-          "required_fields": [
-            "findings",
-            "visual_evidence_candidates"
-          ],
-          "excluded_fields": [
-            "raw_materials"
-          ],
-          "output_schema": "storyline.v3"
-        },
-        "report": {
-          "upstream_schema": "storyline.v3",
-          "required_fields": [
-            "core_answer",
-            "executive_summary",
-            "sections",
-            "visual_evidence_plan"
-          ],
-          "output_schema": "report.v1"
-        },
-        "format": {
-          "upstream_schema": "report.v1",
-          "required_fields": [
-            "report_markdown",
-            "visual_evidence_placements"
-          ],
-          "task_fields": [
-            "delivery_target"
-          ],
-          "excluded_fields": [
-            "raw_materials",
-            "storyline.pages",
-            "page_content"
-          ],
-          "output_schema": "formatted_material.v2"
-        },
-        "qa_preparation": {
-          "upstream_schema": "report.v1",
-          "required_fields": [
-            "report_markdown",
-            "visual_evidence_placements"
-          ],
-          "output_schema": "report.v1"
-        }
-      }
     }
   },
   "max_inline_chars_per_field": 12000,

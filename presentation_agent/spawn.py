@@ -77,7 +77,7 @@ def prepare_evidence_subtask(
     subtask_dir.mkdir(parents=True, exist_ok=True)
     input_path = subtask_dir / "input.json"
     if not input_path.exists():
-        profile = load_agent_profile(root, "v0_3")
+        profile = load_agent_profile(root, "v0_4")
         spec = profile.support_specs["evidence_harvester"]
         resolved_materials, resolution_summary = resolve_raw_materials(
             raw_materials,
@@ -107,7 +107,7 @@ def prepare_evidence_subtask(
             run_state_path,
             {
                 "run_id": f"evidence-{now_iso().replace(':', '')}",
-                "contract_profile": "v0_3",
+                "contract_profile": "v0_4",
                 "agent_id": "evidence_harvester",
                 "agent_name": "证据完整盘点",
                 "stage": 0,
@@ -125,7 +125,7 @@ def prepare_evidence_subtask(
             },
         )
     runner = StepRunner(
-        root, subtask_dir, data_root=data_root, contract_profile="v0_3"
+        root, subtask_dir, data_root=data_root, contract_profile="v0_4"
     )
     state = read_json(run_state_path, default={})
     if state.get("current_step") == "init":
@@ -175,7 +175,7 @@ def prepare_evidence_intake(
     evidence_dir.mkdir(parents=True, exist_ok=True)
     input_path = evidence_dir / "input.json"
     if not input_path.exists():
-        profile = load_agent_profile(root, "v0_3")
+        profile = load_agent_profile(root, "v0_4")
         spec = profile.support_specs["evidence_harvester"]
         resolved_materials, resolution_summary = resolve_raw_materials(
             raw_materials,
@@ -205,7 +205,7 @@ def prepare_evidence_intake(
             run_state_path,
             {
                 "run_id": f"evidence-{now_iso().replace(':', '')}",
-                "contract_profile": "v0_3",
+                "contract_profile": "v0_4",
                 "agent_id": "evidence_harvester",
                 "agent_name": "证据完整盘点",
                 "stage": 0,
@@ -223,7 +223,7 @@ def prepare_evidence_intake(
             },
         )
     runner = StepRunner(
-        root, evidence_dir, data_root=data_root, contract_profile="v0_3"
+        root, evidence_dir, data_root=data_root, contract_profile="v0_4"
     )
     state = read_json(run_state_path, default={})
     if state.get("current_step") == "init":
@@ -332,7 +332,7 @@ def commit_evidence_subtask(
             + "\n- ".join(minimum_errors)
         )
 
-    profile = load_agent_profile(root, "v0_3")
+    profile = load_agent_profile(root, "v0_4")
     spec = profile.support_specs["evidence_harvester"]
     input_data = read_json(subtask_dir / "input.json", default={})
     evidence_index = input_data.get("evidence_index") or []

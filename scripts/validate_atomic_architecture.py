@@ -19,7 +19,7 @@ def main() -> None:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     config = read_json(root / "configs" / "capabilities.json")
     agents_config = read_json(root / "configs" / "agents.json")
-    profile_id = str(agents_config.get("active_contract_profile") or "v0_3")
+    profile_id = str(agents_config.get("active_contract_profile") or "v0_4")
     profile = agents_config["contract_profiles"][profile_id]
     active = set(profile["canonical_stages"])
     specs = [

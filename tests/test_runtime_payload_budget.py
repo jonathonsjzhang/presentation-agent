@@ -67,7 +67,7 @@ class RuntimePayloadBudgetTests(unittest.TestCase):
             "instructions": "按证据形成观点。",
             "schemas": {"analysis.v1": {"type": "object"}},
         }
-        spec = load_agent_profile(ROOT, "v0_3").specs["analysis"]
+        spec = load_agent_profile(ROOT, "v0_4").specs["analysis"]
         request = GenericSkill("analysis")._build_request(
             spec,
             input_data,

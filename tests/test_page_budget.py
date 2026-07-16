@@ -27,13 +27,18 @@ class PageBudgetTests(unittest.TestCase):
         self.assertEqual(
             derive_delivery_budget(charter),
             {
+                "requested_body_page_limit": 3,
                 "body_page_limit": 3,
+                "automatic_page_tolerance": 1,
+                "automatic_body_page_limit": 4,
+                "maximum_body_page_limit": 4,
                 "counting_policy": "body_only",
                 "excluded_section_roles": ["methods_and_limitations", "qa"],
                 "body_char_min": 2400,
                 "body_char_target": 2550,
                 "body_char_warning": 2700,
-                "report_body_char_limit": 2700,
+                "report_body_char_limit": 3600,
+                "body_char_enforcement": "advisory",
                 "executive_summary_char_min": 250,
                 "executive_summary_char_max": 350,
                 "max_body_visuals": 3,
@@ -63,11 +68,11 @@ class PageBudgetTests(unittest.TestCase):
         )
         self.assertEqual(
             (five_pages["body_char_min"], five_pages["body_char_target"], five_pages["report_body_char_limit"]),
-            (4000, 4250, 4500),
+            (4000, 4250, 5400),
         )
         self.assertEqual(
             (six_pages["body_char_min"], six_pages["body_char_target"], six_pages["report_body_char_limit"]),
-            (4800, 5100, 5400),
+            (4800, 5100, 6300),
         )
         self.assertEqual(five_pages["executive_summary_char_min"], 250)
         self.assertEqual(six_pages["executive_summary_char_max"], 350)
@@ -162,7 +167,7 @@ class PageBudgetTests(unittest.TestCase):
         self.assertNotIn("方法与边界", captured["report"]["report_markdown"])
         self.assertEqual(len(captured["formatted"]["visuals"]), 1)
 
-    def test_audit_fails_when_body_exceeds_limit(self) -> None:
+    def test_audit_automatically_allows_one_extra_page(self) -> None:
         def fake_renderer(formatted, report, out_dir, *, file_stem):
             return RenderResult(
                 status="rendered",
@@ -185,8 +190,67 @@ class PageBudgetTests(unittest.TestCase):
                 renderer=fake_renderer,
                 page_counter=lambda _: 4,
             )
-        self.assertFalse(audit["passed"])
+        self.assertTrue(audit["passed"])
         self.assertEqual(audit["body_page_count"], 4)
+        self.assertTrue(audit["automatic_tolerance_used"])
+        self.assertFalse(audit["requires_user_decision"])
+
+    def test_audit_requires_user_decision_beyond_one_extra_page(self) -> None:
+        def fake_renderer(formatted, report, out_dir, *, file_stem):
+            return RenderResult(
+                status="rendered",
+                fmt="document",
+                fidelity="formatted",
+                output_path=str(Path(out_dir) / f"{file_stem}.docx"),
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audit = audit_document_body_pages(
+                report={
+                    "agent_id": "report",
+                    "schema": "report.v1",
+                    "report_markdown": "# 标题\n\n## Executive Summary\n\n摘要\n",
+                },
+                formatted={"visuals": []},
+                out_dir=Path(temp_dir),
+                body_page_limit=3,
+                maximum_body_page_limit=4,
+                stage="report_preflight",
+                renderer=fake_renderer,
+                page_counter=lambda _: 5,
+            )
+        self.assertFalse(audit["passed"])
+        self.assertTrue(audit["requires_user_decision"])
+        self.assertEqual(audit["maximum_body_page_limit"], 4)
+
+    def test_audit_distinguishes_automatic_and_user_approved_limits(self) -> None:
+        def fake_renderer(formatted, report, out_dir, *, file_stem):
+            return RenderResult(
+                status="rendered",
+                fmt="document",
+                fidelity="formatted",
+                output_path=str(Path(out_dir) / f"{file_stem}.docx"),
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audit = audit_document_body_pages(
+                report={
+                    "agent_id": "format",
+                    "schema": "report.v1",
+                    "report_markdown": "# 标题\n\n## Executive Summary\n\n摘要\n",
+                },
+                formatted={"visuals": []},
+                out_dir=Path(temp_dir),
+                body_page_limit=3,
+                maximum_body_page_limit=5,
+                user_approved_body_page_limit=5,
+                stage="format_final",
+                renderer=fake_renderer,
+                page_counter=lambda _: 6,
+            )
+        self.assertEqual(audit["automatic_body_page_limit"], 4)
+        self.assertEqual(audit["user_approved_body_page_limit"], 5)
+        self.assertIn("用户批准上限 5 页", audit["detail"])
 
     def test_format_final_audit_marks_render_error_when_body_overflows(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

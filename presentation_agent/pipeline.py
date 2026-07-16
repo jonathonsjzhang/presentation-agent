@@ -20,7 +20,7 @@ class Pipeline:
       a stage is blocked by an open P0. Convenient for debugging / dry runs.
 
     New high-level report runs are controlled by ManagerOrchestrator. This
-    class remains as a compatibility/debug path that runs workers in the
+    class remains as a debug path that runs workers in the
     declared order and passes artifacts downstream.
     """
 
@@ -29,7 +29,7 @@ class Pipeline:
         self.runner = LoopRunner(
             root,
             provider_override=provider_override,
-            contract_profile="v0_3",
+            contract_profile="v0_4",
         )
         self.stages = self._ordered_stages()
 

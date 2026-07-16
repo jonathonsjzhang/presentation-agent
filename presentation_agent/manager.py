@@ -153,7 +153,7 @@ class ManagerAgentRuntime:
     def _required_fields_reference(self) -> list[str]:
         return [
             "",
-            "## v0.3 planning 契约速查",
+            "## v0.4 planning 契约速查",
             "",
             "- report_charter 只定义任务，不重复固定流程、质量检查或运行状态。",
             "- runtime 固定执行 analysis → storyline → report → qa_preparation → format，不输出 execution_plan。",
@@ -164,7 +164,7 @@ class ManagerAgentRuntime:
             "- PPT、HTML 只允许在默认五阶段完成后的 delivery options gate 追加。",
             "",
             "### acceptance_report（acceptance 阶段）",
-            "- acceptance 只需输出 action + acceptance_report；v0.3 runtime 自动生成/规范化 dispatch 或 revise 的 task_packet。",
+            "- acceptance 只需输出 action + acceptance_report；runtime 自动生成/规范化 dispatch 或 revise 的 task_packet。",
             "- 不要引用 handoff/output_*.json；正式上游路径由 runtime 绑定到当前 task 的 artifact.json。",
             "- verdict: accept / revise / blocked",
             "- reason: 一句话说明决定",
@@ -220,15 +220,12 @@ class ManagerAgentRuntime:
                 isinstance(charter, dict)
                 and isinstance(packet, dict)
             ):
-                errors.extend(self._v03_plan_errors(charter, packet))
+                errors.extend(self._plan_errors(charter, packet))
         else:
             state = read_json(
                 self.run_dir / "manager_state.json", default={}
             )
-            if self.contract_profile == "v0_4":
-                self._normalize_v04_acceptance_packet(decision, state)
-            elif self.contract_profile == "v0_3":
-                self._normalize_v03_acceptance_packet(decision, state)
+            self._normalize_v04_acceptance_packet(decision, state)
             report = decision.get("acceptance_report")
             if not isinstance(report, dict):
                 errors.append("$: acceptance decision missing object 'acceptance_report'")
@@ -246,7 +243,7 @@ class ManagerAgentRuntime:
             if action == "complete" and phase != "acceptance":
                 errors.append("$.action: complete is only valid during acceptance")
             errors.extend(
-                self._v03_acceptance_route_errors(
+                self._acceptance_route_errors(
                     action,
                     state,
                     decision.get("task_packet"),
@@ -385,158 +382,8 @@ class ManagerAgentRuntime:
         decision["stage"] = target
         decision["task_packet"] = packet
 
-    def _normalize_v03_acceptance_packet(
-        self,
-        decision: dict[str, Any],
-        state: dict[str, Any],
-    ) -> None:
-        """Keep fixed-chain routing and artifact bookkeeping out of model output.
-
-        The Manager still decides whether to accept, revise, or stop.  For v0.3,
-        however, the runtime already owns the worker order and knows the formal
-        artifact registered for the task under review.  Reconstructing those
-        fields here prevents a missing task packet or a handoff/output_gen.json
-        reference from stranding an otherwise valid acceptance decision.
-        """
-
-        action = decision.get("action")
-        if action not in ("dispatch", "revise"):
-            return
-        current = state.get("current_task") or {}
-        current_agent = str(current.get("agent_id") or "")
-        expected_next = {
-            "analysis": "storyline",
-            "storyline": "report",
-            "report": "qa_preparation",
-            "qa_preparation": "format",
-        }
-        upstream_requests: list[dict[str, Any]] = []
-        if action == "revise":
-            artifact = (state.get("worker_result") or {}).get("artifact") or {}
-            upstream_requests = [
-                item
-                for item in artifact.get("upstream_revision_requests") or []
-                if isinstance(item, dict)
-                and item.get("blocking_level") == "blocking"
-            ]
-        upstream_targets = [
-            "analysis"
-            if item.get("target_agent") == "evidence_harvester"
-            else str(item.get("target_agent") or "")
-            for item in upstream_requests
-        ]
-        upstream_target = next(
-            (
-                agent_id
-                for agent_id in ("analysis", "storyline", "report", "qa_preparation")
-                if agent_id in upstream_targets
-            ),
-            "",
-        )
-        target_agent = (
-            expected_next.get(current_agent, "")
-            if action == "dispatch"
-            else upstream_target or current_agent
-        )
-        if not target_agent:
-            return
-
-        submitted = decision.get("task_packet")
-        submitted_packet = submitted if isinstance(submitted, dict) else {}
-        if action == "revise":
-            upstream_task = next(
-                (
-                    item
-                    for item in reversed(state.get("tasks") or [])
-                    if isinstance(item, dict)
-                    and item.get("agent_id") == target_agent
-                    and isinstance(item.get("packet"), dict)
-                ),
-                None,
-            )
-            current_packet = (
-                upstream_task.get("packet")
-                if isinstance(upstream_task, dict)
-                else current.get("packet")
-            )
-            packet = copy.deepcopy(
-                current_packet if isinstance(current_packet, dict) else {}
-            )
-            packet.update(copy.deepcopy(submitted_packet))
-        else:
-            packet = copy.deepcopy(submitted_packet)
-
-        artifact_path = str(
-            current.get("artifact_path")
-            or (state.get("worker_result") or {}).get("artifact_path")
-            or ""
-        ).strip()
-        effective_inputs = list(packet.get("input_artifacts") or [])
-        if action == "dispatch" and artifact_path:
-            effective_inputs = [artifact_path]
-
-        objectives = {
-            "storyline": "基于已批准的 Analysis 产物收敛唯一故事线。",
-            "report": "基于已批准的 Storyline 写作完整报告。",
-            "qa_preparation": "基于完整报告追加听众深度追问清单。",
-            "format": "基于追加追问后的完整报告生成正式文档。",
-        }
-        packet["agent_id"] = target_agent
-        packet["input_artifacts"] = effective_inputs
-        packet.setdefault(
-            "objective",
-            objectives.get(target_agent, f"修订当前 {target_agent} 产物。"),
-        )
-        packet.setdefault("task_id", f"acceptance-{target_agent}")
-        if action == "revise":
-            report = decision.get("acceptance_report") or {}
-            requirements = report.get("revision_requirements") or []
-            if requirements:
-                packet["revision_feedback"] = [
-                    str(item) for item in requirements if str(item).strip()
-                ]
-            elif "revision_feedback" not in submitted_packet:
-                # The current acceptance decision owns the revision round.
-                # Never silently carry feedback from an earlier packet.
-                packet.pop("revision_feedback", None)
-        if action == "revise" and upstream_requests:
-            reasons = [
-                str(item.get("reason") or "可视化论据不完整")
-                for item in upstream_requests
-                if (
-                    "analysis"
-                    if item.get("target_agent") == "evidence_harvester"
-                    else item.get("target_agent")
-                )
-                == target_agent
-            ]
-            if reasons:
-                packet["revision_feedback"] = reasons
-        decision["task_packet"] = packet
-
-        changes = []
-        if not isinstance(submitted, dict):
-            changes.append("missing task_packet synthesized by runtime")
-        if submitted_packet.get("agent_id") != target_agent:
-            changes.append(
-                f"agent_id normalized to canonical {target_agent}"
-            )
-        if action == "dispatch" and artifact_path and list(
-            submitted_packet.get("input_artifacts") or []
-        ) != [artifact_path]:
-            changes.append("input_artifacts bound to current artifact.json")
-        if changes:
-            decision.setdefault("runtime_normalizations", []).append(
-                {
-                    "field": "task_packet",
-                    "submitted": submitted if isinstance(submitted, dict) else None,
-                    "effective": copy.deepcopy(packet),
-                    "reason": "; ".join(changes),
-                }
-            )
-
     @staticmethod
-    def _v03_plan_errors(
+    def _plan_errors(
         charter: dict[str, Any],
         plan_or_packet: dict[str, Any],
         packet: Optional[dict[str, Any]] = None,
@@ -547,12 +394,12 @@ class ManagerAgentRuntime:
         errors: list[str] = []
         if packet.get("agent_id") != "analysis":
             errors.append(
-                "$.task_packet.agent_id: v0.3 initial task must be 'analysis'"
+                "$.task_packet.agent_id: initial task must be 'analysis'"
             )
         return errors
 
     @staticmethod
-    def _v03_acceptance_route_errors(
+    def _acceptance_route_errors(
         action: Any,
         state: dict[str, Any],
         packet: Any,
@@ -579,7 +426,7 @@ class ManagerAgentRuntime:
                 ]
         if action == "complete" and current_agent in expected_next:
             return [
-                f"$.action: cannot complete v0.3 after {current_agent}; "
+                f"$.action: cannot complete after {current_agent}; "
                 f"must dispatch {expected_next[current_agent]}"
             ]
         return []
@@ -679,41 +526,23 @@ class WorkerExecutor:
                 "Manager task_packet 包含无法解析的 input_artifacts: "
                 + ", ".join(unresolved_inputs)
             )
-        if self.contract_profile == "v0_4":
-            required_kind = {
-                "storyline": "analysis",
-                "report": "storyline",
-                "qa_preparation": "report",
-                "format": "report",
-            }.get(agent_id)
-            available_kinds = {
-                str(data.get("artifact_kind") or "")
-                for _, data in resolved_artifacts
-                if isinstance(data, dict)
-                and data.get("schema") == "markdown_artifact.v1"
-            }
-            if required_kind and required_kind not in available_kinds:
-                raise StepError(
-                    f"v0.4 Worker {agent_id} 缺少 canonical {required_kind}.md; "
-                    f"已解析 artifact kinds={sorted(available_kinds)}"
-                )
-        elif self.contract_profile == "v0_3":
-            required_schema = {
-                "storyline": "analysis.v1",
-                "report": "storyline.v3",
-                "format": "report.v1",
-                "qa_preparation": "report.v1",
-            }.get(agent_id)
-            available_schemas = {
-                str(data.get("schema") or "")
-                for _, data in resolved_artifacts
-                if isinstance(data, dict)
-            }
-            if required_schema and required_schema not in available_schemas:
-                raise StepError(
-                    f"v0.3 Worker {agent_id} 缺少必需上游 {required_schema}; "
-                    f"已解析 schemas={sorted(available_schemas)}"
-                )
+        required_kind = {
+            "storyline": "analysis",
+            "report": "storyline",
+            "qa_preparation": "report",
+            "format": "report",
+        }.get(agent_id)
+        available_kinds = {
+            str(data.get("artifact_kind") or "")
+            for _, data in resolved_artifacts
+            if isinstance(data, dict)
+            and data.get("schema") == "markdown_artifact.v1"
+        }
+        if required_kind and required_kind not in available_kinds:
+            raise StepError(
+                f"v0.4 Worker {agent_id} 缺少 canonical {required_kind}.md; "
+                f"已解析 artifact kinds={sorted(available_kinds)}"
+            )
 
         task_id = self._safe_id(str(packet.get("task_id") or f"task-{agent_id}"))
         task_dir = self._unique_task_dir(task_id, agent_id)
@@ -1081,6 +910,7 @@ class ManagerOrchestrator:
         )
         phase = str(state.get("manager_phase") or "planning")
         decision = self.agent.read_decision(phase)
+        page_budget_gate_audit: dict[str, Any] | None = None
         if phase == "acceptance":
             current_task = state.get("current_task") or {}
             report = decision.get("acceptance_report") or {}
@@ -1106,8 +936,7 @@ class ManagerOrchestrator:
             budget_required = bool(delivery_budget.get("body_page_limit"))
             budget_audit = self._body_budget_audit(worker_result)
             requires_budget_pass = (
-                self.contract_profile == "v0_3"
-                and budget_required
+                budget_required
                 and (
                     action == "dispatch"
                     and current_task.get("agent_id") == "report"
@@ -1153,14 +982,17 @@ class ManagerOrchestrator:
                     f"请修复真实渲染错误后重试。{detail_suffix}"
                 )
             if requires_budget_pass and budget_audit.get("passed") is not True:
-                detail = str(
-                    budget_audit.get("detail")
-                    or "runtime 未取得可验证的正文页数结果"
-                )
-                raise StepError(
-                    f"{current_task.get('agent_id')} 不能{action}：正文页数硬约束未通过。"
-                    f"{detail}。请提交 revise，并依据 body_budget_audit 压缩当前环节。"
-                )
+                if budget_audit.get("requires_user_decision") is True:
+                    page_budget_gate_audit = dict(budget_audit)
+                else:
+                    detail = str(
+                        budget_audit.get("detail")
+                        or "runtime 未取得可验证的正文页数结果"
+                    )
+                    raise StepError(
+                        f"{current_task.get('agent_id')} 不能{action}：正文页数审计未通过。"
+                        f"{detail}。请提交 revise，并依据 body_budget_audit 压缩当前环节。"
+                    )
             revision_requests = artifact.get("upstream_revision_requests", [])
             blocking_requests = [
                 item
@@ -1220,6 +1052,13 @@ class ManagerOrchestrator:
         state["last_manager_decision"] = decision
         state["manager_step"] = "decision_committed"
         state["project_state"].update(decision.get("state_updates") or {})
+
+        if page_budget_gate_audit is not None:
+            return self._open_page_budget_gate(
+                state,
+                decision,
+                page_budget_gate_audit,
+            )
 
         try:
             if phase == "planning":
@@ -1310,6 +1149,34 @@ class ManagerOrchestrator:
         """Advance the simple v0.4 happy path without Manager handshakes."""
 
         agent_id = str(task.get("agent_id") or "")
+        budget_audit = self._body_budget_audit(state.get("worker_result") or {})
+        approved_limit = (
+            state.get("project_state", {})
+            .get("delivery_budget", {})
+            .get("user_approved_body_page_limit")
+        )
+        actual_pages = budget_audit.get("body_page_count")
+        if (
+            agent_id in {"report", "format"}
+            and budget_audit.get("requires_user_decision") is True
+            and not (
+                isinstance(approved_limit, int)
+                and isinstance(actual_pages, int)
+                and actual_pages <= approved_limit
+            )
+        ):
+            decision: dict[str, Any] = {
+                "action": "complete" if agent_id == "format" else "dispatch",
+                "acceptance_report": {
+                    "verdict": "accept",
+                    "reason": "内容已通过，但实际分页超过自动一页容差，等待用户决定。",
+                },
+            }
+            if agent_id == "report":
+                decision["task_packet"] = self._v04_task_packet(
+                    state, "qa_preparation", include_current=True
+                )
+            return self._open_page_budget_gate(state, decision, budget_audit)
         if agent_id == "format" and not self._format_delivery_succeeded(
             state.get("worker_result") or {}
         ):
@@ -1899,6 +1766,8 @@ class ManagerOrchestrator:
             return self._record_storyline_confirmation_feedback(state, feedback)
         if gate == "brief":
             return self._record_brief_feedback(state, feedback)
+        if gate == "page_budget":
+            return self._record_page_budget_feedback(state, feedback)
         state["current_actor"] = "manager"
         _phase_after_feedback = {
             "brief": "brief_confirmation",
@@ -1907,6 +1776,7 @@ class ManagerOrchestrator:
             "decision": "acceptance",
             "final": "acceptance",
             "delivery_options": "acceptance",
+            "page_budget": "acceptance",
         }
         state["manager_phase"] = _phase_after_feedback.get(gate, "acceptance")
         state["manager_step"] = "init"
@@ -1922,6 +1792,136 @@ class ManagerOrchestrator:
             {"gate": gate, "text": feedback},
         )
         return self.prepare()
+
+    def _open_page_budget_gate(
+        self,
+        state: dict[str, Any],
+        decision: dict[str, Any],
+        audit: dict[str, Any],
+    ) -> dict[str, Any]:
+        requested = int(
+            audit.get("requested_body_page_limit")
+            or audit.get("body_page_limit")
+            or 0
+        )
+        automatic = int(
+            audit.get("automatic_body_page_limit") or requested + 1
+        )
+        maximum = int(audit.get("maximum_body_page_limit") or requested + 1)
+        actual = int(audit.get("body_page_count") or 0)
+        pending = copy.deepcopy(decision)
+        pending["page_budget_audit"] = dict(audit)
+        if maximum > automatic:
+            pending["user_message"] = (
+                f"正文实际渲染为 {actual} 页。原目标为 {requested} 页，自动容差上限为 "
+                f"{automatic} 页，此前用户批准上限为 {maximum} 页，但当前仍超出。"
+                f"请选择接受当前 {actual} 页，或继续收窄内容。"
+            )
+        else:
+            pending["user_message"] = (
+                f"正文实际渲染为 {actual} 页。原目标为 {requested} 页，系统已自动放宽至 "
+                f"{maximum} 页，但当前仍超出。请选择接受当前 {actual} 页，或继续收窄内容。"
+            )
+        state["current_actor"] = "human"
+        state["human_gate"] = "page_budget"
+        state["pending_decision"] = pending
+        state["page_budget_audit"] = dict(audit)
+        state["status"] = "awaiting_page_budget_decision"
+        state["last_event"] = "page_budget_human_gate"
+        self._save_state(state)
+        self._append_decision(
+            "page_budget_human_gate",
+            "Rendered body still exceeds the automatic one-page tolerance",
+            {"audit": audit},
+        )
+        return self._human_gate_result(state)
+
+    def _record_page_budget_feedback(
+        self,
+        state: dict[str, Any],
+        feedback: str,
+    ) -> dict[str, Any]:
+        normalized = re.sub(r"\s+", "", str(feedback or "").lower())
+        relax_tokens = ("放宽", "接受当前", "接受篇幅", "relax", "accept")
+        narrow_tokens = ("收窄", "压缩", "精简", "narrow", "shorten")
+        decision = state.get("pending_decision") or {}
+        audit = (
+            decision.get("page_budget_audit")
+            or state.get("page_budget_audit")
+            or {}
+        )
+
+        if any(token in normalized for token in relax_tokens):
+            actual = int(audit.get("body_page_count") or 0)
+            if actual <= 0:
+                raise StepError("页数审计缺少有效的实际页数，无法放宽")
+            budget = state.setdefault("project_state", {}).setdefault(
+                "delivery_budget", {}
+            )
+            budget["maximum_body_page_limit"] = actual
+            budget["user_approved_body_page_limit"] = actual
+            budget["user_approved_at"] = now_iso()
+            run_state_path = self.run_dir / "state.json"
+            run_state = read_json(run_state_path, default={})
+            run_budget = run_state.setdefault("delivery_budget", {})
+            run_budget.update(budget)
+            run_state["updated_at"] = now_iso()
+            write_json(run_state_path, run_state)
+            state.setdefault("page_budget_overrides", []).append(
+                {
+                    "at": now_iso(),
+                    "approved_limit": actual,
+                    "stage": audit.get("stage"),
+                    "feedback": feedback,
+                }
+            )
+            state["current_actor"] = "manager"
+            state["human_gate"] = None
+            state["pending_decision"] = None
+            state["status"] = "running"
+            state["last_event"] = "page_budget_relaxed"
+            self._save_state(state)
+            self._append_decision(
+                "page_budget_relaxed",
+                f"Human approved widening the body-page limit to {actual}",
+                {"audit": audit, "feedback": feedback},
+            )
+            task = state.get("current_task")
+            if not isinstance(task, dict):
+                raise StepError("页数放宽后缺少当前任务，无法继续")
+            return self._record_v04_worker_completed(state, task)
+
+        if any(token in normalized for token in narrow_tokens):
+            task = state.get("current_task")
+            if not isinstance(task, dict):
+                raise StepError("页数收窄时缺少当前任务，无法返工")
+            task["status"] = "revision_required"
+            self._replace_task(state, task)
+            self._set_plan_task_status(
+                str(task.get("task_id") or ""), "revision_required"
+            )
+            state["current_actor"] = "manager"
+            state["human_gate"] = None
+            state["pending_decision"] = None
+            state["status"] = "running"
+            state["last_event"] = "page_budget_narrowing_requested"
+            self._save_state(state)
+            return self._dispatch(
+                state,
+                self._v04_task_packet(
+                    state,
+                    str(task.get("agent_id") or "report"),
+                    feedback=(
+                        f"正文实际 {audit.get('body_page_count')} 页，须压缩至不超过 "
+                        f"{audit.get('maximum_body_page_limit')} 页。用户选择继续收窄。"
+                    ),
+                ),
+                reason="human chose to narrow content to the page-budget limit",
+            )
+
+        state["page_budget_feedback_error"] = "请选择“接受当前篇幅”或“继续收窄”。"
+        self._save_state(state)
+        return self._human_gate_result(state)
 
     def status(self) -> dict[str, Any]:
         state = self._load_state()
@@ -2479,7 +2479,6 @@ class ManagerOrchestrator:
         state["pending_decision"] = decision
         if (
             action == "complete"
-            and self.contract_profile == "v0_3"
             and isinstance(task, dict)
             and self._is_default_document_format_task(task)
         ):
@@ -2632,9 +2631,6 @@ class ManagerOrchestrator:
         profile = normalize_report_profile(
             profile_source, root=self.root, strict=False
         ).to_dict()
-        if self.contract_profile == "v0_3":
-            profile["version"] = "v0_3"
-            profile["delivery_target"] = profile["output_format"]
         registry = CapabilityRegistry(self.root)
         return {
             "schema": "manager_context.v1",
@@ -2783,9 +2779,7 @@ class ManagerOrchestrator:
                 "format(html)",
             ],
             "input_preparation": ["evidence_harvester"],
-            "internal_subagents": {
-                "analysis": ["evidence_harvester (legacy/direct-run fallback only)"]
-            },
+            "internal_subagents": {},
         }
 
     @staticmethod
@@ -3356,6 +3350,7 @@ class ManagerOrchestrator:
             "worker_result": "当前步骤已完成，请查看中间产物。如需继续，确认后进入下一步。",
             "final": "所有任务已完成，请确认最终交付物。",
             "delivery_options": "默认五阶段已完成。请选择是否转译 PPT/HTML；直接批准表示结束。",
+            "page_budget": "正文超过自动放宽的一页容差，请选择接受当前篇幅或继续收窄。",
             "decision": "请确认 Manager 的决策。",
             }.get(gate, "请确认。")
 
@@ -3488,6 +3483,42 @@ class ManagerOrchestrator:
                 }
             ]
             result["next_action"] = "report_approve"
+
+        elif gate == "page_budget":
+            audit = (
+                decision.get("page_budget_audit")
+                or state.get("page_budget_audit")
+                or {}
+            )
+            result["page_budget_audit"] = audit
+            result["questions"] = [
+                {
+                    "header": "篇幅处理",
+                    "question": "当前正文仍超出自动放宽后上限，如何处理？",
+                    "multiSelect": False,
+                    "options": [
+                        {
+                            "label": "接受当前篇幅",
+                            "description": (
+                                "将正文上限放宽到当前 "
+                                f"{audit.get('body_page_count', '-')} 页并继续"
+                            ),
+                            "value": "放宽",
+                        },
+                        {
+                            "label": "继续收窄",
+                            "description": (
+                                f"保持 {audit.get('maximum_body_page_limit', '-')} "
+                                "页上限并返工压缩"
+                            ),
+                            "value": "收窄",
+                        },
+                    ],
+                }
+            ]
+            result["next_action"] = "human_feedback"
+            if state.get("page_budget_feedback_error"):
+                result["feedback_error"] = state["page_budget_feedback_error"]
 
         elif gate in ("final", "decision"):
             result["acceptance_report"] = decision.get("acceptance_report")

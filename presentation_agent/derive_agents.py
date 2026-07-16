@@ -72,7 +72,7 @@ def _stage_agents(config: dict[str, Any]) -> list[dict[str, Any]]:
     sub-agents and therefore are not derived here.
     """
 
-    profile_id = str(config.get("active_contract_profile") or "v0_3")
+    profile_id = str(config.get("active_contract_profile") or "v0_4")
     profile = config.get("contract_profiles", {}).get(profile_id, {})
     active = profile.get("canonical_stages", [])
     by_id = {a.get("id"): a for a in profile.get("workers", [])}

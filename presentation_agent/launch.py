@@ -5,7 +5,7 @@ from __future__ import annotations
 Three hosts — Claude Code (subagent), WorkBuddy (skill), Codex (prompt) — all
 need to do the same thing: take a user's spoken request, turn it into a
 `raw_brief.v1`, and kick off a report run. The only supported path is the
-v0.3 Manager-orchestrated workflow.
+v0.4 Markdown-first Manager workflow.
 
 Design choices baked in here:
   - Manager path is host-self-execution and does not use a provider.
@@ -181,17 +181,16 @@ def normalize_brief(
     if not str(normalized.get("report_length", "")).strip():
         normalized["report_length"] = _default_report_length(requested_targets)
 
-    if selected_profile in {"v0_3", "v0_4"}:
-        allowed = {"document", "ppt", "html"}
-        requested_targets = [
-            item for item in requested_targets if item in allowed
-        ] or ["document"]
-        normalized["requested_delivery_targets"] = requested_targets
-        normalized["requested_followup_targets"] = [
-            item for item in requested_targets if item != "document"
-        ]
-        normalized["delivery_targets"] = ["document"]
-        normalized["output_format"] = "document"
+    allowed = {"document", "ppt", "html"}
+    requested_targets = [
+        item for item in requested_targets if item in allowed
+    ] or ["document"]
+    normalized["requested_delivery_targets"] = requested_targets
+    normalized["requested_followup_targets"] = [
+        item for item in requested_targets if item != "document"
+    ]
+    normalized["delivery_targets"] = ["document"]
+    normalized["output_format"] = "document"
     profile = normalize_report_profile(
         normalized,
         root=root,

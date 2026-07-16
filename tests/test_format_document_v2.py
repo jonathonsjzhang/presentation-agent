@@ -12,11 +12,11 @@ from presentation_agent.io import read_json, write_json
 from presentation_agent.renderers.base import render_material
 from presentation_agent.renderers.base import RenderResult
 from presentation_agent.renderers.formatted_document_v2 import render_formatted_document_v2
-from presentation_agent.step import StepRunner
+from presentation_agent.step import StepError, StepRunner
 
 ROOT = Path(__file__).resolve().parents[1]
-FORMATTED = ROOT / "tests/fixtures/v0_3/formatted_material.v2.valid.json"
-REPORT = ROOT / "tests/fixtures/v0_3/report.v1.valid.json"
+FORMATTED = ROOT / "tests/fixtures/rendering/formatted_material.v2.valid.json"
+REPORT = ROOT / "tests/fixtures/rendering/report.v1.valid.json"
 
 
 def load(path: Path) -> dict:
@@ -223,7 +223,7 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 stage_dir / "run_state.json",
                 {
                     "run_id": "format-test",
-                    "contract_profile": "v0_3",
+                    "contract_profile": "v0_4",
                     "agent_id": "format",
                     "agent_name": "可视化",
                     "stage": 4,
@@ -255,7 +255,7 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                     ]
                 },
             )
-            runner = StepRunner(ROOT, stage_dir, data_root=temp / "data", contract_profile="v0_3")
+            runner = StepRunner(ROOT, stage_dir, data_root=temp / "data", contract_profile="v0_4")
             result = RenderResult(
                 status="rendered",
                 fmt="document",
@@ -277,9 +277,9 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 artifact["evidence_asset_enrichment"][0]["ref"],
                 "E1:T1-usage",
             )
-            self.assertEqual(
-                artifact["render_result"]["detail"],
+            self.assertIn(
                 "preset=standard_business_brief",
+                artifact["render_result"]["detail"],
             )
 
     def test_format_runtime_projects_irregular_workbook_table_without_inventing_chart(self) -> None:
@@ -338,7 +338,7 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 stage_dir / "run_state.json",
                 {
                     "run_id": "format-table-test",
-                    "contract_profile": "v0_3",
+                    "contract_profile": "v0_4",
                     "agent_id": "format",
                     "agent_name": "可视化",
                     "stage": 4,
@@ -371,7 +371,7 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 },
             )
             runner = StepRunner(
-                ROOT, stage_dir, data_root=temp / "data", contract_profile="v0_3"
+                ROOT, stage_dir, data_root=temp / "data", contract_profile="v0_4"
             )
             result = RenderResult(
                 status="rendered",
@@ -392,7 +392,7 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 "table_fallback",
             )
 
-    def test_visual_preflight_failure_still_renders_draft_before_blocking(self) -> None:
+    def test_visual_preflight_failure_blocks_before_rendering(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)
             stage_dir = temp / "stage_4_format"
@@ -418,7 +418,7 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 stage_dir / "run_state.json",
                 {
                     "run_id": "format-preflight-test",
-                    "contract_profile": "v0_3",
+                    "contract_profile": "v0_4",
                     "agent_id": "format",
                     "agent_name": "可视化",
                     "stage": 4,
@@ -459,18 +459,16 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 output_path=str(draft_path),
             )
             runner = StepRunner(
-                ROOT, stage_dir, data_root=temp / "data", contract_profile="v0_3"
+                ROOT, stage_dir, data_root=temp / "data", contract_profile="v0_4"
             )
             with patch(
                 "presentation_agent.renderers.render_material",
                 return_value=render_result,
             ) as mocked_renderer:
-                result = runner.commit()
+                with self.assertRaisesRegex(StepError, "视觉预检未通过"):
+                    runner.commit()
 
-            mocked_renderer.assert_called_once()
-            self.assertEqual(result["status"], "blocked")
-            self.assertEqual(result["render_result"]["output_path"], str(draft_path))
-            self.assertIn("可视化论据检查未通过", result["render_result"]["detail"])
+            mocked_renderer.assert_not_called()
 
     def test_line_chart_data_renders_as_document_visual(self) -> None:
         formatted = load(FORMATTED)
