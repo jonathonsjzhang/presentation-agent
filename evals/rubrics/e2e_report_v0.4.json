@@ -1,7 +1,7 @@
 {
   "schema": "e2e_rubric.v1",
-  "version": "v0.3",
-  "name": "v0.3 完整报告 E2E 评测",
+  "version": "v0.4",
+  "name": "v0.4 完整报告 E2E 评测",
   "scope": "评价从 raw materials 到完整、可独立阅读战略分析报告的质量。",
   "scale": {"min": 0, "max": 5, "step": 0.5},
   "release_policy": {"formal_ready_threshold": 4.0, "internal_discussion_threshold": 3.0, "minimum_dimension_score": 3.0, "hard_gate_required": true},

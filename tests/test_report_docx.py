@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "tests" / "fixtures" / "v0_3" / "report.v1.valid.json"
+FIXTURE = ROOT / "tests" / "fixtures" / "rendering" / "report.v1.valid.json"
 
 
 class ReportMarkdownArtifactTests(unittest.TestCase):

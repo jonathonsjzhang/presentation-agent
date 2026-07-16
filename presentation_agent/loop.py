@@ -44,9 +44,7 @@ class LoopRunner:
         self.stop_checker = StopChecker()
 
     def list_agents(self) -> list[AgentSpec]:
-        if self.contract_profile == "v0_3":
-            return list(self.agent_profile.ordered_specs)
-        return sorted(self.specs.values(), key=lambda spec: spec.stage)
+        return list(self.agent_profile.ordered_specs)
 
     def run(self, agent_id: str, input_path: Path, run_dir: Optional[Path] = None) -> dict[str, Any]:
         spec = self.specs[agent_id]

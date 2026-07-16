@@ -104,18 +104,29 @@ def derive_delivery_budget(report_charter: dict[str, Any]) -> dict[str, Any]:
         return {}
     # Keep the writing budget linear and predictable: 800-900 characters per
     # requested body page, with the midpoint as the generation target.  The
-    # Executive Summary remains a fixed 250-350 characters within that total.
+    # Executive Summary remains a fixed 250-350-character content contract
+    # within that total.
     report_char_min = limit * 800
     report_char_target = limit * 850
-    report_char_limit = limit * 900
+    automatic_page_tolerance = 1
+    maximum_page_limit = limit + automatic_page_tolerance
+    report_char_warning = limit * 900
     return {
+        "requested_body_page_limit": limit,
         "body_page_limit": limit,
+        "automatic_page_tolerance": automatic_page_tolerance,
+        "automatic_body_page_limit": maximum_page_limit,
+        "maximum_body_page_limit": maximum_page_limit,
         "counting_policy": "body_only",
         "excluded_section_roles": ["methods_and_limitations", "qa"],
         "body_char_min": report_char_min,
         "body_char_target": report_char_target,
-        "body_char_warning": report_char_limit,
-        "report_body_char_limit": report_char_limit,
+        "body_char_warning": report_char_warning,
+        # Character counts guide drafting and warn about likely overflow.  The
+        # rendered page count remains authoritative, so a dense but readable
+        # document is not rejected by this estimate alone.
+        "report_body_char_limit": maximum_page_limit * 900,
+        "body_char_enforcement": "advisory",
         "executive_summary_char_min": 250,
         "executive_summary_char_max": 350,
         "max_body_visuals": min(3, max(1, limit)),
@@ -231,6 +242,8 @@ def audit_document_body_pages(
     formatted: dict[str, Any],
     out_dir: Path,
     body_page_limit: int,
+    maximum_body_page_limit: int | None = None,
+    user_approved_body_page_limit: int | None = None,
     stage: str,
     renderer: Callable[..., Any] | None = None,
     page_counter: Callable[[Path], int] | None = None,
@@ -263,10 +276,22 @@ def audit_document_body_pages(
         audit_dir,
         file_stem=f"body_shadow_{stage}",
     )
+    requested_limit = int(body_page_limit)
+    automatic_limit = requested_limit + 1
+    maximum_limit = (
+        int(maximum_body_page_limit)
+        if isinstance(maximum_body_page_limit, int)
+        and maximum_body_page_limit >= requested_limit
+        else requested_limit + 1
+    )
     audit: dict[str, Any] = {
         "stage": stage,
         "counting_policy": "body_only",
-        "body_page_limit": int(body_page_limit),
+        "requested_body_page_limit": requested_limit,
+        "body_page_limit": requested_limit,
+        "automatic_page_tolerance": 1,
+        "automatic_body_page_limit": automatic_limit,
+        "maximum_body_page_limit": maximum_limit,
         "body_chars": body_character_count(shadow_report["report_markdown"]),
         "excluded_sections": ["方法与边界", "听众可能追问的问题"],
         "visual_count": len(shadow_formatted.get("visuals") or []),
@@ -287,10 +312,28 @@ def audit_document_body_pages(
         {
             "available": True,
             "body_page_count": page_count,
-            "passed": page_count <= int(body_page_limit),
-            "detail": (
-                f"正文实际渲染 {page_count} 页，限制 {body_page_limit} 页"
+            "passed": page_count <= maximum_limit,
+            "within_requested_limit": page_count <= requested_limit,
+            "automatic_tolerance_used": (
+                requested_limit < page_count <= automatic_limit
             ),
+            "within_effective_limit": page_count <= maximum_limit,
+            "requires_user_decision": page_count > maximum_limit,
         }
     )
+    if (
+        isinstance(user_approved_body_page_limit, int)
+        and user_approved_body_page_limit > automatic_limit
+    ):
+        audit["user_approved_body_page_limit"] = user_approved_body_page_limit
+        audit["detail"] = (
+            f"正文实际渲染 {page_count} 页；目标 {requested_limit} 页，"
+            f"自动容差上限 {automatic_limit} 页，"
+            f"用户批准上限 {user_approved_body_page_limit} 页"
+        )
+    else:
+        audit["detail"] = (
+            f"正文实际渲染 {page_count} 页；目标 {requested_limit} 页，"
+            f"自动容差上限 {automatic_limit} 页"
+        )
     return audit

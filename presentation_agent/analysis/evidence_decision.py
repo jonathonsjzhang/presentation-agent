@@ -46,7 +46,7 @@ def decide_evidence(
 
     A supplied catalog always wins over raw materials.  Raw materials count as
     present only when the sequence is non-empty.  The function does not spawn,
-    retry, mutate inputs, inspect complexity, or activate the v0.3 runtime.
+    retry, mutate inputs, inspect complexity, or activate another runtime path.
     """
 
     _validate_inputs(evidence_catalog=evidence_catalog, raw_materials=raw_materials)

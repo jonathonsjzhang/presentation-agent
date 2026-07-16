@@ -263,7 +263,7 @@ class GenericSkill:
         }
         if canonical_inputs and not external_input_path:
             blocks.extend([
-                "## v0.3 Canonical inputs（本环节正式输入）",
+                "## v0.4 Canonical inputs（本环节正式输入）",
                 self._json_block(canonical_inputs),
             ])
         inputs = input_data.get("inputs", {})

@@ -44,7 +44,7 @@ class ReportProfileTests(unittest.TestCase):
                 "audience": "board",
                 "report_type": "business_progress",
                 "output_format": "document",
-                "version": "v1",
+                "version": "v0_4",
             },
         )
 

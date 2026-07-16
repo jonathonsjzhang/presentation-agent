@@ -250,8 +250,8 @@ class EvaluationRunner:
 
     def _load_rubric(self, version: str) -> dict[str, Any]:
         aliases = {
-            "report-v0.3": "e2e_report_v0.3.json",
-            "translation-v0.3": "e2e_translation_v0.3.json",
+            "report-v0.4": "e2e_report_v0.4.json",
+            "translation-v0.4": "e2e_translation_v0.4.json",
         }
         normalized = version if version.startswith("v") else f"v{version}"
         filename = aliases.get(version, f"e2e_material_{normalized}.json")

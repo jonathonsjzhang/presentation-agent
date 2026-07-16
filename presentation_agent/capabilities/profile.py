@@ -13,7 +13,7 @@ class ReportProfile:
     audience: str
     report_type: str
     output_format: str
-    version: str = "v1"
+    version: str = "v0_4"
 
     def to_dict(self) -> dict[str, str]:
         result = {
@@ -22,13 +22,11 @@ class ReportProfile:
             "output_format": self.output_format,
             "version": self.version,
         }
-        if self.version == "v0_3":
-            result["delivery_target"] = self.output_format
         return result
 
     @property
     def delivery_target(self) -> str:
-        """Canonical v0.3 name; output_format remains the v0.2 compatibility field."""
+        """Canonical delivery target for the active report protocol."""
         return self.output_format
 
 
@@ -65,7 +63,7 @@ def normalize_report_profile(
             ),
             "output_format": _normalize_delivery_target(target, config),
         }
-        version = "v0_3"
+        version = "v0_4"
     else:
         source = (
             data.get("report_charter")
@@ -104,7 +102,7 @@ def normalize_report_profile(
                 config,
             ),
         }
-        version = "v1"
+        version = "v0_4"
     if strict:
         for dimension, value in values.items():
             allowed = set(config.get("dimensions", {}).get(dimension, []))
@@ -176,7 +174,7 @@ def _normalize_value(dimension: str, value: Any, config: Mapping[str, Any]) -> s
 
 def _normalize_delivery_target(value: Any, config: Mapping[str, Any]) -> str:
     profiles = config.get("contract_profiles", {})
-    profile = profiles.get("v0_4") or profiles.get("v0_3", {})
+    profile = profiles.get("v0_4", {})
     normalized = str(value or "").strip()
     aliases = profile.get("delivery_target_aliases", {})
     if normalized in aliases:

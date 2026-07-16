@@ -59,12 +59,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     report_start = report_subs.add_parser("start", help="Start a report run and return first instruction.")
     report_start.add_argument("--brief-file", required=True, help="raw_brief JSON file path.")
-    report_start.add_argument(
-        "--contract-profile",
-        choices=["v0_4", "v0_3"],
-        default="v0_4",
-        help="Runtime contract profile. Defaults to the simplified Markdown-first v0_4 flow.",
-    )
     _add_spawn_adapter_option(report_start, required=True)
 
     report_next = report_subs.add_parser("next", help="Return the current report instruction.")
@@ -165,7 +159,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_start.add_argument(
         "--rubric",
         default="v0.2",
-        help="v0.2, report-v0.3, or translation-v0.3.",
+        help="Evaluation rubric id (v0.2, report-v0.4, or translation-v0.4).",
     )
     eval_start.add_argument("--out", help="Optional evaluation run directory.")
     eval_start.add_argument(
@@ -192,12 +186,6 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--input", required=True, help="Input artifact JSON path.")
     run.add_argument("--out", help="Optional output directory.")
     run.add_argument("--provider", help="Override LLM provider (mock/cli/codex/inline).")
-    run.add_argument(
-        "--contract-profile",
-        choices=["v0_3"],
-        default="v0_3",
-        help="Direct single-worker debug profile; defaults to legacy JSON v0_3.",
-    )
 
     pipe = sub.add_parser("pipeline", help="Run the five-stage debug pipeline.")
     pipe.add_argument("--input", required=True, help="Initial raw brief JSON path.")
@@ -216,12 +204,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="raw_brief JSON: a file path, or an inline JSON string the host assembled.",
     )
     launch.add_argument("--out", help="Optional output directory.")
-    launch.add_argument(
-        "--contract-profile",
-        choices=["v0_4", "v0_3"],
-        default="v0_4",
-        help="Runtime contract profile. Defaults to the simplified Markdown-first v0_4 flow.",
-    )
     launch.add_argument("--auto", action="store_true", help="Run all stages back to back.")
     launch.add_argument(
         "--provider",
@@ -405,7 +387,7 @@ def main() -> None:
         runner = LoopRunner(
             root,
             provider_override=getattr(args, "provider", None),
-            contract_profile=getattr(args, "contract_profile", "v0_3"),
+            contract_profile="v0_4",
         )
         result = runner.run(args.agent_id, Path(args.input).resolve(), Path(args.out).resolve() if args.out else None)
         print(f"status: {result['status']}")
@@ -439,7 +421,7 @@ def main() -> None:
                 out=Path(args.out).resolve() if args.out else None,
                 spawn_adapter=args.spawn_adapter,
                 init_only=getattr(args, "init_only", False),
-                contract_profile=args.contract_profile,
+                contract_profile="v0_4",
             )
         except BriefError as exc:
             print(f"brief error: {exc}")
@@ -771,7 +753,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
         normalized = normalize_brief(
             str(Path(args.brief_file).expanduser().resolve()),
             root,
-            args.contract_profile,
+            "v0_4",
         )
         brief_path = run_dir / "raw_brief.json"
         write_json(brief_path, normalized)
@@ -780,7 +762,7 @@ def _handle_report_command(args: argparse.Namespace, root: Path, workspace) -> N
             run_dir,
             data_root=workspace.data_dir,
             spawn_adapter=args.spawn_adapter,
-            contract_profile=args.contract_profile,
+            contract_profile="v0_4",
         )
         prepared = manager.initialize_run(brief_path)
         _print_json(

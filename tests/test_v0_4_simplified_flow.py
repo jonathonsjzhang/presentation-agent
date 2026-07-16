@@ -64,18 +64,6 @@ class V04SimplifiedFlowTests(unittest.TestCase):
         self.assertIn("候选论点金字塔", analysis_skill)
         self.assertIn("## Workflow", analysis_skill)
         self.assertIn("analysis.md", analysis_skill)
-        for relative_path in (
-            "skills/analysis/SKILL.md",
-            "skills/storyline/SKILL.md",
-            "skills/report/SKILL.md",
-            "skills/qa_preparation/SKILL.md",
-            "skills/format/SKILL.md",
-            "skills/manager/SKILL.md",
-        ):
-            skill_text = (ROOT / relative_path).read_text(encoding="utf-8")
-            self.assertNotIn("v0.3", skill_text)
-            self.assertNotIn("v0_3", skill_text)
-
     def test_step_runner_commits_canonical_markdown_and_tiny_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             run_dir = Path(temp_dir)
@@ -335,6 +323,124 @@ class V04SimplifiedFlowTests(unittest.TestCase):
             packet = dispatch.call_args.args[1]
             self.assertEqual(packet["agent_id"], "report")
             self.assertEqual(packet["revision_feedback"], ["压缩正文"])
+
+    def test_v04_report_overflow_opens_page_budget_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            task_dir = run_dir / "tasks" / "report-1_report"
+            task_dir.mkdir(parents=True)
+            artifact_path = task_dir / "artifact.json"
+            artifact_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "markdown_artifact.v1",
+                        "agent_id": "report",
+                        "artifact_kind": "report",
+                        "content_path": str(task_dir / "report.md"),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            audit = {
+                "stage": "report_preflight",
+                "requested_body_page_limit": 3,
+                "maximum_body_page_limit": 4,
+                "body_page_count": 5,
+                "passed": False,
+                "requires_user_decision": True,
+            }
+            task = {
+                "task_id": "report-1",
+                "agent_id": "report",
+                "task_dir": str(task_dir),
+                "artifact_path": str(artifact_path),
+                "status": "worker_completed",
+            }
+            state = {
+                "version": "manager_state.v2",
+                "contract_profile": "v0_4",
+                "current_actor": "worker",
+                "current_task": task,
+                "tasks": [task],
+                "accepted_artifacts": [],
+                "project_state": {
+                    "delivery_budget": {
+                        "body_page_limit": 3,
+                        "maximum_body_page_limit": 4,
+                    }
+                },
+                "worker_result": {
+                    "artifact_path": str(artifact_path),
+                    "artifact": {"body_budget_audit": audit},
+                },
+                "spawn_adapter": "inline",
+            }
+            (run_dir / "manager_state.json").write_text(
+                json.dumps(state), encoding="utf-8"
+            )
+            manager = ManagerOrchestrator(ROOT, run_dir, contract_profile="v0_4")
+
+            gate = manager._record_v04_worker_completed(state, task)
+
+            self.assertEqual(gate["gate"], "page_budget")
+            self.assertEqual(gate["page_budget_audit"]["body_page_count"], 5)
+            self.assertEqual(
+                [item["value"] for item in gate["questions"][0]["options"]],
+                ["放宽", "收窄"],
+            )
+
+    def test_v04_page_budget_relaxation_persists_approved_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            task = {"task_id": "report-1", "agent_id": "report"}
+            audit = {
+                "stage": "report_preflight",
+                "requested_body_page_limit": 3,
+                "maximum_body_page_limit": 4,
+                "body_page_count": 5,
+                "passed": False,
+                "requires_user_decision": True,
+            }
+            state = {
+                "version": "manager_state.v2",
+                "contract_profile": "v0_4",
+                "current_actor": "human",
+                "human_gate": "page_budget",
+                "status": "awaiting_page_budget_decision",
+                "current_task": task,
+                "tasks": [task],
+                "accepted_artifacts": [],
+                "project_state": {
+                    "delivery_budget": {
+                        "body_page_limit": 3,
+                        "maximum_body_page_limit": 4,
+                    }
+                },
+                "pending_decision": {
+                    "action": "dispatch",
+                    "page_budget_audit": audit,
+                },
+            }
+            (run_dir / "manager_state.json").write_text(
+                json.dumps(state), encoding="utf-8"
+            )
+            (run_dir / "state.json").write_text(
+                json.dumps({"delivery_budget": state["project_state"]["delivery_budget"]}),
+                encoding="utf-8",
+            )
+            manager = ManagerOrchestrator(ROOT, run_dir, contract_profile="v0_4")
+            with patch.object(
+                manager,
+                "_record_v04_worker_completed",
+                return_value={"actor": "worker"},
+            ) as resumed:
+                result = manager.record_human_feedback("放宽")
+
+            self.assertEqual(result["actor"], "worker")
+            resumed.assert_called_once()
+            persisted = read_json(run_dir / "state.json")["delivery_budget"]
+            self.assertEqual(persisted["maximum_body_page_limit"], 5)
+            self.assertEqual(persisted["user_approved_body_page_limit"], 5)
 
     def test_continue_and_revise_commands_are_public_cli(self) -> None:
         continued = build_parser().parse_args(

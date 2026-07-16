@@ -10,7 +10,6 @@ from presentation_agent.agent_profiles import (
     DEFAULT_CONTRACT_PROFILE,
     load_agent_profile,
 )
-from presentation_agent.analysis import decide_evidence
 from presentation_agent.capabilities.budget import estimate_tokens
 from presentation_agent.capabilities.compiler import compile_skill_package
 from presentation_agent.input_loader import load_agent_input
@@ -200,14 +199,6 @@ class StepRunner:
 
         if step == "done":
             raise StepError("stage 已完成，无需 prepare")
-        if step == "evidence_completed":
-            return self._prepare_gen(state)
-        if step == "awaiting_evidence_output":
-            subtask_dir = Path(state["evidence_subtask_dir"])
-            raise StepError(
-                "已处于 awaiting_evidence_output，指令文件 "
-                f"{subtask_dir / 'handoff' / 'instruction_gen.md'} 已就绪，请先 commit"
-            )
         if step in ("awaiting_gen_output", "awaiting_revise_output"):
             instr_path = self._instruction_path_for(step)
             raise StepError(
@@ -215,10 +206,6 @@ class StepRunner:
             )
 
         if step in ("init", "gen_completed"):
-            if step == "init" and self._uses_analysis_evidence_runtime():
-                evidence_step = self._prepare_analysis_evidence(state)
-                if evidence_step is not None:
-                    return evidence_step
             return self._prepare_gen(state)
         if step == "validation_completed":
             if state.get("p0_open"):
@@ -232,7 +219,6 @@ class StepRunner:
         step = state.get("current_step")
 
         handlers = {
-            "awaiting_evidence_output": self._commit_analysis_evidence,
             "awaiting_gen_output": self._commit_gen,
             "awaiting_revise_output": self._commit_revise,
         }
@@ -283,117 +269,6 @@ class StepRunner:
         return self.prepare()
 
     # ---- internal: prepare --------------------------------------------------
-
-    def _uses_analysis_evidence_runtime(self) -> bool:
-        return self.contract_profile == "v0_3" and self.spec.id == "analysis"
-
-    def _prepare_analysis_evidence(
-        self, state: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        """Run the deterministic Analysis readiness gate exactly once.
-
-        The dispatch marker is persisted before control returns to the host, so
-        recreating StepRunner after an interruption cannot emit a second spawn.
-        """
-
-        input_data = self._load_input(state)
-        catalog, catalog_ref = self._find_evidence_catalog(input_data)
-        raw_materials = self._find_raw_materials(input_data)
-        decision = decide_evidence(
-            evidence_catalog=catalog,
-            raw_materials=raw_materials,
-            evidence_catalog_ref=catalog_ref,
-        )
-        state["evidence_decision"] = decision.to_dict()
-
-        if not decision.should_invoke:
-            if catalog is not None:
-                self._inject_evidence_catalog(
-                    state, input_data, catalog, catalog_ref or "input:evidence_catalog"
-                )
-            state["current_step"] = "evidence_completed"
-            self._write_state(
-                state, "evidence_decision", f"Evidence: {decision.action.value}"
-            )
-            return None
-
-        from presentation_agent.spawn import prepare_evidence_subtask
-
-        prepared = prepare_evidence_subtask(
-            root=self.root,
-            analysis_dir=self.run_dir,
-            data_root=self.data_root,
-            raw_materials=raw_materials,
-            analysis_input=input_data,
-        )
-        state["evidence_spawn_count"] = 1
-        state["evidence_subtask_dir"] = prepared["subtask_dir"]
-        state["current_step"] = "awaiting_evidence_output"
-        self._write_state(
-            state,
-            "prepare_evidence",
-            "Evidence 子任务已派发；单轮 invocation=1",
-        )
-        return prepared
-
-    def _commit_analysis_evidence(self, state: dict[str, Any]) -> dict[str, Any]:
-        from presentation_agent.spawn import commit_evidence_subtask
-
-        subtask_dir = Path(state["evidence_subtask_dir"])
-        catalog = commit_evidence_subtask(
-            root=self.root,
-            subtask_dir=subtask_dir,
-            data_root=self.data_root,
-        )
-        catalog_ref = str(subtask_dir / "evidence_catalog.json")
-        input_data = self._load_input(state)
-        self._inject_evidence_catalog(state, input_data, catalog, catalog_ref)
-        state["current_step"] = "evidence_completed"
-        state["evidence_catalog_ref"] = catalog_ref
-        self._write_state(
-            state, "commit_evidence", "Evidence Catalog 已校验并注入 Analysis 输入"
-        )
-        return self._prepare_gen(state)
-
-    @staticmethod
-    def _find_evidence_catalog(
-        input_data: dict[str, Any],
-    ) -> tuple[dict[str, Any] | None, str | None]:
-        direct = input_data.get("evidence_catalog")
-        if isinstance(direct, dict):
-            return direct, input_data.get("evidence_catalog_ref")
-        for artifact in input_data.get("existing_artifacts") or []:
-            if not isinstance(artifact, dict):
-                continue
-            candidate = artifact.get("artifact") or artifact.get("content") or artifact
-            if isinstance(candidate, dict) and candidate.get("schema") == "evidence_catalog.v1":
-                return candidate, artifact.get("ref") or artifact.get("path")
-        return None, None
-
-    @staticmethod
-    def _find_raw_materials(input_data: dict[str, Any]) -> list[Any]:
-        # An inventory/ref is metadata, not source content.  Only resolved raw
-        # material payloads trigger Evidence.
-        for key in ("raw_materials", "materials"):
-            value = input_data.get(key)
-            if isinstance(value, list) and value:
-                return value
-        return []
-
-    def _inject_evidence_catalog(
-        self,
-        state: dict[str, Any],
-        input_data: dict[str, Any],
-        catalog: dict[str, Any],
-        catalog_ref: str,
-    ) -> None:
-        input_data["evidence_catalog"] = catalog
-        input_data["evidence_catalog_ref"] = catalog_ref
-        for key in ("evidence_index", "evidence_assets", "material_resolution"):
-            if catalog.get(key) not in (None, "", [], {}):
-                input_data[key] = catalog[key]
-        input_path = Path(state["input_path"])
-        write_json(input_path, input_data)
 
     def _prepare_gen(self, state: dict[str, Any]) -> dict[str, Any]:
         context = self._build_context()
@@ -723,27 +598,18 @@ class StepRunner:
         write_json(self.run_dir / "validation.json", validation_json)
 
         p0_blocked = bool(state.get("p0_open"))
-        analysis_blocked = self._analysis_is_blocked(artifact)
         render_result = self._render_deliverable(artifact)
-        report_render_blocked = (
-            self._uses_report_markdown_materializer()
-            and not self._report_render_succeeded(render_result)
-        )
         format_render_blocked = (
-            self._uses_v03_format_renderer()
+            self._uses_format_renderer()
             and not self._format_render_succeeded(render_result)
         )
-        if self._uses_v03_format_renderer():
-            self._update_v03_format_render_result(artifact, render_result)
-        # Keep the semantic report.v1 artifact even when DOCX rendering fails;
-        # it is the source of truth for diagnostics and retry.
+        if self._uses_format_renderer():
+            self._update_format_render_result(artifact, render_result)
         write_json(self.run_dir / "artifact.json", artifact)
 
         state["status"] = (
             "blocked"
             if p0_blocked
-            or analysis_blocked
-            or report_render_blocked
             or format_render_blocked
             else "pending_human_review"
         )
@@ -751,10 +617,6 @@ class StepRunner:
         state["next_action"] = (
             "return_open_p0_to_manager"
             if p0_blocked
-            else "return_blocking_gap_to_manager"
-            if analysis_blocked
-            else "retry_report_markdown_materialization"
-            if report_render_blocked
             else "retry_format_render"
             if format_render_blocked
             else "await_human_decision"
@@ -762,8 +624,6 @@ class StepRunner:
         finalize_note = (
             "达到最大返工轮数但仍有 P0，stage blocked"
             if p0_blocked
-            else "Report Markdown 物化失败，stage blocked"
-            if report_render_blocked
             else "Format 正式材料渲染失败，stage blocked"
             if format_render_blocked
             else "stage 完成，等待人工评审"
@@ -801,27 +661,8 @@ class StepRunner:
                 result["rendered_files"] = [render_result.output_path]
         return result
 
-    def _analysis_is_blocked(self, artifact: dict[str, Any]) -> bool:
-        if not self._uses_analysis_evidence_runtime():
-            return False
-        readiness = artifact.get("material_readiness") or {}
-        evidence = artifact.get("evidence_execution") or {}
-        return (
-            readiness.get("status") == "blocked"
-            or evidence.get("blocking_impact") == "blocking"
-        )
-
-    def _uses_report_markdown_materializer(self) -> bool:
-        return self.contract_profile == "v0_3" and self.spec.id in {
-            "report",
-            "qa_preparation",
-        }
-
-    def _uses_v03_format_renderer(self) -> bool:
-        return (
-            self.contract_profile in {"v0_3", "v0_4"}
-            and self.spec.id == "format"
-        )
+    def _uses_format_renderer(self) -> bool:
+        return self.spec.id == "format"
 
     def _adapt_v04_format_plan(
         self,
@@ -861,15 +702,6 @@ class StepRunner:
         }
 
     @staticmethod
-    def _report_render_succeeded(render_result: Any) -> bool:
-        return bool(
-            render_result is not None
-            and render_result.status == "rendered"
-            and render_result.output_path
-            and str(render_result.output_path).lower().endswith(".md")
-        )
-
-    @staticmethod
     def _format_render_succeeded(render_result: Any) -> bool:
         return bool(
             render_result is not None
@@ -877,7 +709,7 @@ class StepRunner:
             and render_result.output_path
         )
 
-    def _update_v03_format_render_result(
+    def _update_format_render_result(
         self, artifact: dict[str, Any], render_result: Any
     ) -> None:
         target = str(artifact.get("delivery_target") or "")
@@ -951,80 +783,22 @@ class StepRunner:
             asset["render_status"] = "rendered" if succeeded else "error"
 
     def _render_deliverable(self, artifact: dict[str, Any]):
-        """Materialize v0.3 report manuscripts or render format deliverables.
-
-        - report and qa_preparation materialize the canonical
-          `report_markdown` as `report.md`.
-        - format renders `formatted_material.v2` into the selected carrier.
+        """Render the v0.4 Format plan into the selected carrier.
 
         Returns a RenderResult, or None when this agent has no deliverable to
         render. Missing optional deps never crash: the RenderResult carries a
         `skipped_missing_dep` status instead.
         """
-        if self._uses_report_markdown_materializer():
-            try:
-                from presentation_agent.renderers.base import RenderResult
-
-                markdown = str(artifact.get("report_markdown") or "")
-                report_file = str(artifact.get("report_file") or "report.md")
-                if report_file != "report.md":
-                    raise ValueError("report.v1 report_file must be report.md")
-                if not markdown.strip():
-                    raise ValueError("report.v1 report_markdown is empty")
-                output_path = self.run_dir / report_file
-                output_path.write_text(markdown.rstrip() + "\n", encoding="utf-8")
-                render_result = RenderResult(
-                    status="rendered",
-                    fmt="markdown",
-                    fidelity="content",
-                    output_path=str(output_path),
-                    file_bytes=output_path.stat().st_size,
-                    unit_count=len(artifact.get("section_manifest") or []),
-                    detail="canonical report manuscript",
-                )
-                if self.spec.id == "report":
-                    self._apply_report_body_budget_audit(
-                        artifact, render_result
-                    )
-                return render_result
-            except Exception as exc:
-                from presentation_agent.renderers.base import RenderResult
-
-                return RenderResult(
-                    status="error",
-                    fmt="markdown",
-                    fidelity="content",
-                    detail=str(exc),
-                )
-        if self._uses_v03_format_renderer():
+        if self._uses_format_renderer():
             try:
                 from presentation_agent.renderers import render_material
                 from presentation_agent.renderers.base import RenderResult
 
                 input_data = self._load_input(self._load_state())
                 source_report = self._source_report_from_input(input_data)
-                material = artifact
-                visual_audit = None
-                if self.contract_profile == "v0_4":
-                    material = self._adapt_v04_format_plan(
-                        artifact, input_data, source_report or {}
-                    )
-                else:
-                    from presentation_agent.visual_evidence import (
-                        audit_required_visual_evidence,
-                        revision_requests_from_audit,
-                    )
-
-                    visual_audit = audit_required_visual_evidence(
-                        artifact, source_report
-                    )
-                    artifact["visual_evidence_check"] = visual_audit
-                    if visual_audit["passed"] is not True:
-                        artifact["upstream_revision_requests"] = (
-                            revision_requests_from_audit(visual_audit)
-                        )
-                    else:
-                        artifact.pop("upstream_revision_requests", None)
+                material = self._adapt_v04_format_plan(
+                    artifact, input_data, source_report or {}
+                )
                 render_result = render_material(
                     material,
                     self.run_dir,
@@ -1034,18 +808,6 @@ class StepRunner:
                     selected_capabilities=self.skill_package.selected_capabilities,
                     source_report=source_report,
                 )
-                if visual_audit is not None and visual_audit["passed"] is not True:
-                    detail = "；".join(
-                        str(item.get("reason") or "可视化论据不完整")
-                        for item in visual_audit.get("issues") or []
-                    )
-                    visual_detail = f"可视化论据检查未通过：{detail}"
-                    render_result.status = "error"
-                    render_result.detail = (
-                        f"{render_result.detail}; {visual_detail}"
-                        if render_result.detail
-                        else visual_detail
-                    )
                 if self.contract_profile == "v0_4":
                     from presentation_agent.renderers.visual_quality import (
                         audit_render_output,
@@ -1127,7 +889,10 @@ class StepRunner:
         render_result: Any, audit: dict[str, Any]
     ) -> None:
         render_result.metrics["body_budget_audit"] = audit
-        if audit.get("passed") is True:
+        if audit.get("passed") is True or (
+            audit.get("requires_user_decision") is True
+            and not audit.get("blocking_violations")
+        ):
             return
         detail = str(audit.get("detail") or "正文页数审计未通过")
         render_result.status = "error"
@@ -1160,6 +925,10 @@ class StepRunner:
             formatted=formatted,
             out_dir=self.run_dir,
             body_page_limit=limit,
+            maximum_body_page_limit=budget.get("maximum_body_page_limit"),
+            user_approved_body_page_limit=budget.get(
+                "user_approved_body_page_limit"
+            ),
             stage="report_preflight",
         )
         audit["body_char_min"] = budget.get("body_char_min")
@@ -1176,11 +945,12 @@ class StepRunner:
             "executive_summary_char_max"
         )
         audit["max_body_visuals"] = budget.get("max_body_visuals")
-        violations: list[str] = []
+        warnings: list[str] = []
+        blocking_violations: list[str] = []
         char_limit = budget.get("report_body_char_limit")
         if isinstance(char_limit, int) and audit.get("body_chars", 0) > char_limit:
-            violations.append(
-                f"Report 正文 {audit['body_chars']} 字符，超过预留视觉空间后的硬上限 {char_limit} 字符"
+            warnings.append(
+                f"Report 正文 {audit['body_chars']} 字符，超过 {char_limit} 字符的分页风险参考值"
             )
         es_chars = audit["executive_summary_chars"]
         es_min = budget.get("executive_summary_char_min")
@@ -1190,14 +960,17 @@ class StepRunner:
             and isinstance(es_max, int)
             and not es_min <= es_chars <= es_max
         ):
-            violations.append(
+            blocking_violations.append(
                 f"Executive Summary {es_chars} 字符，不在固定的 {es_min}–{es_max} 字符范围内"
             )
-        if violations:
+        if warnings:
+            audit["warnings"] = warnings
+        if blocking_violations:
+            audit["blocking_violations"] = blocking_violations
             audit["passed"] = False
             page_detail = str(audit.get("detail") or "").strip()
             audit["detail"] = "；".join(
-                item for item in [page_detail, *violations] if item
+                item for item in [page_detail, *blocking_violations] if item
             )
         self._mark_body_budget_result(render_result, audit)
 
@@ -1224,6 +997,10 @@ class StepRunner:
             formatted=formatted,
             out_dir=self.run_dir,
             body_page_limit=limit,
+            maximum_body_page_limit=budget.get("maximum_body_page_limit"),
+            user_approved_body_page_limit=budget.get(
+                "user_approved_body_page_limit"
+            ),
             stage="format_final",
         )
         audit["max_body_visuals"] = budget.get("max_body_visuals")

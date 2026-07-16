@@ -176,38 +176,15 @@ class ContextAssembler:
                 "projection_records": projection_records,
             },
         }
-        if self.contract_profile == "v0_4":
-            self._add_v04_canonical_inputs(
-                result,
-                worker_id=worker_id,
-                raw_brief=raw_brief,
-                artifacts=artifact_rows,
-                manager_task=manager_task,
-            )
-            result["input_readiness"]["status"] = "ready"
-            result["input_readiness"]["blocking_issues"] = []
-        elif self.contract_profile == "v0_3":
-            self._add_v03_canonical_inputs(
-                result,
-                worker_id=worker_id,
-                raw_brief=raw_brief,
-                artifacts=artifact_rows,
-                manager_task=manager_task,
-            )
-            # A large field may be projected inside its namespaced source while
-            # still being supplied in full as the v0.3 canonical input.  The
-            # readiness gate protects the Worker from preview-only material; it
-            # must not reject an input merely because an additional projected
-            # view of the same field also exists.
-            blocking_issues = [
-                issue
-                for issue in blocking_issues
-                if not self._has_full_canonical_input(result, issue["field"])
-            ]
-            result["input_readiness"]["status"] = (
-                "blocked" if blocking_issues else "ready"
-            )
-            result["input_readiness"]["blocking_issues"] = blocking_issues
+        self._add_v04_canonical_inputs(
+            result,
+            worker_id=worker_id,
+            raw_brief=raw_brief,
+            artifacts=artifact_rows,
+            manager_task=manager_task,
+        )
+        result["input_readiness"]["status"] = "ready"
+        result["input_readiness"]["blocking_issues"] = []
         return result
 
     @staticmethod
@@ -259,80 +236,6 @@ class ContextAssembler:
         result.update(
             evidence_runtime_fields(raw_brief, *[data for _, data in rows])
         )
-
-    @staticmethod
-    def _has_full_canonical_input(result: dict[str, Any], field: str) -> bool:
-        value = result.get(field)
-        if value in (None, "", [], {}):
-            return False
-        return not (
-            isinstance(value, dict)
-            and str(value.get("_projection") or "").endswith("preview")
-        ) and not (
-            isinstance(value, dict) and value.get("_projection") == "object_index"
-        )
-
-    @staticmethod
-    def _add_v03_canonical_inputs(
-        result: dict[str, Any],
-        *,
-        worker_id: str,
-        raw_brief: dict[str, Any],
-        artifacts: Iterable[tuple[Path, dict[str, Any]]],
-        manager_task: dict[str, Any],
-    ) -> None:
-        rows = list(artifacts)
-        schema_aliases = {
-            "evidence_catalog.v1": "evidence_catalog",
-            "analysis.v1": "analysis",
-            "storyline.v3": "storyline",
-            "report.v1": "report",
-            "formatted_material.v2": "formatted_material",
-        }
-        for _, data in rows:
-            alias = schema_aliases.get(str(data.get("schema") or ""))
-            if alias:
-                result[alias] = data
-        if worker_id == "analysis":
-            catalog = raw_brief.get("evidence_catalog")
-            if isinstance(catalog, dict):
-                result["evidence_catalog"] = catalog
-                result["evidence_catalog_ref"] = raw_brief.get(
-                    "evidence_catalog_ref", "raw_brief:evidence_catalog"
-                )
-            materials = (
-                raw_brief.get("raw_materials")
-                or raw_brief.get("materials")
-            )
-            if not materials and raw_brief.get("source_units"):
-                materials = [
-                    {
-                        "material_type": raw_brief.get("material_type", "source_units"),
-                        "source_units": raw_brief.get("source_units"),
-                        "known_limitations": raw_brief.get("known_limitations", []),
-                    }
-                ]
-            if not materials and raw_brief.get("rows"):
-                materials = [
-                    {
-                        "material_type": raw_brief.get("material_type", "table"),
-                        "metric_definition": raw_brief.get("metric_definition", ""),
-                        "time_window": raw_brief.get("time_window", ""),
-                        "rows": raw_brief.get("rows"),
-                        "known_limitations": raw_brief.get("known_limitations", []),
-                    }
-                ]
-            if materials:
-                result["raw_materials"] = materials
-        if worker_id == "format":
-            target = (
-                manager_task.get("delivery_target")
-                or manager_task.get("context", {}).get("delivery_target")
-                or "document"
-            )
-            result["delivery_target"] = target
-        evidence_fields = evidence_runtime_fields(raw_brief, *[data for _, data in rows])
-        result.update(evidence_fields)
 
     @staticmethod
     def _source_id(path: Path, data: dict[str, Any], index: int) -> str:

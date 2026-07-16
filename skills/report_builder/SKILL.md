@@ -245,6 +245,13 @@ Storyline 确认 gate：
 - 用户选择“不好，重新写”：必须让用户说明原因，再执行 `report feedback --text '<不好 + 原因>'`。不要直接 approve；runtime 会复用当前 Storyline task 进入 revise，修订后会再次回到 Storyline 确认 gate。
 - 用户选择“我自己修改”：把用户的非结构化修改意见原样放进 `report feedback --text`。不要由宿主直接改 canonical Storyline；当前 Storyline agent 会根据反馈重写完整故事线并再次请求确认。
 
+篇幅确认 gate：
+
+- runtime 以 Brief 页数为目标，并自动容许正文最多多 1 页；字符预算只作写作引导与预警。
+- 若 `human_gate=page_budget`，先展示实际页数、目标页数和自动容差上限，再透传 runtime 返回的单题选择面板。
+- 用户选择“接受当前篇幅”：执行 `report feedback --text '放宽'`，runtime 将当前实际页数写为用户批准的新上限并继续。
+- 用户选择“继续收窄”：执行 `report feedback --text '收窄'`，runtime 复用当前 Report/Format task 返工；不要自行改 Brief 页数或跳过该 gate。
+
 示例：
 
 ```bash
