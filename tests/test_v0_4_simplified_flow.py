@@ -62,6 +62,11 @@ class V04SimplifiedFlowTests(unittest.TestCase):
         analysis_skill = (ROOT / "skills/analysis/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("证据综合与候选论点设计者", analysis_skill)
         self.assertIn("候选论点金字塔", analysis_skill)
+        self.assertIn("共享 findings pool", analysis_skill)
+        self.assertIn("不是最终报告的不同章节", analysis_skill)
+        self.assertIn("## 提交前自检", analysis_skill)
+        self.assertIn("章节测试", analysis_skill)
+        self.assertIn("选择测试", analysis_skill)
         self.assertIn("## Workflow", analysis_skill)
         self.assertIn("analysis.md", analysis_skill)
     def test_step_runner_commits_canonical_markdown_and_tiny_receipt(self) -> None:
