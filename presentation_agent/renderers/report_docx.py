@@ -8,6 +8,7 @@ appendices directly; it never interprets page/content/material units.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -160,6 +161,24 @@ def _set_run_font(run: Any, *, size: float | None = None, color: str | None = No
         run.italic = italic
 
 
+def _add_markdown_runs(
+    paragraph: Any,
+    text: str,
+    *,
+    size: float | None = None,
+    color: str = _INK,
+) -> None:
+    for part in re.split(r"(\*\*.+?\*\*)", str(text)):
+        if not part:
+            continue
+        bold = part.startswith("**") and part.endswith("**") and len(part) >= 4
+        value = part[2:-2] if bold else part
+        if not value:
+            continue
+        run = paragraph.add_run(value)
+        _set_run_font(run, size=size, color=color, bold=bold)
+
+
 def _style_document(doc: Any) -> None:
     from docx.enum.style import WD_STYLE_TYPE
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -205,18 +224,24 @@ def _style_document(doc: Any) -> None:
         style.paragraph_format.space_after = Pt(after)
         style.paragraph_format.keep_with_next = True
 
-    bullet = doc.styles["List Bullet"]
-    bullet.font.name = "Arial"
-    bullet._element.rPr.rFonts.set(qn("w:ascii"), "Arial")
-    bullet._element.rPr.rFonts.set(qn("w:hAnsi"), "Arial")
-    bullet._element.rPr.rFonts.set(qn("w:eastAsia"), "Kaiti SC")
-    bullet.font.size = Pt(12)
-    bullet.paragraph_format.left_indent = Inches(0.5)
-    bullet.paragraph_format.first_line_indent = Inches(-0.25)
-    bullet.paragraph_format.space_after = Pt(8)
-    bullet.paragraph_format.line_spacing = 1.167
+    list_tokens = {
+        "List Bullet": (12, 0.50, -0.25, 8),
+        "List Bullet 2": (11.5, 0.75, -0.20, 4),
+        "List Bullet 3": (11, 1.00, -0.20, 3),
+    }
+    for name, (size, left_indent, hanging_indent, space_after) in list_tokens.items():
+        bullet = doc.styles[name]
+        bullet.font.name = "Arial"
+        bullet._element.rPr.rFonts.set(qn("w:ascii"), "Arial")
+        bullet._element.rPr.rFonts.set(qn("w:hAnsi"), "Arial")
+        bullet._element.rPr.rFonts.set(qn("w:eastAsia"), "Kaiti SC")
+        bullet.font.size = Pt(size)
+        bullet.paragraph_format.left_indent = Inches(left_indent)
+        bullet.paragraph_format.first_line_indent = Inches(hanging_indent)
+        bullet.paragraph_format.space_after = Pt(space_after)
+        bullet.paragraph_format.line_spacing = 1.167
 
-    for name in ("Report Citation", "Report Note", "Report Callout"):
+    for name in ("Report Citation", "Report Source", "Report Note", "Report Callout"):
         if name not in doc.styles:
             doc.styles.add_style(name, WD_STYLE_TYPE.PARAGRAPH)
     citation = doc.styles["Report Citation"]
@@ -229,6 +254,18 @@ def _style_document(doc: Any) -> None:
     citation.font.italic = True
     citation.paragraph_format.space_before = Pt(4)
     citation.paragraph_format.space_after = Pt(4)
+    source = doc.styles["Report Source"]
+    source.font.name = "Arial"
+    source._element.rPr.rFonts.set(qn("w:ascii"), "Arial")
+    source._element.rPr.rFonts.set(qn("w:hAnsi"), "Arial")
+    source._element.rPr.rFonts.set(qn("w:eastAsia"), "Kaiti SC")
+    source.font.size = Pt(9)
+    source.font.color.rgb = RGBColor.from_string(_MUTED)
+    source.paragraph_format.left_indent = Inches(0.5)
+    source.paragraph_format.first_line_indent = Inches(0)
+    source.paragraph_format.space_before = Pt(2)
+    source.paragraph_format.space_after = Pt(6)
+    source.paragraph_format.line_spacing = 1.0
     note = doc.styles["Report Note"]
     note.font.name = "Arial"
     note._element.rPr.rFonts.set(qn("w:ascii"), "Arial")
@@ -275,14 +312,22 @@ def _add_heading(doc: Any, text: str, level: int) -> Any:
     return paragraph
 
 
-def _add_bullets(doc: Any, items: Iterable[Any]) -> None:
+def _add_bullets(doc: Any, items: Iterable[Any], *, level: int = 0) -> None:
+    styles = ("List Bullet", "List Bullet 2", "List Bullet 3")
+    style = styles[max(0, min(level, len(styles) - 1))]
     for item in items:
         text = str(item).strip()
         if not text:
             continue
-        paragraph = doc.add_paragraph(style="List Bullet")
-        run = paragraph.add_run(text)
-        _set_run_font(run, color=_INK)
+        paragraph = doc.add_paragraph(style=style)
+        _add_markdown_runs(paragraph, text)
+
+
+def _add_source(doc: Any, text: str) -> None:
+    if doc.paragraphs:
+        doc.paragraphs[-1].paragraph_format.keep_with_next = True
+    paragraph = doc.add_paragraph(style="Report Source")
+    _add_markdown_runs(paragraph, str(text).strip(), size=9, color=_MUTED)
 
 
 def _add_note_box(doc: Any, label: str, text: str, *, caveat: bool = False) -> None:

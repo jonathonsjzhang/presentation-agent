@@ -19,7 +19,7 @@ Report 是内容真相源；Format 不再写稿，也不负责真实分页、字
 
 - 不改写、缩写、扩写、调序或删除 `report_markdown`。
 - 不新增观点、数字、引语、因果强度或 caveat。
-- 视觉标题只说明该证据支持的判断，不升级原稿强度。
+- 视觉标题只说明该证据支持的判断，不把相关性、个案或描述性比较升级为因果、总体规律或效果承诺；callout 使用报告已有的判断、原话或边界，不另造一句更强的文案。
 - 如果正文过密或超页，Format 不删稿；由 Report 处理内容压缩，由 renderer/runtime 处理分页和版面。
 
 ### 2. 一个视觉只回答一个分析问题
@@ -41,7 +41,7 @@ Report 是内容真相源；Format 不再写稿，也不负责真实分页、字
 
 ### 4. 视觉必须绑定真实来源
 
-每个 visual 都要有可解析的 `source_refs`，并能回到报告中的证据、可读来源，或 runtime 提供的 E-id / `E-id:data_asset_id`。
+每个 visual 都要有可解析的 `source_refs`，并能回到报告中的证据、可读来源，或 runtime 提供的 E-id / `E-id:data_asset_id`。引用不仅要证明“来源存在”，还要覆盖视觉中的类别、数值、系列、表格行列、象限标签或 callout 文本；时间窗、单位、样本、分母和比较基线保持与报告一致。
 
 有可核对的 renderer-ready 数据时提交 `data`；若数据已登记在 `evidence_assets`，优先提交精确引用，让 runtime 做确定性投影。证据不足时不得模拟数据或静默换命题；保留真实引用，让 runtime 以结构化错误退回 Evidence / Analysis / Format。
 
@@ -60,17 +60,30 @@ Report 是内容真相源；Format 不再写稿，也不负责真实分页、字
 
 ### 2. 绑定来源并选择原语
 
-为每项视觉绑定最小充分的 `source_refs`，再选择 chart / table / matrix / callout。先按分析任务选原语，再组织数据；不要从“想画什么图”反推业务命题。
+为每项视觉绑定最小充分的 `source_refs`，核对报告中的指标口径与比较关系，再选择 chart / table / matrix / callout。先按分析任务选原语，再组织数据；不要从“想画什么图”反推业务命题。
 
 若 `evidence_assets` 已有精确匹配，优先引用资产；有安全的 chart-ready / table-ready 数据时可直接提交。缺少可绘制数据时不抄造，交由 runtime enrichment 与 preflight 明确阻断。
 
 ### 3. 提交最小视觉计划
 
-只输出 renderer 做视觉编译所需的字段，不复制正文，不提交 delivery units、分页计划、字体颜色、quality checks 或 render manifest。
+只输出 renderer 做视觉编译所需的字段，不复制正文，不提交 delivery units、分页计划、字体颜色、quality checks 或 render manifest。需要指定位置时，`after_heading` 必须逐字对应报告中真实存在的章节标题；合并回答同一问题、使用同一证据的重复视觉。
 
 ### 4. 由 runtime 完成真实质量闭环
 
 runtime 依次执行：证据投影 → renderer capability preflight → 文件与资产生成 → 页面快照 → 视觉质量审计。空白/纯黑/缺失资产、无法生成页面快照或载体结构错误都会阻断交付；这些结果来自真实文件，不由 Format 自评。
+
+## 提交前检查
+
+提交前逐项检查并在已批准 Report、视觉意图和证据边界内直接修正，不输出检查过程：
+
+- **内容与判断保真：** 每个视觉的标题、数据、标签和 callout 是否只呈现 `report_markdown` 已经建立的判断，没有改写正文、遗漏会改变理解的限定条件，或提高归因与确定性？视觉标题是否是完整、可理解的判断，而不是脱离上下文的抽象标签？
+- **视觉必要性：** 每个视觉是否回答一个明确的阅读问题，并比保留正文更快地呈现关键比较、变化、精确值、2×2 关系、原话或重大边界？是否存在只为装饰、填空、凑数量或重复正文而创建的视觉？
+- **来源与口径：** 每项视觉是否有最小充分且可解析的 `source_refs`，能够覆盖其中的全部类别、数值、系列、行列、象限标签或文本？时间窗、单位、样本、分母和比较基线是否与报告一致，是否存在抄造、补齐或静默替换数据？
+- **原语与数据形状：** `chart` 是否只使用 renderer 支持的 bar / line，非空 categories 与 values 或各 series 等长且数值可解析；`table` 的 columns/headers 是否非空并与每行等长；`matrix` 是否确为 2×2 且恰有四个非空标签；`callout` 是否提供实际 text/quote？依赖 runtime 投影时，引用是否精确到可确定性生成这些字段的 evidence asset？
+- **位置与去重：** `after_heading` 是否逐字对应报告中的真实标题，并把视觉放在它所证明的判断之后？同一 marker、阅读问题或完整数据集是否只映射一次，没有错章、重复、漏放或用多个视觉反复表达同一信息？
+- **输出与责任边界：** 是否只提交 `format_plan.v1` 允许的字段，没有复制正文、加入分页计划、字体颜色、样式指令、自检结果或 render manifest？Format 是否只修正视觉选择、原语、来源、数据形状和插入位置，而没有代替 Report 修稿或把 runtime 的真实渲染验收写成自我声明？
+
+若问题能通过删除非必要视觉、更换原生原语、修正来源引用、数据形状或插入位置解决，先在 Format 阶段修正；若视觉成立需要新增观点、改写正文、改变指标口径或补造证据，应放弃该视觉，并由 Manager 判断返回 Report、Analysis 或 Evidence。Format 不承担语义修复，也不以视觉包装掩盖上游缺口。
 
 ## Output
 
@@ -78,7 +91,7 @@ runtime 依次执行：证据投影 → renderer capability preflight → 文件
 
 - `type`：chart / table / matrix / callout
 - `title`：该视觉支持的判断，保持原稿强度
-- `source_refs`：真实且可解析的来源引用
+- `source_refs`：真实且可解析的机器追溯引用，只用于证据绑定和 runtime 物化，不作为读者可见来源文案
 - `after_heading`：仅在需要指定插入章节时提供
 - `data`：有 renderer-ready 数据时提供；若依赖 runtime 证据投影可暂不提供
 

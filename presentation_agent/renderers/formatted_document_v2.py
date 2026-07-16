@@ -15,6 +15,8 @@ from presentation_agent.renderers.report_docx import (
     _add_heading,
     _add_note_box,
     _add_page_field,
+    _add_source,
+    _add_markdown_runs,
     _set_run_font,
     _style_document,
 )
@@ -23,6 +25,8 @@ import re
 
 CAPABILITY_ID = "format.document.v2"
 PRESET_NAME = "standard_business_brief"
+_LIST_ITEM_RE = re.compile(r"^(?P<indent>[ \t]*)[-*+]\s+(?P<text>.+)$")
+_SOURCE_LINE_RE = re.compile(r"^\s*(?:Source|来源)\s*[:：]\s*.+$", re.IGNORECASE)
 
 
 def _normalize_heading(heading: str) -> str:
@@ -68,22 +72,6 @@ def _add_toc(doc: Any, report: dict[str, Any]) -> None:
         paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
         run = paragraph.add_run(entry)
         _set_run_font(run, size=11 if index else 12, color="253746", bold=index == 0)
-
-
-def _add_asset_trace(doc: Any, asset: dict[str, Any]) -> None:
-    bits = [
-        "Section: " + "、".join(asset.get("source_section_ids") or []),
-        "Claim: " + "、".join(asset.get("source_claim_ids") or []) or "Claim: -",
-        "Evidence: " + "、".join(asset.get("source_evidence_refs") or []) or "Evidence: -",
-    ]
-    paragraph = doc.add_paragraph(style="Report Citation")
-    run = paragraph.add_run(" | ".join(bits))
-    _set_run_font(run, size=8, color="666666", italic=True)
-    note = str(asset.get("source_note") or "").strip()
-    if note:
-        paragraph = doc.add_paragraph(style="Report Citation")
-        run = paragraph.add_run(note)
-        _set_run_font(run, size=8, color="666666", italic=True)
 
 
 def _chart_png(asset: dict[str, Any], path: Path) -> Path:
@@ -410,7 +398,7 @@ def _render_visual_asset(
         rows = data.get("rows") or []
         if not columns:
             raise ValueError(f"{asset.get('asset_id')}: table requires columns/headers")
-        _add_data_table(doc, title, columns, rows, asset.get("source_evidence_refs") or [], asset.get("caveats") or [])
+        _add_data_table(doc, title, columns, rows, (), asset.get("caveats") or [])
     elif asset_type == "callout":
         _add_note_box(doc, title, str(asset.get("reader_takeaway") or ""))
     elif asset_type == "chart" and not _chart_data_ready(asset):
@@ -447,7 +435,6 @@ def _render_visual_asset(
                 title,
                 str(asset.get("reader_takeaway") or f"「{title}」渲染失败，数据格式不兼容，暂以文本呈现。"),
             )
-    _add_asset_trace(doc, asset)
     for caveat in asset.get("caveats") or []:
         _add_note_box(doc, "图表边界", str(caveat), caveat=True)
 
@@ -580,12 +567,17 @@ def _render_markdown_body(
             _add_note_box(doc, "边界说明", line[2:].strip(), caveat=True)
             index += 1
             continue
-        if line.startswith(("- ", "* ")):
-            items: list[str] = []
-            while index < len(lines) and lines[index].startswith(("- ", "* ")):
-                items.append(lines[index][2:].strip())
-                index += 1
-            _add_bullets(doc, items)
+        source_match = _SOURCE_LINE_RE.match(line)
+        if source_match:
+            _add_source(doc, line.strip())
+            index += 1
+            continue
+        list_match = _LIST_ITEM_RE.match(line)
+        if list_match:
+            indent = list_match.group("indent").expandtabs(2)
+            level = min(2, len(indent) // 2)
+            _add_bullets(doc, [list_match.group("text")], level=level)
+            index += 1
             continue
         if line.startswith("|") and index + 1 < len(lines) and lines[index + 1].startswith("|"):
             table_lines: list[str] = []
@@ -607,12 +599,13 @@ def _render_markdown_body(
             index < len(lines)
             and lines[index].strip()
             and not lines[index].startswith(("### ", "> ", "- ", "* ", "|", "[可视化论据："))
+            and _LIST_ITEM_RE.match(lines[index]) is None
+            and _SOURCE_LINE_RE.match(lines[index]) is None
         ):
             paragraph_lines.append(lines[index].strip())
             index += 1
         paragraph = doc.add_paragraph()
-        run = paragraph.add_run(" ".join(paragraph_lines))
-        _set_run_font(run, color="253746")
+        _add_markdown_runs(paragraph, " ".join(paragraph_lines), color="253746")
     return rendered_assets
 
 

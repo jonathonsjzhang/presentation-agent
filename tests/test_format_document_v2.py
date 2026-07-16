@@ -44,7 +44,7 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 self.assertTrue(str(result.output_path).endswith(suffix))
                 self.assertTrue(Path(str(result.output_path)).is_file())
 
-    def test_fixture_renders_polished_traceable_docx(self) -> None:
+    def test_fixture_renders_polished_reader_clean_docx(self) -> None:
         from docx import Document
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -74,15 +74,55 @@ class FormattedDocumentV2Tests(unittest.TestCase):
                 "AI 助手用户留存改善机会",
                 "Executive Summary",
                 "34%",
-                "Section: 一、成果保存与回访共同出现，但因果仍待验证",
-                "Evidence: E-Q-01",
                 "结论与战略含义",
             ):
                 self.assertIn(text, extracted)
+            self.assertNotIn("Section:", extracted)
+            self.assertNotIn("Claim:", extracted)
+            self.assertNotIn("Evidence:", extracted)
+            self.assertNotIn("[EV-", extracted)
             self.assertTrue(document.inline_shapes)
             self.assertEqual(document.paragraphs[0].text, "AI 助手用户留存改善机会")
             self.assertEqual(document.paragraphs[0].runs[0].font.size.pt, 24)
             self.assertEqual(document.paragraphs[1].text, "Executive Summary")
+
+    def test_renderer_preserves_nested_lists_and_styles_reader_sources(self) -> None:
+        from docx import Document
+
+        report = load(REPORT)
+        report["report_markdown"] = (
+            "# 列表与来源测试\n\n"
+            "## Executive Summary\n\n"
+            "- **一级结论。** 说明核心判断。\n"
+            "  - 二级证据解释为什么成立。\n"
+            "    - 三级案例补充具体边界。\n\n"
+            "  Source：专家访谈，2026 年 7 月\n"
+        )
+        formatted = load(FORMATTED)
+        formatted["visuals"] = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = render_formatted_document_v2(formatted, report, Path(temp_dir))
+            self.assertEqual(result.status, "rendered", result.detail)
+            document = Document(result.output_path)
+
+            paragraphs = {paragraph.text: paragraph for paragraph in document.paragraphs}
+            top_level = paragraphs["一级结论。 说明核心判断。"]
+            self.assertEqual(top_level.style.name, "List Bullet")
+            self.assertTrue(top_level.runs[0].bold)
+            self.assertEqual(
+                paragraphs["二级证据解释为什么成立。"].style.name,
+                "List Bullet 2",
+            )
+            self.assertEqual(
+                paragraphs["三级案例补充具体边界。"].style.name,
+                "List Bullet 3",
+            )
+            source = paragraphs["Source：专家访谈，2026 年 7 月"]
+            self.assertEqual(source.style.name, "Report Source")
+            self.assertEqual(source.runs[0].font.size.pt, 9)
+            self.assertEqual(str(source.runs[0].font.color.rgb), "666666")
+            self.assertFalse(any(p.text.startswith("- ") for p in document.paragraphs))
+            self.assertNotIn("**", "\n".join(p.text for p in document.paragraphs))
 
     def test_renderer_does_not_require_worker_generated_caveat_register(self) -> None:
         formatted = load(FORMATTED)
