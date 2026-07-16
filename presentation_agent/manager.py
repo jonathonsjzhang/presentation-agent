@@ -1198,6 +1198,8 @@ class ManagerOrchestrator:
             )
         state["last_failure_signature"] = None
         state["failure_streak"] = 0
+        state["last_failure_family"] = None
+        state["failure_family_streak"] = 0
         if agent_id in {"analysis", "storyline"}:
             next_agent = "storyline" if agent_id == "analysis" else "report"
             state["current_actor"] = "human"
@@ -1295,7 +1297,7 @@ class ManagerOrchestrator:
         task["last_failure"] = failure
         task["failure_streak"] = streak
         self._replace_task(state, task)
-        if streak >= 2:
+        if max(streak, int(state.get("failure_family_streak") or 0)) >= 2:
             return self._open_failure_circuit(state, task, failure)
 
         runner = StepRunner(
@@ -1331,7 +1333,7 @@ class ManagerOrchestrator:
         task["last_failure"] = failure
         task["failure_streak"] = streak
         self._replace_task(state, task)
-        if streak >= 2:
+        if max(streak, int(state.get("failure_family_streak") or 0)) >= 2:
             return self._open_failure_circuit(state, task, failure)
         target = str(failure.get("responsible_stage") or "format")
         if target not in {"analysis", "storyline", "report", "qa_preparation", "format"}:
@@ -1368,8 +1370,23 @@ class ManagerOrchestrator:
         )
         state["last_failure_signature"] = signature
         state["failure_streak"] = streak
+        family = ":".join(
+            [
+                str(failure.get("responsible_stage") or "runtime"),
+                str(failure.get("error_code") or "runtime_failure"),
+            ]
+        )
+        family_streak = (
+            int(state.get("failure_family_streak") or 0) + 1
+            if state.get("last_failure_family") == family
+            else 1
+        )
+        state["last_failure_family"] = family
+        state["failure_family_streak"] = family_streak
         row = dict(failure)
         row["streak"] = streak
+        row["family"] = family
+        row["family_streak"] = family_streak
         row["at"] = now_iso()
         state.setdefault("runtime_failures", []).append(row)
         return streak
@@ -2296,14 +2313,32 @@ class ManagerOrchestrator:
         )
         if isinstance(previous, dict):
             previous_spawn = previous.get("spawn")
+            previous_detail = (
+                previous_spawn.get("detail")
+                if isinstance(previous_spawn, dict)
+                and isinstance(previous_spawn.get("detail"), dict)
+                else {}
+            )
+            previous_dispatch = (
+                previous_detail.get("dispatch")
+                if isinstance(previous_detail, dict)
+                and isinstance(previous_detail.get("dispatch"), dict)
+                else {}
+            )
+            current_instruction_hash = (
+                hashlib.sha256(Path(inst_path).read_bytes()).hexdigest()
+                if Path(inst_path).is_file()
+                else ""
+            )
             if (
-                previous.get("step") == instruction.get("step")
-                and previous.get("instruction_path")
+                previous.get("instruction_path")
                 == instruction.get("instruction_path")
                 and previous.get("output_path") == instruction.get("output_path")
                 and isinstance(previous_spawn, dict)
                 and previous_spawn.get("status") == "dispatched"
                 and previous_spawn.get("adapter") == adapter.kind
+                and str(previous_dispatch.get("instruction_sha256") or "")
+                == current_instruction_hash
             ):
                 instruction["spawn"] = previous_spawn
                 return
@@ -2374,13 +2409,25 @@ class ManagerOrchestrator:
         if not output_path.is_file():
             raise StepError(f"sub-agent 输出不存在: {output_path}")
         request_payload = read_json(request_path, default={})
-        dispatch = (
+        request_dispatch = (
             request_payload.get("dispatch")
             if isinstance(request_payload, dict)
             else {}
         )
+        dispatch = (
+            detail.get("dispatch")
+            if isinstance(detail, dict)
+            and isinstance(detail.get("dispatch"), dict)
+            else request_dispatch
+        )
         if not isinstance(dispatch, dict):
             dispatch = {}
+        if (
+            isinstance(request_dispatch, dict)
+            and request_dispatch.get("dispatch_id")
+            and dispatch.get("dispatch_id") != request_dispatch.get("dispatch_id")
+        ):
+            raise StepError("spawn request 与 Manager dispatch snapshot 不一致")
         expected_output = str(dispatch.get("output_path") or "")
         if expected_output and Path(expected_output).resolve() != output_path.resolve():
             raise StepError("spawn dispatch 绑定的 output_path 与当前 instruction 不一致")

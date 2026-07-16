@@ -48,9 +48,11 @@ description: Read a complete Markdown strategy report as a thoughtful audience w
 
 ### 四、问题清单可直接进入最终材料
 
-问题清单最终由 Format 放在报告末尾、附录之后。你提交独立 Markdown，标题使用：
+问题清单最终由 Format 放在报告末尾、附录之后。你提交独立 Markdown，固定使用下面的两层标题结构：
 
 ```markdown
+# [项目主题]｜听众追问准备
+
 ## 听众可能追问的问题
 ```
 
@@ -100,6 +102,17 @@ description: Read a complete Markdown strategy report as a thoughtful audience w
 
 ## Output
 
-只提交独立的 `qa.md`：以 `# 听众可能追问的问题` 为标题，输出编号问题清单，不复制或改写 Report 正文。Format 会把该清单追加到最终材料。
+只提交独立的 `qa.md`，完整结构固定为：
+
+```markdown
+# [项目主题]｜听众追问准备
+
+## 听众可能追问的问题
+
+1. [完整问句]
+2. [完整问句]
+```
+
+一级标题说明项目与文档用途；二级标题必须逐字使用“听众可能追问的问题”。随后输出编号问题清单，不复制或改写 Report 正文。Format 会把该清单追加到最终材料。
 
 Format 的纯视觉局部返工可以复用当前 `qa.md`；Report、Storyline 或 Analysis 发生修改时，本阶段的 canonical artifact 自动失效并重新生成，避免旧问题清单重新引入已删除内容。

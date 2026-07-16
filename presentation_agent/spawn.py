@@ -460,6 +460,26 @@ def _attach_dispatch_contract(
     return dispatch
 
 
+def _spawn_request_path(
+    request: SpawnRequest, dispatch: dict[str, Any]
+) -> Path:
+    dispatch_id = str(dispatch.get("dispatch_id") or uuid.uuid4().hex)
+    return request.task_dir / f"spawn_request_{dispatch_id}.json"
+
+
+def _write_spawn_request(
+    request: SpawnRequest,
+    dispatch: dict[str, Any],
+    spec: dict[str, Any],
+) -> Path:
+    """Write an immutable request plus a legacy latest-request alias."""
+
+    spawn_file = _spawn_request_path(request, dispatch)
+    write_json(spawn_file, spec)
+    write_json(request.task_dir / "spawn_request.json", spec)
+    return spawn_file
+
+
 class InlineSpawnAdapter(SpawnAdapter):
     """Default adapter = today's behaviour. Spawns nothing.
 
@@ -506,8 +526,7 @@ class WorkBuddySpawnAdapter(SpawnAdapter):
             },
         }
         dispatch = _attach_dispatch_contract(spec, request)
-        spawn_file = request.task_dir / "spawn_request.json"
-        write_json(spawn_file, spec)
+        spawn_file = _write_spawn_request(request, dispatch, spec)
         return SpawnResult(
             status="dispatched",
             artifact_path=None,
@@ -556,8 +575,7 @@ class ClaudeCodeSpawnAdapter(SpawnAdapter):
             },
         }
         dispatch = _attach_dispatch_contract(spec, request)
-        spawn_file = request.task_dir / "spawn_request.json"
-        write_json(spawn_file, spec)
+        spawn_file = _write_spawn_request(request, dispatch, spec)
         return SpawnResult(
             status="dispatched",
             artifact_path=None,
@@ -609,8 +627,7 @@ class CodexSpawnAdapter(SpawnAdapter):
             },
         }
         dispatch = _attach_dispatch_contract(spec, request)
-        spawn_file = request.task_dir / "spawn_request.json"
-        write_json(spawn_file, spec)
+        spawn_file = _write_spawn_request(request, dispatch, spec)
         return SpawnResult(
             status="dispatched",
             artifact_path=None,
@@ -784,8 +801,7 @@ class CLISpawnAdapter(SpawnAdapter):
             },
         }
         dispatch = _attach_dispatch_contract(spec, request)
-        spawn_file = request.task_dir / "spawn_request.json"
-        write_json(spawn_file, spec)
+        spawn_file = _write_spawn_request(request, dispatch, spec)
 
         if not self.execute:
             # Emit-only: a capable environment runs argv later.

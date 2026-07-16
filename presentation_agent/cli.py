@@ -896,7 +896,8 @@ def _copy_report_output(runner: StepRunner, output_file: Path) -> None:
     kind = kind_map.get(str(step))
     if not kind:
         raise StepError(f"current step {step} is not awaiting host output")
-    target = runner._handoff_output_path(kind)
+    target_path = str(status.get("output_path") or "")
+    target = Path(target_path) if target_path else runner._handoff_output_path(kind)
     target.write_text(output_file.read_text(encoding="utf-8"), encoding="utf-8")
 
 

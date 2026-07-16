@@ -200,7 +200,10 @@ class StepRunner:
         if step == "done":
             raise StepError("stage 已完成，无需 prepare")
         if step in ("awaiting_gen_output", "awaiting_revise_output"):
-            instr_path = self._instruction_path_for(step)
+            instr_path = Path(
+                self._last_instruction_path(state)
+                or self._instruction_path_for(step)
+            )
             raise StepError(
                 f"已处于 {step}，指令文件 {instr_path.name} 已就绪，请先 commit"
             )
@@ -333,10 +336,12 @@ class StepRunner:
                 }
             )
 
-        instruction_path = self.handoff_dir / "instruction_gen.md"
-        output_path = self._handoff_output_path("gen")
+        instruction_path = self.handoff_dir / f"instruction_gen_round_{round_idx}.md"
+        output_path = self._handoff_output_path("gen", round_idx)
         self._write_instruction(instruction_path, output_path, request, kind="gen")
 
+        state["current_instruction_path"] = str(instruction_path)
+        state["current_output_path"] = str(output_path)
         state["current_step"] = "awaiting_gen_output"
         self._write_state(state, "prepare_gen", "generation 指令已就绪，等待宿主模型写入")
 
@@ -383,11 +388,14 @@ class StepRunner:
             previous_artifact=previous_artifact,
         )
 
-        instruction_path = self.handoff_dir / "instruction_revise.md"
-        output_path = self._handoff_output_path("revise")
+        next_round = round_idx + 1
+        instruction_path = self.handoff_dir / f"instruction_revise_round_{next_round}.md"
+        output_path = self._handoff_output_path("revise", next_round)
         self._write_instruction(instruction_path, output_path, request, kind="revise")
 
-        state["round_index"] = round_idx + 1
+        state["round_index"] = next_round
+        state["current_instruction_path"] = str(instruction_path)
+        state["current_output_path"] = str(output_path)
         state["current_step"] = "awaiting_revise_output"
         self._write_state(state, "prepare_revise", f"revise round {state['round_index']} 指令已就绪")
 
@@ -502,7 +510,7 @@ class StepRunner:
         keep resolving paths without duplicating the document.
         """
 
-        output_path = self._handoff_output_path(kind)
+        output_path = self._current_handoff_output_path(state, kind)
         if not output_path.is_file():
             raise StepError(
                 f"handoff 输出文件不存在: {output_path}。"
@@ -1296,7 +1304,10 @@ class StepRunner:
         return applied
 
     def _read_and_validate_output(self, filename: str, state: dict[str, Any]) -> dict[str, Any]:
-        output_path = self.handoff_dir / filename
+        output_path = self._current_handoff_output_path(
+            state,
+            "revise" if "revise" in filename else "gen",
+        )
         if not output_path.exists():
             raise StepError(
                 f"handoff 输出文件不存在: {output_path}。"
@@ -1447,9 +1458,21 @@ class StepRunner:
             == "markdown"
         )
 
-    def _handoff_output_path(self, kind: str) -> Path:
+    def _handoff_output_path(
+        self, kind: str, round_index: int | None = None
+    ) -> Path:
         suffix = ".md" if self._is_markdown_artifact() else ".json"
+        if round_index is not None:
+            return self.handoff_dir / f"output_{kind}_round_{round_index}{suffix}"
         return self.handoff_dir / f"output_{kind}{suffix}"
+
+    def _current_handoff_output_path(
+        self, state: dict[str, Any], kind: str
+    ) -> Path:
+        current = str(state.get("current_output_path") or "")
+        if current:
+            return Path(current)
+        return self._handoff_output_path(kind)
 
     def _schema_quick_ref(self) -> str:
         """Extract required fields + types from the output schema for worker guidance."""
@@ -1692,6 +1715,13 @@ class StepRunner:
 
     def _last_instruction_path(self, state: dict[str, Any]) -> Optional[str]:
         step = state.get("current_step", "")
+        current = str(state.get("current_instruction_path") or "")
+        if current and step in (
+            "awaiting_gen_output",
+            "awaiting_revise_output",
+            "awaiting_evidence_output",
+        ):
+            return current
         if step in (
             "awaiting_gen_output", "awaiting_revise_output",
             "awaiting_evidence_output",
@@ -1706,6 +1736,13 @@ class StepRunner:
 
     def _last_output_path(self, state: dict[str, Any]) -> Optional[str]:
         step = state.get("current_step", "")
+        current = str(state.get("current_output_path") or "")
+        if current and step in (
+            "awaiting_gen_output",
+            "awaiting_revise_output",
+            "awaiting_evidence_output",
+        ):
+            return current
         kind_map = {
             "awaiting_gen_output": "gen",
             "awaiting_revise_output": "revise",
