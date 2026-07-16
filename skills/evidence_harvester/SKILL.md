@@ -28,23 +28,19 @@ description: Build a complete, source-traceable evidence catalog before argument
 5. 每个 evidence item 内可以概括多个定量信号、访谈主题、案例、caveat、反证、解释变量、作者判断和方法定义；这些是 item 的内容，不是额外 item。对 item 想清 observation、scope、limitations 和 attribution，不得把作者判断改写成已验证事实。
 6. 在内部完成 source-unit coverage 与 disposition 检查。完整性仍来自 source coverage，而不是主观自检；但这些运行过程不再要求逐项写入模型输出。
 
-## Granularity acceptance test
+## 提交前检查
 
-提交前先做一次计数：
+提交前逐项检查并直接修正，不输出检查过程：
 
-- 8 个独立 QM 数据文件 + 1 个问卷数据文件 + 1 个含 4 次访谈的合集，应输出 **13 条** evidence，而不是按行、问题、指标或原话扩展成几十条。
-- 对任一 `one_item_per_file` 的 E-id，`items[]` 中只能出现一次。
-- 对任一 `one_item_per_interview_session` 的 E-id，条目数必须等于可识别的独立访谈场次数；同场联合访谈不得按参与者重复拆分。
-- 对任一 `one_item_per_underlying_source` 的 E-id，先建立内部 source map，再按规范化来源去重；正文、截图、表格和附录对同一来源的复述不得重复计数。
+- **材料覆盖：** `source_manifest` 中所有可读取材料是否都已检查；未读取的图片、表格、附件或引用是否明确进入 `unresolved`，而不是被静默忽略？
+- **来源边界：** 每个 evidence item 是否对应一个真实、可区分的底层来源或独立访谈 session；是否把多个独立来源错误合并，或把同一来源的段落、指标和复述机械拆成多条？对 `one_item_per_file`、`one_item_per_interview_session` 和 `one_item_per_underlying_source` 的 E-id，条目数是否分别符合输入定义并完成去重？
+- **精确回查：** 每个 item 中保留的关键数字、原话和事实是否能通过真实 `source_ref`、source unit、表格/sheet、data asset 或原文位置回查；数据型表格是否说明 data asset、表名和范围，是否存在只有概括、无法定位原始依据的论据？
+- **口径完整：** 关键定量信号是否保留了材料中已有的指标定义、样本或分母、时间窗、比较对象和单位；原材料缺少这些信息时，是否如实标记限制，而不是替材料补全？
+- **证据性质：** 是否清楚区分公开数据、问卷统计、访谈观察、分析师自测、原材料作者判断和战略建议；`content` 是否忠实于输入，没有补写、润色、拼接不存在的原话，或把作者归纳改写成独立验证事实？
+- **冲突与限制：** 原材料中的口径冲突、反证、异常、样本限制和来源不确定性是否与对应 item 一起保留；是否只提取支持某一方向的内容，或为了完整性把 caveat、反证和解释变量机械拆成新 item？
+- **角色边界：** Catalog 是否只描述材料包含什么、来源是什么、适用边界是什么，没有形成新的因果解释、核心论点、优先级、recommendation、timeline、KPI、owner、预算或路线图？
 
-## Invariants
-
-- 不遗漏独立访谈、caveat、反证或解释变量；caveat、反证和解释变量应收进所属 evidence item，不以“完整性”为由机械拆条。
-- `content` 必须忠实于输入，不补写、不润色、不拼接不存在的原话。
-- 所有 item 必须有真实 `source_ref`。
-- 数据型表格 item 引用 E-id，并在 content/notes 中说明 data_asset/表名/范围；不要把大型原始表逐行复制到 catalog。
-- 图片、扫描页或图表未实际检查时只能写入 `unresolved`。
-- 不生成 thesis、claim、recommendation、timeline、KPI、owner、预算或路线图。
+任一项不满足时，先在 Evidence 阶段修正。无法恢复来源、口径或原文位置时，降低可追溯性并写入 `unresolved`，不得通过推断补齐。
 
 ## Output
 
@@ -54,13 +50,3 @@ description: Build a complete, source-traceable evidence catalog before argument
 - `unresolved[]`：尚未实际读取或无法定位的内容
 
 不要重复提交 source-unit 原文副本、disposition map、coverage summary 或 quality checks；runtime 可从输入清单与 refs 计算这些信息。
-
-## Failure conditions
-
-- 把多个独立访谈压成一个无法追溯的概述，或把同一访谈按参与者/问题/原话拆成多条；
-- 把一个数据文件按行、题目、指标、sheet、data asset 或 key finding 拆成多条；
-- 把多来源研究包整体压成一条，或把同一底层来源在正文、截图、表格、附录中的重复表述生成多条；
-- 只列支持主线的证据，遗漏 caveat、反证或解释变量；
-- 引用不存在的来源；
-- 未检查图片/表格却声称已经读取；
-- 在取证阶段形成战略结论或行动建议。

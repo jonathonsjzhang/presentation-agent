@@ -92,7 +92,7 @@ class VisualQualityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             output = root / "report_formatted.docx"
-            output.write_bytes(b"docx-placeholder")
+            self._write_docx(output, ["正常正文"])
             asset = root / "report_formatted_assets" / "VIS-01.png"
             page = root / "page-001.png"
             self._meaningful_image(asset, (600, 300))
@@ -119,7 +119,7 @@ class VisualQualityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             output = root / "report_formatted.docx"
-            output.write_bytes(b"docx-placeholder")
+            self._write_docx(output, ["正常正文"])
             asset = root / "report_formatted_assets" / "VIS-01.png"
             asset.parent.mkdir(parents=True)
             Image.new("RGB", (600, 300), "white").save(asset)
@@ -142,7 +142,7 @@ class VisualQualityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             output = root / "report_formatted.docx"
-            output.write_bytes(b"docx-placeholder")
+            self._write_docx(output, ["正常正文"])
             asset = root / "report_formatted_assets" / "VIS-01.png"
             self._meaningful_image(asset, (600, 300))
             page = root / "page-001.png"
@@ -159,6 +159,35 @@ class VisualQualityTests(unittest.TestCase):
                 )
             self.assertFalse(audit["passed"])
             self.assertIn("near_black_raster", self._codes(audit))
+
+    def test_post_render_audit_blocks_reader_visible_format_leaks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            output = root / "report_formatted.docx"
+            self._write_docx(
+                output,
+                [
+                    "- 伪造的二级列表",
+                    "Source：专家访谈",
+                    "Section: 第一章 | Claim: - | Evidence: EV-001",
+                ],
+            )
+            page = root / "page-001.png"
+            self._meaningful_image(page, (800, 1000))
+            prepared = SimpleNamespace(
+                warnings=[], contact_sheet_path=None, visual_paths=[str(page)]
+            )
+            with patch(
+                "presentation_agent.renderers.artifact_preparation.prepare_artifact_pages",
+                return_value=prepared,
+            ):
+                audit = audit_render_output(
+                    {"visuals": []}, self._render_result(output), root
+                )
+            self.assertFalse(audit["passed"])
+            self.assertIn("fake_list_marker", self._codes(audit))
+            self.assertIn("unstyled_reader_source", self._codes(audit))
+            self.assertIn("reader_visible_internal_trace", self._codes(audit))
 
     @staticmethod
     def _material() -> dict:
@@ -182,6 +211,15 @@ class VisualQualityTests(unittest.TestCase):
             fidelity="formatted",
             output_path=str(output),
         )
+
+    @staticmethod
+    def _write_docx(path: Path, paragraphs: list[str]) -> None:
+        from docx import Document
+
+        document = Document()
+        for text in paragraphs:
+            document.add_paragraph(text)
+        document.save(path)
 
     @staticmethod
     def _meaningful_image(path: Path, size: tuple[int, int]) -> None:

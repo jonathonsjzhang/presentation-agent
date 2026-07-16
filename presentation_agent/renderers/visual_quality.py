@@ -7,6 +7,7 @@ assets/pages must be inspectable before a deliverable is published.
 
 from __future__ import annotations
 
+import re
 import statistics
 from pathlib import Path
 from typing import Any
@@ -145,6 +146,7 @@ def audit_render_output(
     warnings: list[str] = []
     inspected_assets: list[dict[str, Any]] = []
     inspected_pages: list[dict[str, Any]] = []
+    inspected_document: dict[str, Any] | None = None
     output_path = Path(str(getattr(render_result, "output_path", "") or ""))
     if getattr(render_result, "status", "") != "rendered":
         issues.append(
@@ -164,6 +166,9 @@ def audit_render_output(
                 output_path,
             )
         )
+    elif output_path.suffix.lower() == ".docx":
+        inspected_document, document_issues = _audit_docx_readability(output_path)
+        issues.extend(document_issues)
 
     asset_dir = out_dir / f"{file_stem}_assets"
     for index, visual in enumerate(material.get("visuals") or [], 1):
@@ -249,9 +254,80 @@ def audit_render_output(
         "warnings": warnings,
         "inspected_assets": inspected_assets,
         "inspected_pages": inspected_pages,
+        "inspected_document": inspected_document,
         "contact_sheet_path": contact_sheet_path,
         "ppt_structural_qa": ppt_qa,
     }
+
+
+def _audit_docx_readability(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    row: dict[str, Any] = {
+        "path": str(path),
+        "available": False,
+        "paragraph_count": 0,
+        "list_paragraph_count": 0,
+        "source_paragraph_count": 0,
+    }
+    try:
+        from docx import Document
+
+        document = Document(path)
+    except Exception as exc:
+        return row, [
+            _issue(
+                "unreadable_docx_structure",
+                "deliverable",
+                f"DOCX 结构无法读取: {exc}",
+                path,
+            )
+        ]
+
+    paragraphs = list(document.paragraphs)
+    for table in document.tables:
+        for table_row in table.rows:
+            for cell in table_row.cells:
+                paragraphs.extend(cell.paragraphs)
+
+    issues: list[dict[str, Any]] = []
+    row["available"] = True
+    row["paragraph_count"] = len(paragraphs)
+    for index, paragraph in enumerate(paragraphs, 1):
+        text = str(paragraph.text or "").strip()
+        if not text:
+            continue
+        style_name = str(getattr(paragraph.style, "name", "") or "")
+        if style_name.startswith("List Bullet"):
+            row["list_paragraph_count"] += 1
+        if re.search(r"\b(?:Section|Claim|Evidence)\s*:", text) or "[EV-" in text:
+            issues.append(
+                _issue(
+                    "reader_visible_internal_trace",
+                    "deliverable",
+                    f"读者可见内容包含内部追溯字段（段落 {index}）",
+                    path,
+                )
+            )
+        if re.match(r"^[-*+]\s+\S", text) and not style_name.startswith("List Bullet"):
+            issues.append(
+                _issue(
+                    "fake_list_marker",
+                    "deliverable",
+                    f"段落 {index} 使用正文字符模拟列表层级",
+                    path,
+                )
+            )
+        if re.match(r"^(?:Source|来源)\s*[:：]", text, re.IGNORECASE):
+            row["source_paragraph_count"] += 1
+            if style_name != "Report Source":
+                issues.append(
+                    _issue(
+                        "unstyled_reader_source",
+                        "deliverable",
+                        f"段落 {index} 的读者来源未使用 Report Source 样式",
+                        path,
+                    )
+                )
+    return row, issues
 
 
 def _audit_raster(path: Path, *, scope: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
