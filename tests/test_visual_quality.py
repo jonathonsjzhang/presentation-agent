@@ -9,6 +9,10 @@ from unittest.mock import patch
 from PIL import Image, ImageDraw
 
 from presentation_agent.renderers.base import RenderResult
+from presentation_agent.renderers.artifact_preparation import (
+    PagePreparationError,
+    prepare_artifact_pages,
+)
 from presentation_agent.renderers.visual_quality import (
     audit_render_output,
     renderer_readiness_issues,
@@ -16,6 +20,29 @@ from presentation_agent.renderers.visual_quality import (
 
 
 class VisualQualityTests(unittest.TestCase):
+    def test_page_preparation_routes_html_to_real_snapshot_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            deliverable = root / "report.html"
+            deliverable.write_text("<html><body>report</body></html>", encoding="utf-8")
+            page = root / "page-001.png"
+            self._meaningful_image(page, (800, 1000))
+            with patch(
+                "presentation_agent.renderers.artifact_preparation._render_html_pages",
+                return_value=[page],
+            ):
+                prepared = prepare_artifact_pages(deliverable, root / "quality")
+        self.assertEqual(prepared.format, "html")
+        self.assertEqual(prepared.visual_paths, [str(page.resolve())])
+        self.assertEqual(prepared.warnings, [])
+
+    def test_page_preparation_rejects_non_deliverable_format(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "report.txt"
+            source.write_text("report", encoding="utf-8")
+            with self.assertRaises(PagePreparationError):
+                prepare_artifact_pages(source, Path(temp_dir) / "quality")
+
     def test_renderer_readiness_rejects_empty_matrix_and_callout(self) -> None:
         issues = renderer_readiness_issues(
             [
@@ -76,7 +103,7 @@ class VisualQualityTests(unittest.TestCase):
                 visual_paths=[str(page)],
             )
             with patch(
-                "presentation_agent.evaluation.adapters.prepare_artifact",
+                "presentation_agent.renderers.artifact_preparation.prepare_artifact_pages",
                 return_value=prepared,
             ):
                 audit = audit_render_output(
@@ -102,7 +129,7 @@ class VisualQualityTests(unittest.TestCase):
                 warnings=[], contact_sheet_path=None, visual_paths=[str(page)]
             )
             with patch(
-                "presentation_agent.evaluation.adapters.prepare_artifact",
+                "presentation_agent.renderers.artifact_preparation.prepare_artifact_pages",
                 return_value=prepared,
             ):
                 audit = audit_render_output(
@@ -124,7 +151,7 @@ class VisualQualityTests(unittest.TestCase):
                 warnings=[], contact_sheet_path=None, visual_paths=[str(page)]
             )
             with patch(
-                "presentation_agent.evaluation.adapters.prepare_artifact",
+                "presentation_agent.renderers.artifact_preparation.prepare_artifact_pages",
                 return_value=prepared,
             ):
                 audit = audit_render_output(

@@ -185,9 +185,11 @@ def audit_render_output(
     contact_sheet_path: str | None = None
     if output_path.is_file():
         try:
-            from presentation_agent.evaluation.adapters import prepare_artifact
+            from presentation_agent.renderers.artifact_preparation import (
+                prepare_artifact_pages,
+            )
 
-            prepared = prepare_artifact(output_path, qa_dir, render_visuals=True)
+            prepared = prepare_artifact_pages(output_path, qa_dir)
             warnings.extend(prepared.warnings)
             contact_sheet_path = prepared.contact_sheet_path
             for page_path in prepared.visual_paths:

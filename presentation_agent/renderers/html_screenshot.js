@@ -85,7 +85,7 @@ async function main() {
     return;
   }
   if (!htmlPath || !outputDir) {
-    throw new Error("usage: html_screenshot.js <input.html> <output-dir>");
+    throw new Error("usage: html_screenshot.js <deliverable.html> <output-dir>");
   }
 
   fs.mkdirSync(outputDir, { recursive: true });

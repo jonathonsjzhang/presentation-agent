@@ -23,9 +23,9 @@
 
 > 缺失可选依赖不会导致运行崩溃——渲染器会返回 `skipped_missing_dep` 状态。
 
-## E2E 评测依赖（仅在评测时需要）
+## 真实页面质量检查依赖（按交付格式需要）
 
-自动评测需要生成材料的视觉快照，依赖以下外部工具：
+生产链会为最终材料生成真实页面快照，并在交付前检查空白页、纯黑页、缺失资产和载体结构。该质量门禁依赖以下外部工具：
 
 | 依赖 | 用途 | 安装方式 | 备注 |
 |---|---|---|---|
@@ -33,13 +33,13 @@
 | **Playwright** | HTML → 浏览器截图 | `npx playwright install chromium` | 需要 Node.js 18+ |
 | **Node.js** | Playwright 运行环境 | `nvm install 18` 或系统自带 | |
 
-可通过 `doctor` 命令检查评测依赖的就绪状态：
+可通过 `doctor` 命令检查核心生产依赖：
 
 ```bash
 python -m presentation_agent.cli doctor
 ```
 
-输出中的 `evaluation.formats` 字段报告各格式的 `ready` 状态及缺失依赖。
+最终页面快照由 renderer 在 Format 阶段实际生成并写入 `visual_quality_manifest.json`；生成失败会阻止静默交付。
 
 ## 可选的辅助工具
 
