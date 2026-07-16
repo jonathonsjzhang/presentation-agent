@@ -30,6 +30,23 @@ def _request(task_dir: Path) -> SpawnRequest:
     )
 
 
+def _markdown_request(task_dir: Path) -> SpawnRequest:
+    handoff = task_dir / "handoff"
+    handoff.mkdir(parents=True, exist_ok=True)
+    instruction = handoff / "instruction_gen.md"
+    input_path = task_dir / "input.json"
+    instruction.write_text("markdown contract", encoding="utf-8")
+    input_path.write_text("{}", encoding="utf-8")
+    return SpawnRequest(
+        task_dir=task_dir,
+        agent_id="analysis",
+        role="worker",
+        instruction_path=instruction,
+        output_path=handoff / "output_gen.md",
+        input_path=input_path,
+    )
+
+
 class InlineSpawnAdapterTests(unittest.TestCase):
     def test_inline_spawns_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -73,6 +90,21 @@ class WorkBuddySpawnAdapterTests(unittest.TestCase):
             )
             self.assertIn("专业战略分析师", spec["prompt"])
             self.assertIn("唯一权威来源", spec["prompt"])
+            self.assertTrue(spec["dispatch"]["dispatch_id"])
+
+    def test_markdown_worker_prompt_and_dispatch_contract_match_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            task_dir = Path(tmp)
+            result = WorkBuddySpawnAdapter().spawn(_markdown_request(task_dir))
+            spec = read_json(task_dir / "spawn_request.json")
+            self.assertIn("完整 Markdown 文档", spec["prompt"])
+            self.assertNotIn("写成一个合法 JSON 对象", spec["prompt"])
+            self.assertEqual(spec["dispatch"]["response_format"], "markdown")
+            self.assertEqual(
+                result.detail["dispatch"]["dispatch_id"],
+                spec["dispatch"]["dispatch_id"],
+            )
+            self.assertTrue(spec["dispatch"]["instruction_sha256"])
 
 class NativeTerminalSpawnAdapterTests(unittest.TestCase):
     def test_claude_worker_uses_general_purpose_task(self) -> None:

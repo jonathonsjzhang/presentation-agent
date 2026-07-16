@@ -38,6 +38,14 @@ MANAGER_MEMORY_DIMENSIONS = [
 ]
 
 DEFAULT_CHECKPOINT_PAUSE_AGENTS = ["analysis", "storyline"]
+V04_CANONICAL_STAGES = (
+    "analysis",
+    "storyline",
+    "report",
+    "qa_preparation",
+    "format",
+)
+V04_STAGE_INDEX = {stage: index for index, stage in enumerate(V04_CANONICAL_STAGES)}
 
 
 class ManagerAgentRuntime:
@@ -1211,12 +1219,16 @@ class ManagerOrchestrator:
 
         self._v04_accept_current_task(state, task)
         if agent_id == "report":
-            packet = task.get("packet") if isinstance(task.get("packet"), dict) else {}
-            if packet.get("revision_feedback"):
+            delivery_budget = state.get("project_state", {}).get(
+                "delivery_budget", {}
+            )
+            if isinstance(delivery_budget, dict) and delivery_budget.get(
+                "qa_included"
+            ) is False:
                 return self._dispatch(
                     state,
                     self._v04_task_packet(state, "format"),
-                    reason="v0.4 Report revision skips QA and reuses existing qa.md when available",
+                    reason="v0.4 brief excludes QA; dispatch report → Format",
                 )
             return self._dispatch(
                 state,
@@ -1327,14 +1339,20 @@ class ManagerOrchestrator:
         state["current_actor"] = "manager"
         state["human_gate"] = None
         state["pending_decision"] = None
+        packet = self._v04_task_packet(
+            state,
+            target,
+            feedback=str(failure.get("message") or ""),
+        )
+        self._invalidate_canonical_from(
+            state,
+            target,
+            reason=f"runtime repair: {failure.get('error_code')}",
+        )
         self._save_state(state)
         return self._dispatch(
             state,
-            self._v04_task_packet(
-                state,
-                target,
-                feedback=str(failure.get("message") or ""),
-            ),
+            packet,
             reason=f"structured runtime repair: {failure['error_code']}",
         )
 
@@ -1394,10 +1412,18 @@ class ManagerOrchestrator:
         state["pending_decision"] = None
         state["current_actor"] = "manager"
         state["status"] = "running"
+        packet = self._v04_task_packet(
+            state, stage, feedback=str(feedback).strip()
+        )
+        self._invalidate_canonical_from(
+            state,
+            stage,
+            reason=f"explicit stage revision: {stage}",
+        )
         self._save_state(state)
         return self._dispatch(
             state,
-            self._v04_task_packet(state, stage, feedback=str(feedback).strip()),
+            packet,
             reason=f"explicit stage revision: {stage}",
         )
 
@@ -1474,6 +1500,7 @@ class ManagerOrchestrator:
             item
             for item in state.get("accepted_artifacts", [])
             if item.get("task_dir") != task.get("task_dir")
+            and item.get("agent_id") != task.get("agent_id")
         ]
         state.setdefault("accepted_artifacts", []).append(
             {
@@ -1494,11 +1521,25 @@ class ManagerOrchestrator:
         include_current: bool = False,
         feedback: str = "",
     ) -> dict[str, Any]:
-        paths = [
-            str(item.get("artifact_path"))
-            for item in state.get("accepted_artifacts", [])
-            if str(item.get("artifact_path") or "").strip()
-        ]
+        target_index = V04_STAGE_INDEX.get(target, len(V04_CANONICAL_STAGES))
+        include_target = bool(feedback)
+        latest_by_stage: dict[str, dict[str, Any]] = {}
+        for item in state.get("accepted_artifacts", []):
+            agent_id = str(item.get("agent_id") or "")
+            stage_index = V04_STAGE_INDEX.get(agent_id)
+            if (
+                stage_index is not None
+                and stage_index < target_index + int(include_target)
+                and str(item.get("artifact_path") or "").strip()
+            ):
+                latest_by_stage[agent_id] = item
+        canonical_items = sorted(
+            latest_by_stage.values(),
+            key=lambda item: V04_STAGE_INDEX.get(
+                str(item.get("agent_id") or ""), len(V04_CANONICAL_STAGES)
+            ),
+        )
+        paths = [str(item.get("artifact_path")) for item in canonical_items]
         current = state.get("current_task") or {}
         current_path = str(current.get("artifact_path") or "")
         if include_current and current_path and current_path not in paths:
@@ -1522,6 +1563,52 @@ class ManagerOrchestrator:
         if feedback:
             packet["revision_feedback"] = [feedback]
         return packet
+
+    def _invalidate_canonical_from(
+        self,
+        state: dict[str, Any],
+        stage: str,
+        *,
+        reason: str,
+    ) -> list[dict[str, Any]]:
+        """Invalidate one canonical stage and every dependent downstream stage."""
+
+        start = V04_STAGE_INDEX[stage]
+        stale_agents = set(V04_CANONICAL_STAGES[start:])
+        invalidated = [
+            dict(item)
+            for item in state.get("accepted_artifacts", [])
+            if str(item.get("agent_id") or "") in stale_agents
+        ]
+        invalidated_at = now_iso()
+        for item in invalidated:
+            item.update(
+                {
+                    "status": "invalidated",
+                    "invalidated_at": invalidated_at,
+                    "invalidated_reason": reason,
+                }
+            )
+        state.setdefault("invalidated_artifacts", []).extend(invalidated)
+        state["accepted_artifacts"] = [
+            item
+            for item in state.get("accepted_artifacts", [])
+            if str(item.get("agent_id") or "") not in stale_agents
+        ]
+        for task in state.get("tasks", []):
+            if (
+                str(task.get("agent_id") or "") in stale_agents
+                and task.get("status") == "accepted"
+            ):
+                task["status"] = "invalidated"
+                task["invalidated_at"] = invalidated_at
+                task["invalidated_reason"] = reason
+        project_state = state.setdefault("project_state", {})
+        if stage == "analysis":
+            project_state.pop("analysis_thesis_selection", None)
+        if start <= V04_STAGE_INDEX["storyline"]:
+            project_state.pop("storyline_confirmation", None)
+        return invalidated
 
     @staticmethod
     def _v04_charter_from_brief(brief: dict[str, Any]) -> dict[str, Any]:
@@ -1566,6 +1653,7 @@ class ManagerOrchestrator:
             "project_type": str(brief.get("project_type") or "分析类"),
             "report_type": str(brief.get("report_type") or "deep_dive"),
             "report_length": str(brief.get("report_length") or "3页"),
+            "page_budget": copy.deepcopy(brief.get("page_budget") or {}),
             "requested_delivery_targets": list(requested_targets),
             "decision_question": str(brief.get("decision_question") or purpose),
             "expected_action": str(brief.get("expected_action") or direction),
@@ -1573,6 +1661,9 @@ class ManagerOrchestrator:
             "material_inventory": inventory,
             "high_confidence_evidence": list(brief.get("high_confidence_evidence") or []),
             "constraints": list(brief.get("constraints") or []),
+            "constraint_ledger": copy.deepcopy(
+                brief.get("constraint_ledger") or {}
+            ),
             "assumptions": list(brief.get("assumptions") or []),
         }
 
@@ -2282,10 +2373,35 @@ class ManagerOrchestrator:
             raise StepError(f"spawn request 不存在: {request_path}")
         if not output_path.is_file():
             raise StepError(f"sub-agent 输出不存在: {output_path}")
-        if output_path.stat().st_mtime_ns < request_path.stat().st_mtime_ns:
-            raise StepError(
-                "sub-agent 输出早于当前 spawn request，疑似复用了旧输出"
-            )
+        request_payload = read_json(request_path, default={})
+        dispatch = (
+            request_payload.get("dispatch")
+            if isinstance(request_payload, dict)
+            else {}
+        )
+        if not isinstance(dispatch, dict):
+            dispatch = {}
+        expected_output = str(dispatch.get("output_path") or "")
+        if expected_output and Path(expected_output).resolve() != output_path.resolve():
+            raise StepError("spawn dispatch 绑定的 output_path 与当前 instruction 不一致")
+        instruction_path = Path(str(instruction.get("instruction_path") or ""))
+        expected_instruction_hash = str(dispatch.get("instruction_sha256") or "")
+        if expected_instruction_hash and (
+            not instruction_path.is_file()
+            or hashlib.sha256(instruction_path.read_bytes()).hexdigest()
+            != expected_instruction_hash
+        ):
+            raise StepError("spawn dispatch 后 instruction 内容发生变化")
+        dispatch_input_path = str(dispatch.get("input_path") or "")
+        input_path = Path(dispatch_input_path) if dispatch_input_path else None
+        expected_input_hash = str(dispatch.get("input_sha256") or "")
+        if expected_input_hash and (
+            input_path is None
+            or not input_path.is_file()
+            or hashlib.sha256(input_path.read_bytes()).hexdigest()
+            != expected_input_hash
+        ):
+            raise StepError("spawn dispatch 后 input 内容发生变化")
         output_sha256 = hashlib.sha256(output_path.read_bytes()).hexdigest()
         task_dir = self.current_worker_dir(state)
         if task_dir is None:
@@ -2298,7 +2414,11 @@ class ManagerOrchestrator:
             "adapter": spawn.get("adapter"),
             "role": spawn.get("role"),
             "spawn_request": str(request_path),
+            "dispatch_id": dispatch.get("dispatch_id"),
             "instruction_path": instruction.get("instruction_path"),
+            "instruction_sha256": expected_instruction_hash,
+            "input_path": dispatch_input_path or None,
+            "input_sha256": expected_input_hash,
             "output_path": str(output_path),
             "output_sha256": output_sha256,
             "round_index": round_index,
@@ -3220,6 +3340,25 @@ class ManagerOrchestrator:
         return "10页PPT" if "PPT" in delivery else "3页"
 
     @staticmethod
+    def _brief_page_budget(brief: dict[str, Any]) -> str:
+        page_budget = brief.get("page_budget")
+        if not isinstance(page_budget, dict) or not page_budget:
+            return ManagerOrchestrator._brief_report_length(brief) + "（默认按正文口径）"
+        parts: list[str] = []
+        body = page_budget.get("body_page_limit")
+        total = page_budget.get("total_page_limit")
+        if isinstance(body, int) and body > 0:
+            parts.append(f"正文目标 {body} 页")
+        if isinstance(total, int) and total > 0:
+            parts.append(f"文件总页数上限 {total} 页")
+        appendix = str(page_budget.get("appendix_policy") or "allowed")
+        parts.append("允许附录" if appendix != "forbidden" else "不允许附录")
+        parts.append(
+            "包含追问清单" if page_budget.get("qa_included", True) else "不包含追问清单"
+        )
+        return "；".join(parts)
+
+    @staticmethod
     def _format_brief_confirmation(
         brief: dict[str, Any], *, confirmation_ready: bool = False
     ) -> str:
@@ -3246,7 +3385,7 @@ class ManagerOrchestrator:
         )
         project_type = ManagerOrchestrator._display_project_type(brief)
         delivery = ManagerOrchestrator._display_delivery(brief)
-        report_length = ManagerOrchestrator._brief_report_length(brief)
+        report_length = ManagerOrchestrator._brief_page_budget(brief)
         evidence_options = ManagerOrchestrator._brief_evidence_options(brief)
         materials = brief.get("materials") or []
 
@@ -3603,13 +3742,19 @@ class ManagerOrchestrator:
 
     @staticmethod
     def _analysis_thesis_options(artifact: dict[str, Any]) -> list[dict[str, Any]]:
+        routing = artifact.get("routing_metadata")
+        routed_options = (
+            routing.get("thesis_options") if isinstance(routing, dict) else None
+        )
+        if isinstance(routed_options, list) and routed_options:
+            return [dict(item) for item in routed_options if isinstance(item, dict)][:3]
         markdown = ManagerOrchestrator._artifact_markdown(artifact)
         if markdown:
             matches = list(
                 re.finditer(
-                    r"^###\s+(方案\s*[A-C一二三123]|TG-[A-Za-z0-9_-]+)\s*[：:]?\s*(.+)$",
+                    r"^###\s+((?:方案|Option)\s*[A-C一二三123]|TG-[A-Za-z0-9_-]+)\s*[：:]?\s*(.+)$",
                     markdown,
-                    flags=re.MULTILINE,
+                    flags=re.MULTILINE | re.IGNORECASE,
                 )
             )
             options = []
@@ -3953,8 +4098,12 @@ class ManagerOrchestrator:
     ) -> dict[str, Any] | None:
         normalized = cls._normalize_choice_token(feedback)
         for option in options:
-            option_id = str(option.get("option_id") or "")
-            if cls._normalize_choice_token(option_id) in normalized:
+            aliases = [option.get("option_id"), option.get("source_label")]
+            if any(
+                cls._normalize_choice_token(str(alias or "")) in normalized
+                for alias in aliases
+                if str(alias or "").strip()
+            ):
                 return option
         index = cls._selected_option_index(feedback)
         if index is not None and 0 <= index < len(options):
@@ -3969,8 +4118,8 @@ class ManagerOrchestrator:
     def _selected_option_index(feedback: str) -> int | None:
         text = str(feedback or "")
         patterns = (
-            r"(?:方案|选择|选|第)\s*([ABCabc123一二三])\s*(?:个|组|套|项|方案)?",
-            r"\b([ABCabc])\b\s*(?:方案|组|项)",
+            r"(?:方案|Option|选择|选|第)\s*([ABCabc123一二三])\s*(?:个|组|套|项|方案|option)?",
+            r"\b([ABCabc])\b\s*(?:方案|Option|组|项)",
         )
         mapping = {
             "a": 0,

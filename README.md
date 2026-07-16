@@ -26,7 +26,9 @@
 - **Markdown-first 交接**：Analysis、Storyline、Report、QA 分别直接产出 `analysis.md`、`storyline.md`、`report.md`、`qa.md`；JSON 只保留路径与哈希回执。
 - **保留专业 Skill**：原有核心准则、Workflow、Self-edit Checklist 和专业验收标准全部保留；简化仅作用于交接载体与运行时控制面。
 - **简化 happy path**：Brief 确认后直接进入 Analysis；Analysis、Storyline 保留用户 Gate；Report、QA 正常完成后自动推进到 Format。
-- **显式局部返工**：Manager 使用 `stage` 指定责任阶段；Report/Format 局部修改可跳过 QA 并复用旧产物，不按固定链整段回放。
+- **显式局部返工**：Manager 使用 `stage` 指定责任阶段；返工会使该阶段及全部下游 canonical artifact 失效，避免旧结论重新混入。Format 局部修改只重做 Format；Report 修改后重新生成 QA。
+- **可验证派发回执**：原生 sub-agent spawn 使用 `dispatch_id + instruction/input/output hash` 绑定本轮结果，不再依赖跨文件系统不稳定的 mtime freshness。
+- **结构化约束与双页数口径**：Brief 可分别声明正文目标、文件总页数、附录与 QA 策略；`Constraint Ledger` 可登记必需/禁用内容，并在 Worker 提交时执行确定性检查。
 - **真实渲染优先**：Format 只提交轻量视觉计划；runtime 在证据投影后按 renderer 的真实数据模型 preflight，并在文件生成后检查视觉资产和逐页快照。空白、纯黑、缺失资产或无法生成页面快照都会进入 quality manifest 并阻止静默通过。
 - **Evidence/doctor 快速失败**：目录中不支持的文件显式列出并使 intake 不完整；doctor 检查 PDF 解析、DOCX 生成和中文 DOCX→PDF 冒烟路径。
 

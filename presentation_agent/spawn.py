@@ -34,9 +34,11 @@ read today.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -430,6 +432,34 @@ class SpawnAdapter(ABC):
         raise NotImplementedError
 
 
+def _file_sha256(path: Path) -> str:
+    if not path.is_file():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _attach_dispatch_contract(
+    spec: dict[str, Any], request: SpawnRequest
+) -> dict[str, Any]:
+    """Bind one spawn to immutable instruction and input facts."""
+
+    dispatch = {
+        "dispatch_id": uuid.uuid4().hex,
+        "agent_id": request.agent_id,
+        "role": request.role,
+        "instruction_path": str(request.instruction_path),
+        "instruction_sha256": _file_sha256(request.instruction_path),
+        "input_path": str(request.input_path),
+        "input_sha256": _file_sha256(request.input_path),
+        "output_path": str(request.output_path),
+        "response_format": (
+            "markdown" if request.output_path.suffix.lower() == ".md" else "json"
+        ),
+    }
+    spec["dispatch"] = dispatch
+    return dispatch
+
+
 class InlineSpawnAdapter(SpawnAdapter):
     """Default adapter = today's behaviour. Spawns nothing.
 
@@ -475,6 +505,7 @@ class WorkBuddySpawnAdapter(SpawnAdapter):
                 "write_scope": str(request.task_dir),
             },
         }
+        dispatch = _attach_dispatch_contract(spec, request)
         spawn_file = request.task_dir / "spawn_request.json"
         write_json(spawn_file, spec)
         return SpawnResult(
@@ -489,6 +520,7 @@ class WorkBuddySpawnAdapter(SpawnAdapter):
                 "result_delivery": result_delivery,
                 "prompt": prompt,
                 "skill_execution": spec["skill_execution"],
+                "dispatch": dispatch,
                 "invariants": spec["invariants"],
             },
         )
@@ -523,6 +555,7 @@ class ClaudeCodeSpawnAdapter(SpawnAdapter):
                 "read_only": False,
             },
         }
+        dispatch = _attach_dispatch_contract(spec, request)
         spawn_file = request.task_dir / "spawn_request.json"
         write_json(spawn_file, spec)
         return SpawnResult(
@@ -538,6 +571,7 @@ class ClaudeCodeSpawnAdapter(SpawnAdapter):
                 "result_delivery": result_delivery,
                 "prompt": prompt,
                 "skill_execution": spec["skill_execution"],
+                "dispatch": dispatch,
                 "invariants": spec["invariants"],
             },
         )
@@ -574,6 +608,7 @@ class CodexSpawnAdapter(SpawnAdapter):
                 "read_only": False,
             },
         }
+        dispatch = _attach_dispatch_contract(spec, request)
         spawn_file = request.task_dir / "spawn_request.json"
         write_json(spawn_file, spec)
         return SpawnResult(
@@ -590,6 +625,7 @@ class CodexSpawnAdapter(SpawnAdapter):
                 "result_delivery": result_delivery,
                 "prompt": prompt,
                 "skill_execution": spec["skill_execution"],
+                "dispatch": dispatch,
                 "invariants": spec["invariants"],
             },
         )
@@ -627,6 +663,11 @@ def _build_cli_prompt(request: SpawnRequest) -> str:
     input, and the exact handoff file it must write back.
     """
 
+    output_rule = (
+        "完整 Markdown 文档（不要使用代码围栏或 JSON 外壳）"
+        if request.output_path.suffix.lower() == ".md"
+        else "合法 JSON 对象（不要使用 markdown fences）"
+    )
     return (
         "你是一个隔离上下文的 Worker sub-agent，没有宿主对话历史。"
         "请以面向互联网战略分析场景的专业战略分析师身份完成任务，"
@@ -634,8 +675,8 @@ def _build_cli_prompt(request: SpawnRequest) -> str:
         f"{request.instruction_path}（其中内嵌完整 SKILL.md 角色、工作流、"
         "质量标准与输出契约）以及任务输入 "
         f"{request.input_path}。请按照指令包中的专业角色、工作流、质量标准"
-        "和输出契约完成任务，然后将结果写成一个合法 JSON 对象"
-        f"（不要使用 markdown fences）并保存到 {request.output_path}。"
+        "和输出契约完成任务，然后将结果写成"
+        f"{output_rule}并保存到 {request.output_path}。"
         "指令包是字段名、枚举值、必需章节、质量标准和工作流规则的唯一权威来源。"
         "不要从本派发 prompt 推断或复述 schema；如果外部摘要与指令包冲突，"
         "以指令包为准。"
@@ -742,6 +783,7 @@ class CLISpawnAdapter(SpawnAdapter):
                 "read_only": False,
             },
         }
+        dispatch = _attach_dispatch_contract(spec, request)
         spawn_file = request.task_dir / "spawn_request.json"
         write_json(spawn_file, spec)
 
@@ -756,6 +798,7 @@ class CLISpawnAdapter(SpawnAdapter):
                     "dialect": self.dialect,
                     "argv": argv,
                     "result_delivery": result_delivery,
+                    "dispatch": dispatch,
                 },
             )
 
@@ -778,6 +821,7 @@ class CLISpawnAdapter(SpawnAdapter):
                     "executor": "cli_subprocess",
                     "returncode": proc.returncode,
                     "stderr": proc.stderr[-2000:],
+                    "dispatch": dispatch,
                 },
             )
         return SpawnResult(
@@ -789,6 +833,7 @@ class CLISpawnAdapter(SpawnAdapter):
                 "returncode": 0,
                 "stdout": proc.stdout[-2000:],
                 "result_delivery": result_delivery,
+                "dispatch": dispatch,
             },
         )
 

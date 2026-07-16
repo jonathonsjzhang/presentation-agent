@@ -37,6 +37,8 @@ class RuntimePayloadBudgetTests(unittest.TestCase):
         )
         self.assertNotIn("result", response)
         self.assertNotIn("instruction", response)
+        self.assertEqual(response["protocol_version"], "report-host.v0_4")
+        self.assertEqual(response["artifact_contract"], "markdown-first.v1")
         instruction = response["current_instruction"]
         self.assertIsInstance(instruction, dict)
         self.assertNotIn("brief", instruction)

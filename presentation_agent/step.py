@@ -530,6 +530,9 @@ class StepRunner:
                 (markdown + "\n").encode("utf-8")
             ).hexdigest(),
         }
+        routing_metadata = self._markdown_routing_metadata(markdown)
+        if routing_metadata:
+            receipt["routing_metadata"] = routing_metadata
         draft_path = self.run_dir / f"draft_round_{round_idx}.json"
         write_json(draft_path, receipt)
         state.setdefault("produced_artifacts", []).extend(
@@ -571,6 +574,14 @@ class StepRunner:
             raise StepError("Markdown 缺少必要章节: " + "、".join(missing))
         if re.search(r"\bTODO\b|待补充|占位", markdown, flags=re.IGNORECASE):
             raise StepError("Markdown 含 TODO/待补充占位，请在当前 Worker 内处理")
+        if self.spec.id == "analysis":
+            options = self._analysis_option_metadata(markdown)
+            if not 2 <= len(options) <= 3:
+                raise StepError(
+                    "Analysis 候选论点组必须包含 2–3 个可识别选项；"
+                    "标题使用“### 方案 A：…”、“### Option A: …”或“### TG-01：…”。"
+                )
+        self._validate_constraint_ledger(markdown)
         input_data = self._load_input(self._load_state())
         catalog = input_data.get("evidence_catalog")
         if isinstance(catalog, dict):
@@ -582,6 +593,115 @@ class StepRunner:
             unknown = sorted(set(re.findall(r"\[(EV-[A-Za-z0-9_-]+)\]", markdown)) - known)
             if unknown:
                 raise StepError("Markdown 引用了不存在的 Evidence ID: " + ", ".join(unknown))
+
+    def _markdown_routing_metadata(self, markdown: str) -> dict[str, Any]:
+        if self.spec.id != "analysis":
+            return {}
+        return {"thesis_options": self._analysis_option_metadata(markdown)}
+
+    def _validate_constraint_ledger(self, markdown: str) -> None:
+        input_data = self._load_input(self._load_state())
+        charter = input_data.get("report_charter")
+        ledger = charter.get("constraint_ledger") if isinstance(charter, dict) else None
+        if not isinstance(ledger, dict):
+            return
+        forbidden = [
+            str(item).strip()
+            for key in ("forbidden_claims", "forbidden_terms")
+            for item in ledger.get(key) or []
+            if str(item).strip()
+        ]
+        violations = [item for item in forbidden if item in markdown]
+        required = [
+            str(item).strip()
+            for item in ledger.get("required_terms") or []
+            if str(item).strip()
+        ]
+        missing = [item for item in required if item not in markdown]
+        errors: list[str] = []
+        if violations:
+            errors.append("出现禁用内容：" + "、".join(violations))
+        if missing:
+            errors.append("缺少必需内容：" + "、".join(missing))
+        allocation_rules = ledger.get("content_allocation")
+        if isinstance(allocation_rules, list):
+            meaningful_lines = [
+                re.sub(r"[#>*_`|\-\s]", "", line)
+                for line in markdown.splitlines()
+                if re.sub(r"[#>*_`|\-\s]", "", line)
+            ]
+            total_chars = sum(len(line) for line in meaningful_lines) or 1
+            for rule in allocation_rules:
+                if not isinstance(rule, dict):
+                    continue
+                terms = rule.get("terms") or []
+                if isinstance(terms, str):
+                    terms = [terms]
+                terms = [str(term) for term in terms if str(term).strip()]
+                if not terms:
+                    continue
+                matched_chars = sum(
+                    len(line)
+                    for line in meaningful_lines
+                    if any(term in line for term in terms)
+                )
+                ratio = matched_chars / total_chars
+                maximum = rule.get("max_ratio")
+                minimum = rule.get("min_ratio")
+                label = str(rule.get("label") or "/".join(terms))
+                if isinstance(maximum, (int, float)) and ratio > float(maximum):
+                    errors.append(
+                        f"{label} 内容占比 {ratio:.1%}，超过上限 {float(maximum):.1%}"
+                    )
+                if isinstance(minimum, (int, float)) and ratio < float(minimum):
+                    errors.append(
+                        f"{label} 内容占比 {ratio:.1%}，低于下限 {float(minimum):.1%}"
+                    )
+        if errors:
+            raise StepError("Constraint Ledger 校验未通过：" + "；".join(errors))
+        page_budget = charter.get("page_budget") if isinstance(charter, dict) else None
+        if (
+            self.spec.id == "report"
+            and isinstance(page_budget, dict)
+            and page_budget.get("appendix_policy") == "forbidden"
+            and re.search(r"^##\s+.*附录", markdown, flags=re.MULTILINE)
+        ):
+            raise StepError("Page Budget 校验未通过：Brief 明确不允许附录")
+
+    @staticmethod
+    def _analysis_option_metadata(markdown: str) -> list[dict[str, Any]]:
+        pattern = re.compile(
+            r"^###\s+((?:方案|Option)\s*[A-C一二三123]|TG-[A-Za-z0-9_-]+)"
+            r"\s*[：:]?\s*(.+)$",
+            flags=re.MULTILINE | re.IGNORECASE,
+        )
+        matches = list(pattern.finditer(markdown))
+        options: list[dict[str, Any]] = []
+        for index, match in enumerate(matches[:3]):
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+            body = markdown[match.end():end].strip()
+            source_label = re.sub(r"\s+", "", match.group(1))
+            option_id = (
+                source_label.upper()
+                if source_label.upper().startswith("TG-")
+                else f"TG-{index + 1:02d}"
+            )
+            options.append(
+                {
+                    "option_id": option_id,
+                    "source_label": source_label,
+                    "main_thesis": match.group(2).strip(),
+                    "sub_theses": [
+                        {"claim": line.lstrip("- ").strip(), "finding_refs": []}
+                        for line in body.splitlines()
+                        if line.strip().startswith("-")
+                    ][:4],
+                    "finding_refs": re.findall(
+                        r"\[(EV-[A-Za-z0-9_-]+)\]", body
+                    ),
+                }
+            )
+        return options
 
     # ---- internal: helpers --------------------------------------------------
 
@@ -938,40 +1058,15 @@ class StepRunner:
         audit["executive_summary_chars"] = executive_summary_character_count(
             str(report.get("report_markdown") or "")
         )
-        audit["executive_summary_char_min"] = budget.get(
-            "executive_summary_char_min"
-        )
-        audit["executive_summary_char_max"] = budget.get(
-            "executive_summary_char_max"
-        )
         audit["max_body_visuals"] = budget.get("max_body_visuals")
         warnings: list[str] = []
-        blocking_violations: list[str] = []
         char_limit = budget.get("report_body_char_limit")
         if isinstance(char_limit, int) and audit.get("body_chars", 0) > char_limit:
             warnings.append(
                 f"Report 正文 {audit['body_chars']} 字符，超过 {char_limit} 字符的分页风险参考值"
             )
-        es_chars = audit["executive_summary_chars"]
-        es_min = budget.get("executive_summary_char_min")
-        es_max = budget.get("executive_summary_char_max")
-        if (
-            isinstance(es_min, int)
-            and isinstance(es_max, int)
-            and not es_min <= es_chars <= es_max
-        ):
-            blocking_violations.append(
-                f"Executive Summary {es_chars} 字符，不在固定的 {es_min}–{es_max} 字符范围内"
-            )
         if warnings:
             audit["warnings"] = warnings
-        if blocking_violations:
-            audit["blocking_violations"] = blocking_violations
-            audit["passed"] = False
-            page_detail = str(audit.get("detail") or "").strip()
-            audit["detail"] = "；".join(
-                item for item in [page_detail, *blocking_violations] if item
-            )
         self._mark_body_budget_result(render_result, audit)
 
     def _apply_format_body_budget_audit(
@@ -988,26 +1083,74 @@ class StepRunner:
             return
         budget = self._delivery_budget()
         limit = budget.get("body_page_limit")
-        if not isinstance(limit, int) or limit <= 0:
+        total_limit = budget.get("total_page_limit")
+        has_body_limit = isinstance(limit, int) and limit > 0
+        has_total_limit = isinstance(total_limit, int) and total_limit > 0
+        if not has_body_limit and not has_total_limit:
             return
         from presentation_agent.page_budget import audit_document_body_pages
 
-        audit = audit_document_body_pages(
-            report=source_report,
-            formatted=formatted,
-            out_dir=self.run_dir,
-            body_page_limit=limit,
-            maximum_body_page_limit=budget.get("maximum_body_page_limit"),
-            user_approved_body_page_limit=budget.get(
-                "user_approved_body_page_limit"
-            ),
-            stage="format_final",
+        audit = (
+            audit_document_body_pages(
+                report=source_report,
+                formatted=formatted,
+                out_dir=self.run_dir,
+                body_page_limit=limit,
+                maximum_body_page_limit=budget.get("maximum_body_page_limit"),
+                user_approved_body_page_limit=budget.get(
+                    "user_approved_body_page_limit"
+                ),
+                stage="format_final",
+            )
+            if has_body_limit
+            else {
+                "stage": "format_final",
+                "counting_policy": "total_only",
+                "available": True,
+                "passed": True,
+                "requires_user_decision": False,
+                "detail": "未设置正文页数目标，仅审计文件总页数",
+            }
         )
         audit["max_body_visuals"] = budget.get("max_body_visuals")
+        if has_total_limit:
+            from presentation_agent.page_budget import count_docx_pages
+
+            output_path = Path(str(render_result.output_path or ""))
+            try:
+                total_pages = count_docx_pages(output_path)
+                audit["total_page_count"] = total_pages
+                audit["total_page_limit"] = total_limit
+                audit["total_pages_passed"] = total_pages <= total_limit
+                if total_pages > total_limit:
+                    audit.setdefault("blocking_violations", []).append(
+                        f"文件总页数 {total_pages} 页，超过上限 {total_limit} 页"
+                    )
+                    audit["passed"] = False
+                    audit["detail"] = "；".join(
+                        item
+                        for item in [
+                            str(audit.get("detail") or "").strip(),
+                            audit["blocking_violations"][-1],
+                        ]
+                        if item
+                    )
+            except Exception as exc:
+                audit.setdefault("blocking_violations", []).append(
+                    f"文件总页数审计失败: {exc}"
+                )
+                audit["passed"] = False
+                audit["detail"] = "；".join(
+                    item
+                    for item in [
+                        str(audit.get("detail") or "").strip(),
+                        audit["blocking_violations"][-1],
+                    ]
+                    if item
+                )
         self._mark_body_budget_result(render_result, audit)
 
-    @staticmethod
-    def _source_report_from_input(input_data: dict[str, Any]) -> dict[str, Any] | None:
+    def _source_report_from_input(self, input_data: dict[str, Any]) -> dict[str, Any] | None:
         if input_data.get("schema") == "report.v1":
             return input_data
         direct = input_data.get("report")
@@ -1017,7 +1160,12 @@ class StepRunner:
         if isinstance(markdown, str) and markdown.strip():
             qa = input_data.get("qa_markdown")
             combined = markdown.rstrip()
-            if isinstance(qa, str) and qa.strip():
+            budget = self._delivery_budget()
+            if (
+                budget.get("qa_included", True)
+                and isinstance(qa, str)
+                and qa.strip()
+            ):
                 combined += "\n\n" + qa.strip()
             return {
                 "schema": "report.v1",

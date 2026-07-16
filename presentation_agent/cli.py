@@ -15,6 +15,10 @@ from presentation_agent.step import PipelineStepper, StepError, StepRunner
 from presentation_agent.workspace import init_workspace, resolve_workspace, workspace_status
 
 
+REPORT_PROTOCOL_VERSION = "report-host.v0_4"
+ARTIFACT_CONTRACT_VERSION = "markdown-first.v1"
+
+
 def _add_spawn_adapter_option(
     parser: argparse.ArgumentParser, *, required: bool = False
 ) -> None:
@@ -75,7 +79,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     report_submit = report_subs.add_parser("submit", help="Submit host output for the current instruction.")
     report_submit.add_argument("--run", required=True, help="Run id or run directory.")
-    report_submit.add_argument("--output-file", help="JSON output file produced by the host model.")
+    report_submit.add_argument(
+        "--output-file",
+        help="Markdown or JSON output file matching the current instruction response_format.",
+    )
     report_submit.add_argument(
         "--spawn-completed",
         action="store_true",
@@ -679,6 +686,8 @@ def _report_response(
     spawn = instruction.get("spawn")
     response: dict[str, object] = {
         "ok": True,
+        "protocol_version": REPORT_PROTOCOL_VERSION,
+        "artifact_contract": ARTIFACT_CONTRACT_VERSION,
         "run_dir": str(run_dir),
         "current_instruction": instruction,
         "spawn_required": bool(

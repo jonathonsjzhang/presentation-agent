@@ -55,6 +55,8 @@ _DEFAULTS: dict[str, Any] = {
     "context": "",
     "materials": [],
     "constraints": [],
+    "page_budget": {},
+    "constraint_ledger": {},
     "user_intent": "",
     "decision_goal": "",
     "expected_action": "",
@@ -149,6 +151,43 @@ def normalize_brief(
 
     normalized["materials"] = _normalize_materials(normalized.get("materials"))
     normalized["constraints"] = _as_str_list(normalized.get("constraints"))
+    page_budget = (
+        dict(normalized.get("page_budget"))
+        if isinstance(normalized.get("page_budget"), dict)
+        else {}
+    )
+    for source_key, target_key in (
+        ("body_page_limit", "body_page_limit"),
+        ("total_page_limit", "total_page_limit"),
+        ("total_document_pages", "total_page_limit"),
+    ):
+        value = normalized.get(source_key)
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            page_budget[target_key] = value
+    if normalized.get("appendix_policy"):
+        page_budget["appendix_policy"] = str(normalized["appendix_policy"])
+    if "qa_included" in normalized:
+        page_budget["qa_included"] = bool(normalized["qa_included"])
+    normalized["page_budget"] = page_budget
+    constraint_ledger = (
+        dict(normalized.get("constraint_ledger"))
+        if isinstance(normalized.get("constraint_ledger"), dict)
+        else {}
+    )
+    for key in (
+        "must_answer",
+        "forbidden_claims",
+        "required_terms",
+        "forbidden_terms",
+        "content_allocation",
+        "evidence_boundaries",
+    ):
+        value = constraint_ledger.get(key)
+        if key == "content_allocation":
+            constraint_ledger[key] = value if isinstance(value, list) else []
+        else:
+            constraint_ledger[key] = _as_str_list(value)
+    normalized["constraint_ledger"] = constraint_ledger
     normalized["research_purpose"] = _first_text(normalized, "research_purpose")
     normalized["research_direction"] = _first_text(
         normalized,

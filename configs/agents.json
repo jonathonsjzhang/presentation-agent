@@ -44,7 +44,7 @@
           "name": "故事线",
           "stage": 2,
           "skill": "storyline",
-          "description": "把已确认的 Analysis 论点展开成完整故事线，并基于正文结构写成 250–350 字 bullet 式 Executive Summary。",
+          "description": "把已确认的 Analysis 论点展开成完整故事线，并写成语义完整、可独立回答核心问题的 Executive Summary。",
           "previous_agent_id": "analysis",
           "next_agent_id": "report",
           "input_schema": "markdown_artifact.v1",
