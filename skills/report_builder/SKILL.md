@@ -112,8 +112,10 @@ git pull --ff-only
 | `project_type` | 可空 | 默认“分析类”；可填“分析类/梳理类” |
 | `delivery_targets` / `output_format` | 可空 | 默认文档；如用户要 PPT，则 brief 预设篇幅为 10 页 PPT |
 | `report_length` | 可空 | 默认 3 页；PPT 默认 10 页 PPT |
+| `page_budget` | 可空 | 文档可分别填写 `body_page_limit`、`total_page_limit`、`appendix_policy`、`qa_included` |
 | `materials` | 可空 | 文件或目录使用 `{"path": "..."}`；已知结论可作为结构化 claim。宿主不预读文件内容 |
 | `constraints` | 可空 | 页数、保密、口径、格式限制 |
+| `constraint_ledger` | 可空 | `required_terms`、`forbidden_terms`、`content_allocation` 可机械校验；`must_answer`、`evidence_boundaries` 结构化继承并由 Worker 自检 |
 | `user_intent` | 可空 | 用一句自然语言记录用户真实意图 |
 
 将 brief 写成 JSON 文件，例如：
@@ -141,7 +143,6 @@ cd "$HOME/PresentationAgent/repo"
   --workspace "$HOME/PresentationAgent/workspaces/default" \
   report start \
   --brief-file "<brief_file>" \
-  --contract-profile "v0_4" \
   --spawn-adapter "<workbuddy|codex|claude>"
 ```
 
@@ -206,6 +207,11 @@ runtime 会返回 `presentation_required_before_tool=true`、独立的 `presenta
 state、Worker artifact、Evidence Catalog 只通过返回的 `*_path` / `*_ref` 按需读取。
 `report status` 默认只返回控制面摘要；只有诊断确需完整状态时才使用
 `report manager-status`。
+
+每次响应必须声明 `protocol_version=report-host.v0_4` 和
+`artifact_contract=markdown-first.v1`。任一字段缺失或版本不同，说明 Host Skill 与 CLI
+未同步；停止当前 run，重新更新 repo、执行 `init-workspace` 与 `derive-agents`，不要按旧
+Skill 猜测参数继续执行。
 
 循环执行：
 
@@ -313,7 +319,7 @@ sub-agent 完成且 `output_path` 存在后：
 ```
 
 Worker 的 `result_delivery=direct_file`：Agent/Task 工具的对话消息可以为空，不能据此判定
-失败。完成标准是当前 `output_path` 存在、晚于本轮 spawn request、符合 instruction 声明的非空 Markdown 或 JSON，且
+失败。完成标准是当前 `output_path` 存在、符合 instruction 声明的非空 Markdown 或 JSON，且
 `report submit --spawn-completed` 成功生成 receipt 并 commit。若消息为空但文件有效，直接
 按成功处理；若消息非空但没有可信文件，则按失败处理。
 
@@ -347,7 +353,7 @@ WorkBuddy 的 subagent 调度失败时，最重要的是不要假装已经执行
 
 1. 确认 CLI 当前 instruction 仍然是同一个 `run_id` / `task_id` / `output_path`
 2. 确认 `instruction.spawn.detail` 存在，并优先照 detail 重新派发
-3. 如果 sub-agent 返回了内容但没写入 `output_path`，用 `report submit --output-file "<output_json>"` 提交该 JSON
+3. 如果 sub-agent 返回了内容但没写入 `output_path`，将内容保存为符合当前 `response_format` 的文件，再用 `report submit --output-file "<output_file>"` 补交
 4. 如果没有可信 JSON 产物，不要手写补齐；运行 `report status`，把错误和当前 gate 告诉用户
 
 Manager `report submit` 在应用决策时失败后，runtime 会自动回滚到同一轮 `awaiting_output`。此时执行 `report next` 取回原 instruction，修正 `output_path` 后再次 `report submit`；不要用 `approve` 强推，也不需要手改 state。
@@ -357,7 +363,7 @@ Manager `report submit` 在应用决策时失败后，runtime 会自动回滚到
 ```bash
 "$HOME/PresentationAgent/repo/.venv/bin/python" -m presentation_agent.cli \
   --workspace "$HOME/PresentationAgent/workspaces/default" \
-  report submit --run "<run_id>" --output-file "<output_json>"
+  report submit --run "<run_id>" --output-file "<output_file>"
 ```
 
 保持两个底线：

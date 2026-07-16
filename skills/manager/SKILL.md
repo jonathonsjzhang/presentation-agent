@@ -29,7 +29,7 @@ Worker 可能以 sub-agent 或 inline 方式执行——这不改变你的职责
 |---|---|---|---|
 | 输入处理 | `evidence_harvester` | evidence catalog | Brief 确认前从原始材料提取可核验证据；不属于五阶段生产主链 |
 | 核心链 | `analysis` | `analysis.md` | 完整分析 + 2-3 组待确认主论点方案；不写 storyline |
-| 核心链 | `storyline` | `storyline.md` | 250–350 字 bullet 式 Executive Summary + 结论式章节与完整论证；不写最终正文 |
+| 核心链 | `storyline` | `storyline.md` | 语义完整、可独立回答核心问题的 bullet 式 Executive Summary + 结论式章节与完整论证；不写最终正文 |
 | 核心链 | `report` | `report.md` | 完整 Markdown 报告 |
 | 核心链 | `qa_preparation` | `qa.md` | 独立的深度问题清单；不写答案、不改正文 |
 | 核心链 | `format` | `format_plan.v1` | 最小视觉计划 + runtime 载体化 |

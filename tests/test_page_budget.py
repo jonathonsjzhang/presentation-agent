@@ -39,9 +39,9 @@ class PageBudgetTests(unittest.TestCase):
                 "body_char_warning": 2700,
                 "report_body_char_limit": 3600,
                 "body_char_enforcement": "advisory",
-                "executive_summary_char_min": 250,
-                "executive_summary_char_max": 350,
                 "max_body_visuals": 3,
+                "appendix_policy": "allowed",
+                "qa_included": True,
             },
         )
         self.assertIsNone(
@@ -53,7 +53,7 @@ class PageBudgetTests(unittest.TestCase):
             )
         )
 
-    def test_scales_report_text_budget_linearly_but_keeps_summary_fixed(self) -> None:
+    def test_scales_report_text_budget_linearly_without_fixed_summary_band(self) -> None:
         five_pages = derive_delivery_budget(
             {
                 "report_length": "5页文档",
@@ -74,8 +74,62 @@ class PageBudgetTests(unittest.TestCase):
             (six_pages["body_char_min"], six_pages["body_char_target"], six_pages["report_body_char_limit"]),
             (4800, 5100, 6300),
         )
-        self.assertEqual(five_pages["executive_summary_char_min"], 250)
-        self.assertEqual(six_pages["executive_summary_char_max"], 350)
+        self.assertNotIn("executive_summary_char_min", five_pages)
+        self.assertNotIn("executive_summary_char_max", six_pages)
+
+    def test_explicit_page_budget_distinguishes_body_and_total_pages(self) -> None:
+        budget = derive_delivery_budget(
+            {
+                "requested_delivery_targets": ["document"],
+                "page_budget": {
+                    "body_page_limit": 3,
+                    "total_page_limit": 6,
+                    "appendix_policy": "forbidden",
+                    "qa_included": False,
+                },
+            }
+        )
+        self.assertEqual(budget["body_page_limit"], 3)
+        self.assertEqual(budget["total_page_limit"], 6)
+        self.assertEqual(budget["appendix_policy"], "forbidden")
+        self.assertFalse(budget["qa_included"])
+
+    def test_format_total_page_limit_is_a_hard_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runner = object.__new__(StepRunner)
+            runner.run_dir = Path(temp_dir)
+            runner._delivery_budget = lambda: {  # type: ignore[method-assign]
+                "body_page_limit": 3,
+                "maximum_body_page_limit": 4,
+                "total_page_limit": 6,
+            }
+            result = RenderResult(
+                status="rendered",
+                fmt="document",
+                fidelity="formatted",
+                output_path=str(Path(temp_dir) / "report.docx"),
+            )
+            body_audit = {
+                "passed": True,
+                "requires_user_decision": False,
+                "detail": "正文实际 3 页",
+            }
+            with patch(
+                "presentation_agent.page_budget.audit_document_body_pages",
+                return_value=body_audit,
+            ), patch(
+                "presentation_agent.page_budget.count_docx_pages",
+                return_value=7,
+            ):
+                runner._apply_format_body_budget_audit(
+                    {"delivery_target": "document", "visuals": []},
+                    {"report_markdown": "# 报告"},
+                    result,
+                )
+            audit = result.metrics["body_budget_audit"]
+            self.assertEqual(audit["total_page_count"], 7)
+            self.assertFalse(audit["total_pages_passed"])
+            self.assertEqual(result.status, "error")
 
     def test_extracts_body_but_preserves_methods_and_qa_in_source(self) -> None:
         markdown = (

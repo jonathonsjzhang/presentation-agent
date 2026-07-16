@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -178,8 +180,184 @@ class V04SimplifiedFlowTests(unittest.TestCase):
             receipt = read_json(run_dir / "artifact.json")
             self.assertEqual(receipt["schema"], "markdown_artifact.v1")
             self.assertEqual(receipt["artifact_kind"], "analysis")
+            self.assertEqual(
+                [
+                    item["option_id"]
+                    for item in receipt["routing_metadata"]["thesis_options"]
+                ],
+                ["TG-01", "TG-02"],
+            )
             self.assertTrue((run_dir / "analysis.md").is_file())
             self.assertNotIn("content_markdown", receipt)
+
+    def test_analysis_option_metadata_accepts_english_labels(self) -> None:
+        markdown = """# Analysis
+
+## 候选论点组
+
+### Option A: Focus on structure
+
+- First supporting thesis
+
+### Option B: Focus on capability
+
+- Second supporting thesis
+"""
+        options = StepRunner._analysis_option_metadata(markdown)
+        self.assertEqual([item["option_id"] for item in options], ["TG-01", "TG-02"])
+        self.assertEqual(options[0]["source_label"], "OptionA")
+        self.assertEqual(
+            ManagerOrchestrator._selected_analysis_option("Option A", options)["option_id"],
+            "TG-01",
+        )
+
+    def test_v04_revision_packet_excludes_downstream_and_invalidates_dependencies(self) -> None:
+        manager = object.__new__(ManagerOrchestrator)
+        state = {
+            "accepted_artifacts": [
+                {"agent_id": "analysis", "artifact_path": "/tmp/analysis.json", "task_id": "a"},
+                {"agent_id": "storyline", "artifact_path": "/tmp/storyline.json", "task_id": "s"},
+                {"agent_id": "report", "artifact_path": "/tmp/report.json", "task_id": "r"},
+                {"agent_id": "qa_preparation", "artifact_path": "/tmp/qa.json", "task_id": "q"},
+                {"agent_id": "format", "artifact_path": "/tmp/format.json", "task_id": "f"},
+            ],
+            "tasks": [],
+            "project_state": {
+                "analysis_thesis_selection": {"option_id": "TG-01"},
+                "storyline_confirmation": {"confirmed": True},
+            },
+        }
+        packet = manager._v04_task_packet(state, "storyline", feedback="收窄主线")
+        self.assertEqual(
+            packet["input_artifacts"],
+            ["/tmp/analysis.json", "/tmp/storyline.json"],
+        )
+        invalidated = manager._invalidate_canonical_from(
+            state, "storyline", reason="test revision"
+        )
+        self.assertEqual(
+            [item["agent_id"] for item in state["accepted_artifacts"]],
+            ["analysis"],
+        )
+        self.assertEqual(len(invalidated), 4)
+        self.assertNotIn("storyline_confirmation", state["project_state"])
+
+    def test_spawn_completion_uses_dispatch_hashes_not_mtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            task_dir = run_dir / "tasks" / "analysis-1_analysis"
+            handoff = task_dir / "handoff"
+            handoff.mkdir(parents=True)
+            instruction_path = handoff / "instruction_gen.md"
+            input_path = task_dir / "input.json"
+            output_path = handoff / "output_gen.md"
+            request_path = task_dir / "spawn_request.json"
+            instruction_path.write_text("instruction", encoding="utf-8")
+            input_path.write_text("{}", encoding="utf-8")
+            output_path.write_text("# valid output", encoding="utf-8")
+            dispatch = {
+                "dispatch_id": "dispatch-123",
+                "instruction_path": str(instruction_path),
+                "instruction_sha256": hashlib.sha256(instruction_path.read_bytes()).hexdigest(),
+                "input_path": str(input_path),
+                "input_sha256": hashlib.sha256(input_path.read_bytes()).hexdigest(),
+                "output_path": str(output_path),
+                "response_format": "markdown",
+            }
+            request_path.write_text(
+                json.dumps({"dispatch": dispatch}), encoding="utf-8"
+            )
+            os.utime(output_path, ns=(1, 1))
+            os.utime(request_path, ns=(2, 2))
+            (task_dir / "run_state.json").write_text(
+                json.dumps({"round_index": 0}), encoding="utf-8"
+            )
+            state = {
+                "version": "manager_state.v2",
+                "contract_profile": "v0_4",
+                "current_actor": "worker",
+                "spawn_adapter": "codex",
+                "current_task": {"task_dir": str(task_dir), "agent_id": "analysis"},
+                "last_instruction": {
+                    "instruction_path": str(instruction_path),
+                    "output_path": str(output_path),
+                    "spawn": {
+                        "adapter": "codex",
+                        "role": "worker",
+                        "status": "dispatched",
+                        "detail": {"spawn_request": str(request_path)},
+                    },
+                },
+            }
+            (run_dir / "manager_state.json").write_text(
+                json.dumps(state), encoding="utf-8"
+            )
+            receipt = ManagerOrchestrator(
+                ROOT, run_dir, contract_profile="v0_4"
+            ).record_spawn_completed()
+            self.assertEqual(receipt["dispatch_id"], "dispatch-123")
+            self.assertEqual(
+                receipt["output_sha256"],
+                hashlib.sha256(output_path.read_bytes()).hexdigest(),
+            )
+
+    def test_constraint_ledger_blocks_forbidden_and_missing_required_content(self) -> None:
+        runner = object.__new__(StepRunner)
+        runner._load_state = lambda: {}  # type: ignore[method-assign]
+        runner._load_input = lambda _state: {  # type: ignore[method-assign]
+            "report_charter": {
+                "constraint_ledger": {
+                    "forbidden_terms": ["稳定忠诚"],
+                    "required_terms": ["腾讯启示"],
+                }
+            }
+        }
+        with self.assertRaisesRegex(
+            StepError, "出现禁用内容：稳定忠诚.*缺少必需内容：腾讯启示"
+        ):
+            runner._validate_constraint_ledger("报告重新引入稳定忠诚判断。")
+
+    def test_constraint_ledger_enforces_content_allocation_ratio(self) -> None:
+        runner = object.__new__(StepRunner)
+        runner._load_state = lambda: {}  # type: ignore[method-assign]
+        runner._load_input = lambda _state: {  # type: ignore[method-assign]
+            "report_charter": {
+                "constraint_ledger": {
+                    "content_allocation": [
+                        {
+                            "label": "腾讯启示",
+                            "terms": ["腾讯"],
+                            "max_ratio": 0.05,
+                        }
+                    ]
+                }
+            }
+        }
+        with self.assertRaisesRegex(StepError, "腾讯启示 内容占比.*超过上限 5.0%"):
+            runner._validate_constraint_ledger(
+                "# 报告\n\n腾讯启示需要展开。\n\n其他判断。"
+            )
+
+    def test_report_skips_qa_only_when_brief_explicitly_excludes_it(self) -> None:
+        manager = object.__new__(ManagerOrchestrator)
+        state = {
+            "project_state": {"delivery_budget": {"qa_included": False}},
+            "accepted_artifacts": [],
+            "tasks": [],
+            "current_task": {"agent_id": "report"},
+        }
+        task = {"agent_id": "report", "task_id": "report-1"}
+        with patch.object(manager, "_v04_accept_current_task"), patch.object(
+            manager,
+            "_dispatch",
+            side_effect=lambda _state, packet, reason: {
+                "packet": packet,
+                "reason": reason,
+            },
+        ):
+            result = manager._record_v04_worker_completed(state, task)
+        self.assertEqual(result["packet"]["agent_id"], "format")
+        self.assertIn("excludes QA", result["reason"])
 
     def test_format_preflight_rejects_renderer_incompatible_chart(self) -> None:
         with self.assertRaisesRegex(StepError, "视觉预检未通过"):

@@ -99,19 +99,33 @@ def parse_body_page_limit(report_charter: dict[str, Any]) -> int | None:
 
 
 def derive_delivery_budget(report_charter: dict[str, Any]) -> dict[str, Any]:
-    limit = parse_body_page_limit(report_charter)
+    explicit = report_charter.get("page_budget")
+    explicit = explicit if isinstance(explicit, dict) else {}
+    explicit_body_limit = explicit.get("body_page_limit")
+    limit = (
+        explicit_body_limit
+        if isinstance(explicit_body_limit, int) and explicit_body_limit > 0
+        else parse_body_page_limit(report_charter)
+    )
+    policy = {
+        "appendix_policy": str(explicit.get("appendix_policy") or "allowed"),
+        "qa_included": bool(explicit.get("qa_included", True)),
+    }
+    total_limit = explicit.get("total_page_limit")
+    if isinstance(total_limit, int) and total_limit > 0:
+        policy["total_page_limit"] = total_limit
     if limit is None:
-        return {}
+        return policy if explicit else {}
     # Keep the writing budget linear and predictable: 800-900 characters per
     # requested body page, with the midpoint as the generation target.  The
-    # Executive Summary remains a fixed 250-350-character content contract
-    # within that total.
+    # Executive Summary is governed by semantic completeness, not a fixed
+    # character band.
     report_char_min = limit * 800
     report_char_target = limit * 850
     automatic_page_tolerance = 1
     maximum_page_limit = limit + automatic_page_tolerance
     report_char_warning = limit * 900
-    return {
+    budget = {
         "requested_body_page_limit": limit,
         "body_page_limit": limit,
         "automatic_page_tolerance": automatic_page_tolerance,
@@ -127,10 +141,10 @@ def derive_delivery_budget(report_charter: dict[str, Any]) -> dict[str, Any]:
         # document is not rejected by this estimate alone.
         "report_body_char_limit": maximum_page_limit * 900,
         "body_char_enforcement": "advisory",
-        "executive_summary_char_min": 250,
-        "executive_summary_char_max": 350,
         "max_body_visuals": min(3, max(1, limit)),
     }
+    budget.update(policy)
+    return budget
 
 
 def _filter_body_visuals(formatted: dict[str, Any]) -> dict[str, Any]:

@@ -102,4 +102,4 @@ description: Read a complete Markdown strategy report as a thoughtful audience w
 
 只提交独立的 `qa.md`：以 `# 听众可能追问的问题` 为标题，输出编号问题清单，不复制或改写 Report 正文。Format 会把该清单追加到最终材料。
 
-Report 或 Format 的局部返工可以由 runtime 跳过本阶段并复用最近一次 `qa.md`；只有主论点、Storyline 或正文实质内容变化时才重新运行 QA。
+Format 的纯视觉局部返工可以复用当前 `qa.md`；Report、Storyline 或 Analysis 发生修改时，本阶段的 canonical artifact 自动失效并重新生成，避免旧问题清单重新引入已删除内容。
