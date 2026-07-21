@@ -5,54 +5,9 @@
 ## 一、系统总框架
 
 - **Manager + 5 默认 Worker**：Manager 直接面向用户，确认共同 Brief、控制两个关键 Gate，并在返工时明确指定责任阶段；五个 Worker 的专业方法论保持不变。正常主链由 runtime 自动推进，Manager 不再逐阶段重复手写验收和下一跳。
-- **自演进闭环**：每个 Agent 由可编辑 skill 定义工作方式，由 loop 执行、runtime 与用户 Gate 拦截、state/memory 持续学习。
-- **覆盖场景**：支持董事会、总办、战略负责人、业务团队、外部等不同汇报对象，覆盖专题深度分析、业务进展汇报与信息快速同步三种汇报性质，可产出文档、PPT 或 HTML 三种材料格式。
-
-整体架构如下：
-
-![汇报助手系统架构图](docs/assets/architecture.png)
-
 这个系统的核心不是「一个模型一次性写完整汇报」，而是让完整 Brief、完整观点、完整 Storyline 和完整报告在专业 Worker 之间清楚传递。Runtime 只负责可靠推进、文件校验、显式返工和真实渲染；不把专业内容拆成复杂 JSON，也不让流程控制盖过汇报质量本身。
 
-## 二、版本进展与 TODOs
-
-### 2.1 版本进展
-
-`0.x` 用于框架快速迭代阶段，每个次版本对应一次明确的能力升级。后续版本按倒序追加，保留历史记录。
-
-#### v0.4（2026-07-15）
-
-- **三类核心上下文**：完整 Brief、上游 canonical Markdown、Evidence Catalog / 数据资产；Brief 每个 Worker 都能完整读取。
-- **Markdown-first 交接**：Analysis、Storyline、Report、QA 分别直接产出 `analysis.md`、`storyline.md`、`report.md`、`qa.md`；JSON 只保留路径与哈希回执。
-- **保留专业 Skill**：原有核心准则、Workflow、Self-edit Checklist 和专业验收标准全部保留；简化仅作用于交接载体与运行时控制面。
-- **简化 happy path**：Brief 确认后直接进入 Analysis；Analysis、Storyline 保留用户 Gate；Report、QA 正常完成后自动推进到 Format。
-- **显式局部返工**：Manager 使用 `stage` 指定责任阶段；返工会使该阶段及全部下游 canonical artifact 失效，避免旧结论重新混入。Format 局部修改只重做 Format；Report 修改后重新生成 QA。
-- **可验证派发回执**：原生 sub-agent spawn 使用 `dispatch_id + instruction/input/output hash` 绑定本轮结果，不再依赖跨文件系统不稳定的 mtime freshness。
-- **结构化约束与双页数口径**：Brief 可分别声明正文目标、文件总页数、附录与 QA 策略；`Constraint Ledger` 可登记必需/禁用内容，并在 Worker 提交时执行确定性检查。
-- **真实渲染优先**：Format 只提交轻量视觉计划；runtime 在证据投影后按 renderer 的真实数据模型 preflight，并在文件生成后检查视觉资产和逐页快照。空白、纯黑、缺失资产或无法生成页面快照都会进入 quality manifest 并阻止静默通过。
-- **Evidence/doctor 快速失败**：目录中不支持的文件显式列出并使 intake 不完整；doctor 检查 PDF 解析、DOCX 生成和中文 DOCX→PDF 冒烟路径。
-
-#### v0.2（2026-06-30）
-
-- **可组合原子能力**：专业 Worker 按受众、汇报性质和材料格式编译当轮所需 Skill bundle，支持 fingerprint 与 prompt budget。
-- **投影上下文与 scoped memory**：Manager 按 Worker 投影上游 artifact；memory 按 capability owner 和 profile scope 检索，作为场景化软提示参与后续生成。
-- **三载体 Format**：PPT、DOCX、HTML 分别加载独立执行规则、工具与 renderer 校验。
-
-#### v0.1（2026-06-29）
-
-- **Manager + Worker 架构**：将原 7-Agent 串行流水线升级为 Manager 控制面 + 专业 Worker 模式，由 Manager 负责任务定义、动态派发、返工和整体验收。
-- **Agent Team 调度**：新增面向 WorkBuddy、Codex、Claude Code 等终端的调度协议，支持 sub-agent 隔离与并发执行，并由 Manager 汇总结果、统一验收。
-
-### 2.2 后续 TODO
-
-1. **框架优化**
-   - **项目接入**：当前主要通过自行部署 Git 仓库和 Host Skill 使用，安装、升级与版本管理仍有成本；后续需要评估接入 WorkBuddy 官方插件库或统一插件分发体系。
-
-2. **知识迭代**
-   - **持续迭代核心 Skill**：当前 Manager 与专业 Worker 的 Skill 仍需结合真实汇报任务持续校准职责边界、工作流和返工策略；跨案例稳定成立的原则再人工合并到 `SKILL.md`。
-   - **注入先验 Memory**：预置一批经过验证的基础经验，例如战略汇报常见措辞偏好、受众关注点和高频质量红线，使首次使用者也能获得稳定的生成与审查引导。
-
-## 三、Manager 与专业 Worker
+## 二、Manager 与专业 Worker
 
 核心定义位于 `configs/agents.json`。Manager 是控制面 Agent，原任务定位 Agent 的能力已并入 Manager 的 `report_charter`；其余 Agent 是可调度 Worker：
 
